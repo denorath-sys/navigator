@@ -11,7 +11,10 @@
 # Actions'ta yapılır (bkz. proje kısıtları: roaming/kısıtlı internet).
 
 ARG BASE_IMAGE="ghcr.io/ublue-os/base-main"
-ARG BASE_TAG="latest"
+# "latest" şu an Fedora 44'e karşılık geliyor; solopasha/hyprland COPR
+# paketleri (aquamarine vb.) henüz fc44'ün libdisplay-info ABI'siyle
+# depsolve olmuyor (build log'da doğrulandı). Fedora 43'e sabitlendi.
+ARG BASE_TAG="43"
 
 FROM ${BASE_IMAGE}:${BASE_TAG}
 
