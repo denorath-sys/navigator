@@ -18,18 +18,23 @@ FROM ${BASE_IMAGE}:${BASE_TAG}
 # ---------------------------------------------------------------------------
 # Katman 1: Temel masaüstü paketleri + Hyprland (Wayland compositor)
 # ---------------------------------------------------------------------------
-# Not: Paket adları Fedora repo yapısına göre Faz 2'de doğrulanacak;
-# şimdilik niyet beyanı olarak bırakılmıştır.
-RUN rpm-ostree install \
+# hyprland, hypridle, hyprlock, hyprpaper, xdg-desktop-portal-hyprland ve
+# hyprpolkitagent şu an resmi Fedora depolarında (bu base image'ın izlediği
+# sürümde) bulunmuyor; solopasha/hyprland COPR'ı Hyprland ekosistemi için
+# fiili standart kaynaktır, bu yüzden burada etkinleştiriliyor.
+# polkit-gnome yerine Hyprland'a özel hyprpolkitagent kullanılıyor
+# (polkit-gnome upstream'de bakımsız ve Fedora depolarından kaldırılmış).
+RUN dnf5 -y copr enable solopasha/hyprland \
+    && rpm-ostree install \
         hyprland \
         hyprpaper \
         hypridle \
         hyprlock \
+        hyprpolkitagent \
         xdg-desktop-portal-hyprland \
         kitty \
         wofi \
         waybar \
-        polkit-gnome \
         NetworkManager \
         pipewire \
         wireplumber \
