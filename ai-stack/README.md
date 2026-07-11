@@ -9,7 +9,7 @@ Beş bileşenden oluşur, her biri kendi README'sinde detaylandırılmıştır:
 |---|---|
 | [`hardware-probe/`](hardware-probe/README.md) | Donanımı tespit eder, model tier'ını belirler — **Faz 2: ilk implementasyon hazır** |
 | [`local-runtime/`](local-runtime/README.md) | Yerel model çalıştırma (Ollama) — **Faz 2: orkestrasyon/istemci katmanı hazır, model indirme onay bekliyor** |
-| [`mcp-tools/`](mcp-tools/README.md) | MCP tabanlı sistem/araç erişimi |
+| [`mcp-tools/`](mcp-tools/README.md) | MCP tabanlı sistem/araç erişimi — **Faz 2: ilk MCP sunucusu hazır** |
 | [`router/`](router/README.md) | Yerel↔bulut hibrit istek yönlendirme — **Faz 2: karar/orkestrasyon katmanı hazır** |
 | [`cloud-bridge/`](cloud-bridge/README.md) | Bulut model sağlayıcılarına bağlantı |
 
@@ -37,8 +37,11 @@ kullanıcı isteği (shell/ asistan paneli)
 gerçek model indirme ayrı bir onay bekliyor. `router/` karar/orkestrasyon
 katmanını aldı (yerel/bulut yönlendirme mantığı, 17 test) — `cloud-bridge`
 henüz yok olduğundan `route: "cloud"` kararı şu an sadece etiket üretiyor,
-gerçek bir çağrı yapmıyor. `mcp-tools` ve `cloud-bridge` hâlâ Faz 1
-placeholder aşamasında.
+gerçek bir çağrı yapmıyor. `mcp-tools/` ilk MCP sunucusunu aldı (resmi SDK
+kurmadan, stdlib-only JSON-RPC 2.0 stdio transport; `hardware_tier` ve
+`route_request` araçları, 16 test). `cloud-bridge` hâlâ Faz 1 placeholder
+aşamasında — kalan tek modül.
 
-Üç modül (`hardware-probe` → `local-runtime` → `router`) artık gerçek
-subprocess zinciriyle uçtan uca çalışıyor ve bu makinede doğrulandı.
+Dört modül (`hardware-probe` → `local-runtime` → `router` → `mcp-tools`)
+artık gerçek MCP protokolü/subprocess zinciriyle uçtan uca çalışıyor ve bu
+makinede doğrulandı.

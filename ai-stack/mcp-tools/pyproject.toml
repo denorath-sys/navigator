@@ -1,0 +1,13 @@
+[project]
+name = "navigator-mcp-tools"
+version = "0.1.0"
+description = "Navigator OS mcp-tools — Navigator asistanına MCP (Model Context Protocol) üzerinden araç erişimi sağlar"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+navigator-mcp-tools = "mcp_tools.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

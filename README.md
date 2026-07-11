@@ -35,10 +35,11 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   orkestrasyon/istemci katmanı tamamlandı (Ollama REST istemcisi,
   tier→model önerisi, 15 test) — Ollama kurulumu ve model indirme ayrı
   bir onay bekliyor. `ai-stack/router` karar katmanı tamamlandı (yerel/bulut
-  yönlendirme mantığı, 17 test) — üç modül (`hardware-probe` →
-  `local-runtime` → `router`) artık gerçek subprocess zinciriyle uçtan uca
-  çalışıyor. Sırada: gerçek Hyprland oturumunda config testi;
-  `mcp-tools`/`cloud-bridge`.
+  yönlendirme mantığı, 17 test). `ai-stack/mcp-tools` ilk MCP sunucusunu
+  aldı (resmi SDK'sız, stdlib-only stdio JSON-RPC 2.0, 16 test) — dört
+  modül (`hardware-probe` → `local-runtime` → `router` → `mcp-tools`)
+  artık gerçek MCP protokolü üzerinden uçtan uca çalışıyor. Sırada: gerçek
+  Hyprland oturumunda config testi; `cloud-bridge` (son placeholder).
 - **Faz 3 — İmaj build & test:** GitHub Actions üzerinde ilk gerçek
   `bootc`/`rpm-ostree` imaj build'i; sanal makinede boot testi.
 - **Faz 4 — AI stack tamamlama:** `router`, `mcp-tools`, `cloud-bridge`
