@@ -1,16 +1,16 @@
 # Navigator OS — Fedora Atomic imaj tanımı (Faz 1 taslağı)
 #
 # Bu Containerfile, bootc/rpm-ostree ile inşa edilebilen, immutable bir
-# Navigator masaüstü imajı üretir. Universal Blue'nun ublue-os/main base
+# Navigator masaüstü imajı üretir. Universal Blue'nun ublue-os/base-main base
 # image'ı referans alınmıştır (bootc uyumlu, aylık güncellenen Fedora Atomic
-# türevi).
+# türevi, DE içermeyen minimal taban — Hyprland'ı üzerine biz katmanlıyoruz).
 #
 # ÖNEMLİ: Bu dosya Faz 1 kapsamında SADECE TANIM amaçlıdır.
 # Yerel ortamda `podman build` / `rpm-ostree compose` ÇALIŞTIRILMAMALIDIR —
 # gerçek build işlemi .github/workflows/build-image.yml üzerinden GitHub
 # Actions'ta yapılır (bkz. proje kısıtları: roaming/kısıtlı internet).
 
-ARG BASE_IMAGE="ghcr.io/ublue-os/main"
+ARG BASE_IMAGE="ghcr.io/ublue-os/base-main"
 ARG BASE_TAG="latest"
 
 FROM ${BASE_IMAGE}:${BASE_TAG}

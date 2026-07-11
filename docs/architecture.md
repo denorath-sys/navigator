@@ -12,8 +12,9 @@ klasörlerin README'lerine bakın.
 **Fedora Atomic**, OSTree tabanlı, aylık güncellenen immutable bir imaj
 olarak kurulacak. Kullanıcı sistemi doğrudan değiştirmez; değişiklikler
 katmanlı imaj güncellemeleri (`rpm-ostree` / `bootc`) üzerinden gelir.
-Referans base image: [`ublue-os/main`](https://github.com/ublue-os/main)
-(Universal Blue). Tanım dosyası: [`image/Containerfile`](../image/Containerfile).
+Referans base image: [`ghcr.io/ublue-os/base-main`](https://github.com/ublue-os/main)
+(Universal Blue'nun DE içermeyen minimal tabanı — Hyprland üzerine bizim
+katmanladığımız bir katman). Tanım dosyası: [`image/Containerfile`](../image/Containerfile).
 
 ### Masaüstü ortamı
 
