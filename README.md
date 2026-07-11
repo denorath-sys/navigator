@@ -31,8 +31,10 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   doğrulandı). Quickshell `image/Containerfile`'a eklendi ve build doğrulandı
   (`errornointernet/quickshell` COPR). İlk QML shell dosyaları yazıldı
   (`shell/shell.qml`, `Bar.qml`, `Theme.qml` vb. — henüz çalışma zamanında
-  test edilmedi, bkz. `shell/README.md`). Sırada: `ai-stack/local-runtime`;
-  gerçek Hyprland oturumunda config testi.
+  test edilmedi, bkz. `shell/README.md`). `ai-stack/local-runtime`
+  orkestrasyon/istemci katmanı tamamlandı (Ollama REST istemcisi,
+  tier→model önerisi, 15 test) — Ollama kurulumu ve model indirme ayrı
+  bir onay bekliyor. Sırada: gerçek Hyprland oturumunda config testi.
 - **Faz 3 — İmaj build & test:** GitHub Actions üzerinde ilk gerçek
   `bootc`/`rpm-ostree` imaj build'i; sanal makinede boot testi.
 - **Faz 4 — AI stack tamamlama:** `router`, `mcp-tools`, `cloud-bridge`

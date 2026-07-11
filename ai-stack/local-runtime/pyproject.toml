@@ -1,0 +1,13 @@
+[project]
+name = "navigator-local-runtime"
+version = "0.1.0"
+description = "Navigator OS yerel model runtime — hardware tier'a göre Ollama model önerisi ve durum raporu"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+navigator-local-runtime = "local_runtime.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
