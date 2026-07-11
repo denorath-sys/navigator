@@ -51,13 +51,13 @@ RUN dnf5 -y copr enable solopasha/hyprland \
 # (0.3.0-3, fc43 için doğrulandı). Bu build Qt 6.10 ABI'sine karşı derlenmiş;
 # base-main imajında katmanlı halde daha eski qt6-qtbase (6.9.2) bulunduğundan
 # depsolve çakışması oluyordu (build log'da doğrulandı). `rpm-ostree install`
-# taban katmandaki mevcut bir paketi yükseltemiyor — bunun için taban
-# paketin `override replace --experimental` ile açıkça değiştirilmesi
-# gerekiyor (repo tabanlı/"non-local" replace bu bayrağı zorunlu kılıyor).
+# taban katmandaki bir paketi yükseltemiyor, `rpm-ostree override replace`
+# ise bu container-build akışında "Non-local replacement overrides not
+# implemented yet" hatası veriyor (--experimental ile bile). Bu yüzden bu
+# katmanda düz `dnf5 install` kullanılıyor — dnf5'in normal bağımlılık
+# çözücüsü rpm-ostree'nin aksine gerekli paketleri sorunsuz yükseltebiliyor.
 RUN dnf5 -y copr enable errornointernet/quickshell \
-    && rpm-ostree override replace --experimental qt6-qtbase \
-    && rpm-ostree install \
-        quickshell \
+    && dnf5 -y install quickshell \
     && ostree container commit
 
 # ---------------------------------------------------------------------------
