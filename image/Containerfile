@@ -44,7 +44,20 @@ RUN dnf5 -y copr enable solopasha/hyprland \
     && ostree container commit
 
 # ---------------------------------------------------------------------------
-# Katman 2: Navigator marka/tema varlıkları
+# Katman 2: Quickshell (Navigator'ın özgün shell'i — bkz. shell/README.md)
+# ---------------------------------------------------------------------------
+# Quickshell resmi Fedora depolarında yok; errornointernet/quickshell COPR'ı
+# Fedora 43/44 için aktif bakımlı, otomatik rebuild edilen tek kaynak
+# (0.3.0-3, fc43 için doğrulandı). Qt6 çalışma zamanı bağımlılıkları
+# (Qt6Core/Qml/Wayland vb.) RPM'in otomatik bağımlılık çözücüsü tarafından
+# paketin binary'sinden çıkarılıp kendiliğinden kurulur, ayrıca eklenmedi.
+RUN dnf5 -y copr enable errornointernet/quickshell \
+    && rpm-ostree install \
+        quickshell \
+    && ostree container commit
+
+# ---------------------------------------------------------------------------
+# Katman 3: Navigator marka/tema varlıkları
 # ---------------------------------------------------------------------------
 # theme/ dizinindeki palette.json ve GTK/Qt varlıkları, imaj içine
 # /usr/share/navigator/theme altında kopyalanacak (Faz 1'de dosyalar henüz
@@ -52,14 +65,14 @@ RUN dnf5 -y copr enable solopasha/hyprland \
 # COPY theme/ /usr/share/navigator/theme/
 
 # ---------------------------------------------------------------------------
-# Katman 3: Navigator sistem config'leri
+# Katman 4: Navigator sistem config'leri
 # ---------------------------------------------------------------------------
 # hyprland/hyprland.conf, sistem geneli varsayılan olarak /etc/skel altına
 # kopyalanabilir; kullanıcı bazlı override'lar korunur.
 # COPY hyprland/hyprland.conf /etc/skel/.config/hypr/hyprland.conf
 
 # ---------------------------------------------------------------------------
-# Katman 4: AI stack bağımlılıkları — PLACEHOLDER (Faz 2+)
+# Katman 5: AI stack bağımlılıkları — PLACEHOLDER (Faz 2+)
 # ---------------------------------------------------------------------------
 # llama.cpp / Ollama gibi büyük bağımlılıklar, boyut kısıtı nedeniyle Faz 1'de
 # katmanlanmıyor. Faz 2'de ai-stack/local-runtime README'sindeki tasarım
