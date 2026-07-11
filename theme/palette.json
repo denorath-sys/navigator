@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "Navigator",
+  "description": "Navigator OS marka renk paleti — pusula/deniz feneri/Orion/Kuzey Yıldızı temalı nautical & gökyüzü kimliği.",
+  "version": "0.1.0",
+  "colors": {
+    "teal": {
+      "hex": "#4fd1c5",
+      "role": "primary-accent",
+      "description": "Birincil vurgu rengi — interaktif öğeler, odak durumları, asistan paneli"
+    },
+    "purple": {
+      "hex": "#8b7cf6",
+      "role": "secondary-accent",
+      "description": "İkincil vurgu rengi — gradyanlarda teal ile eşleşir, AI/asistan bağlamı"
+    },
+    "gold": {
+      "hex": "#e8d9a8",
+      "role": "highlight",
+      "description": "Kuzey Yıldızı vurgusu — bildirimler, uyarılar, marka detayları"
+    },
+    "navy": {
+      "hex": "#0b0f1a",
+      "role": "base",
+      "description": "Lacivert taban — gece gökyüzü zemini, pencere arkaplanları, panel zemini"
+    }
+  },
+  "gradients": {
+    "assistant": {
+      "stops": ["#4fd1c5", "#8b7cf6"],
+      "angle": 45,
+      "usage": "Aktif pencere kenarlığı, asistan paneli vurgusu (bkz. hyprland/hyprland.conf)"
+    }
+  },
+  "notes": [
+    "Bu palet Faz 1 taslağıdır; GTK/Qt tema üretimi Faz 2'de theme/gtk ve theme/qt altında somutlaşacak.",
+    "hyprland/hyprland.conf içindeki renk değerleri bu dosya ile manuel senkron tutulmaktadır."
+  ]
+}

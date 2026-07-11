@@ -1,0 +1,74 @@
+# Navigator OS — İmaj Build & Push Pipeline (Faz 1 taslağı)
+#
+# Bu workflow, image/Containerfile'ı GitHub'ın kendi runner'ında (GitHub-hosted,
+# ücretsiz/paylaşımlı kaynak) build eder ve ghcr.io container registry'sine
+# push eder. Yerel ortamda ağır build/compose işlemi ÇALIŞTIRILMAZ — bu
+# pipeline manuel tetikleme (workflow_dispatch) veya main'e push ile
+# başlatılır; tetikleme kararı proje sahibine aittir.
+
+name: Build Navigator Image
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "image/Containerfile"
+      - "theme/**"
+      - "hyprland/**"
+      - ".github/workflows/build-image.yml"
+
+env:
+  IMAGE_NAME: navigator
+  IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+
+jobs:
+  build:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Maximize build space
+        uses: ublue-os/remove-unwanted-software@v7
+
+      - name: Build image
+        id: build_image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          tags: latest ${{ github.sha }}
+          containerfiles: |
+            ./image/Containerfile
+          context: .
+          layers: true
+          oci: true
+
+      - name: Log in to ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to ghcr.io
+        id: push
+        if: github.event_name != 'pull_request'
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build_image.outputs.image }}
+          tags: ${{ steps.build_image.outputs.tags }}
+          registry: ${{ env.IMAGE_REGISTRY }}
+
+      - name: Summary
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "### Navigator imajı push edildi" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`${{ steps.push.outputs.registry-paths }}\`" >> "$GITHUB_STEP_SUMMARY"

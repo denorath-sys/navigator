@@ -1,0 +1,69 @@
+# Navigator OS — Fedora Atomic imaj tanımı (Faz 1 taslağı)
+#
+# Bu Containerfile, bootc/rpm-ostree ile inşa edilebilen, immutable bir
+# Navigator masaüstü imajı üretir. Universal Blue'nun ublue-os/main base
+# image'ı referans alınmıştır (bootc uyumlu, aylık güncellenen Fedora Atomic
+# türevi).
+#
+# ÖNEMLİ: Bu dosya Faz 1 kapsamında SADECE TANIM amaçlıdır.
+# Yerel ortamda `podman build` / `rpm-ostree compose` ÇALIŞTIRILMAMALIDIR —
+# gerçek build işlemi .github/workflows/build-image.yml üzerinden GitHub
+# Actions'ta yapılır (bkz. proje kısıtları: roaming/kısıtlı internet).
+
+ARG BASE_IMAGE="ghcr.io/ublue-os/main"
+ARG BASE_TAG="latest"
+
+FROM ${BASE_IMAGE}:${BASE_TAG}
+
+# ---------------------------------------------------------------------------
+# Katman 1: Temel masaüstü paketleri + Hyprland (Wayland compositor)
+# ---------------------------------------------------------------------------
+# Not: Paket adları Fedora repo yapısına göre Faz 2'de doğrulanacak;
+# şimdilik niyet beyanı olarak bırakılmıştır.
+RUN rpm-ostree install \
+        hyprland \
+        hyprpaper \
+        hypridle \
+        hyprlock \
+        xdg-desktop-portal-hyprland \
+        kitty \
+        wofi \
+        waybar \
+        polkit-gnome \
+        NetworkManager \
+        pipewire \
+        wireplumber \
+    && ostree container commit
+
+# ---------------------------------------------------------------------------
+# Katman 2: Navigator marka/tema varlıkları
+# ---------------------------------------------------------------------------
+# theme/ dizinindeki palette.json ve GTK/Qt varlıkları, imaj içine
+# /usr/share/navigator/theme altında kopyalanacak (Faz 1'de dosyalar henüz
+# placeholder olduğu için bu adım Faz 2'de etkinleştirilecek).
+# COPY theme/ /usr/share/navigator/theme/
+
+# ---------------------------------------------------------------------------
+# Katman 3: Navigator sistem config'leri
+# ---------------------------------------------------------------------------
+# hyprland/hyprland.conf, sistem geneli varsayılan olarak /etc/skel altına
+# kopyalanabilir; kullanıcı bazlı override'lar korunur.
+# COPY hyprland/hyprland.conf /etc/skel/.config/hypr/hyprland.conf
+
+# ---------------------------------------------------------------------------
+# Katman 4: AI stack bağımlılıkları — PLACEHOLDER (Faz 2+)
+# ---------------------------------------------------------------------------
+# llama.cpp / Ollama gibi büyük bağımlılıklar, boyut kısıtı nedeniyle Faz 1'de
+# katmanlanmıyor. Faz 2'de ai-stack/local-runtime README'sindeki tasarım
+# netleştikten sonra ayrı bir katman olarak eklenecek.
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+LABEL org.opencontainers.image.title="Navigator OS"
+LABEL org.opencontainers.image.description="AI-native Linux masaüstü dağıtımı — Fedora Atomic + Hyprland tabanlı"
+LABEL org.opencontainers.image.vendor="Navigator OS Project"
+LABEL org.opencontainers.image.licenses="GPL-3.0-only"
+
+# bootc uyumluluğu için gerekli standart etiket
+LABEL containers.bootc="1"
