@@ -10,8 +10,9 @@ istemcisiyle konuşması yeterli, ayrı bir model dosyası/quantization yönetim
 gerekmiyor. Amaç, internet bağlantısı olmadan da temel asistan işlevlerinin
 çalışabilmesi.
 
-`router/` bu modülü, isteğin yerel olarak karşılanabileceğine karar
-verdiğinde çağıracak (Faz 3+).
+**`router` entegrasyonu (Faz 2):** `route: "local"` kararı verildiğinde
+`router/local.py` bu modülü subprocess ile `--prompt` bayrağıyla çağırır —
+bkz. `ai-stack/router/README.md` "local-runtime entegrasyonu".
 
 ## Kullanım
 
@@ -20,7 +21,8 @@ yanında (kardeş dizin olarak) bulunması gerekiyor.
 
 ```sh
 cd ai-stack/local-runtime
-python3 -m local_runtime --pretty
+python3 -m local_runtime --pretty                     # sadece durum
+python3 -m local_runtime --prompt "merhaba" --pretty   # gerçek istek (önerilen modelle)
 ```
 
 Testler:
@@ -44,6 +46,24 @@ Bu makinede (Ollama kurulu değil, hardware-probe tier="low" tespit etti):
   "model_ready": false
 }
 ```
+
+`--prompt` verildiğinde (Ollama kapalıyken, gerçek makinede test edildi):
+
+```json
+{
+  "schema_version": "0.1",
+  "provider": "ollama",
+  "hardware_tier": "low",
+  "prompt_preview": "merhaba",
+  "status": "unavailable",
+  "reason": "ollama_not_running",
+  "model": "llama3.2:3b"
+}
+```
+
+`reason` üç değerden biri olabilir: `no_local_model_recommended` (tier
+"minimal"), `ollama_not_running` (Ollama kapalı), `model_not_installed`
+(Ollama açık ama önerilen model çekilmemiş).
 
 ## Tier → model eşlemesi (taslak, `local_runtime/models.py`)
 
@@ -74,7 +94,9 @@ indirilmesi ayrı, açık bir onay gerektiren adım olacak.
 
 ## Durum
 
-Faz 2 — orkestrasyon/istemci katmanı tamamlandı (`models.py`, `client.py`,
-`status.py`, `python3 -m local_runtime` CLI). 15 test geçiyor (mock'lanmış
-Ollama HTTP + gerçek hardware-probe subprocess entegrasyonu). Ollama
-kurulumu ve model indirme Faz 3+'ta, ayrı onayla yapılacak.
+Faz 2 — orkestrasyon/istemci katmanı VE `router` entegrasyonu tamamlandı
+(`models.py`, `client.py`, `status.py`, `python3 -m local_runtime [--prompt ...]`
+CLI). 15 test geçiyor (mock'lanmış Ollama HTTP + gerçek hardware-probe
+subprocess entegrasyonu, hem durum hem `--prompt` yolu). Ollama kurulumu ve
+model indirme Faz 3+'ta, ayrı onayla yapılacak — `router` bu modülü zaten
+`route: "local"` kararında gerçekten çağırıyor.

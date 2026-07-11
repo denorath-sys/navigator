@@ -5,10 +5,10 @@
 Navigator asistanına gelen her isteği, `local-runtime/`'ın raporladığı
 donanım tier'ı + model hazırlığı, kullanıcı tercihi (gizlilik/maliyet/
 hız/dengeli) ve isteğin kaba bir karmaşıklık tahminine göre `local` veya
-`cloud` olarak etiketleyen karar katmanı. Karar `cloud` ise `cloud-bridge/`'i
-**gerçekten çağırır** (bkz. "Cloud-bridge entegrasyonu" aşağıda). Asistan
-panelinin (`shell/`) ve `mcp-tools/`'un birleştiği merkezi nokta olması
-planlanıyor.
+`cloud` olarak etiketleyen karar katmanı. Karar `local` ise `local-runtime/`'ı,
+`cloud` ise `cloud-bridge/`'i **gerçekten çağırır** (bkz. entegrasyon
+bölümleri aşağıda). Asistan panelinin (`shell/`) ve `mcp-tools/`'un
+birleştiği merkezi nokta olması planlanıyor.
 
 `router`, `hardware-probe`'u ayrıca çağırmaz — `local-runtime`'ın raporu
 zaten `hardware_tier` ve `model_ready` alanlarını içeriyor, tek bir
@@ -58,6 +58,9 @@ Bu makinede (Ollama kurulu değil → `model_ready: false` → her zaman `cloud`
 }
 ```
 
+`model_ready: true` olsaydı (`route: "local"`), rapora `cloud_bridge` yerine
+`local_runtime` alanı eklenirdi — bkz. "local-runtime entegrasyonu" aşağıda.
+
 ## Karar mantığı (taslak, `router/decision.py`)
 
 1. `model_ready == false` ise (Ollama kapalı veya model indirilmemiş):
@@ -72,6 +75,26 @@ Karmaşıklık tahmini (`estimate_complexity`) şimdilik çok kaba bir sezgisel
 (kelime sayısı > 40 veya çok satırlı → "complex"); gerçek bir sınıflandırma
 Faz 3+'ta ele alınacak. Tüm eşikler taslaktır.
 
+## local-runtime entegrasyonu
+
+`route: "local"` kararı verildiğinde `router/local.py`, `python3 -m
+local_runtime --prompt "<istek>"` komutunu subprocess ile çalıştırır ve
+sonucu raporun `local_runtime` alanına ekler. Olası durumlar:
+
+- `{"status": "unavailable", "reason": "ollama_not_running"}` — Ollama kapalı
+- `{"status": "unavailable", "reason": "model_not_installed"}` — Ollama açık
+  ama önerilen model çekilmemiş
+- `{"status": "unavailable", "reason": "no_local_model_recommended"}` — tier
+  "minimal", yerel model önerilmiyor
+- `{"status": "ok", "content": "..."}` — gerçek istek başarılı
+- `{"status": "error", "error": "..."}` — ağ/istek hatası
+
+Bu makinede Ollama kurulu olmadığından gerçek karar hep `cloud`'a düşüyor
+(`model_ready` her zaman `false`); `local` yolu, karar adımına sahte bir
+durum (`model_ready: true`) enjekte edilerek test edildi — gerçek
+`local-runtime` subprocess'i yine de gerçek Ollama durumunu doğru raporladı
+(bkz. `tests/test_integration.py`).
+
 ## Cloud-bridge entegrasyonu
 
 `route: "cloud"` kararı verildiğinde `router/cloud.py`, `python3 -m
@@ -82,21 +105,23 @@ sonucu raporun `cloud_bridge` alanına ekler. Üç olası durum:
 - Gerçek bir istek başarılı olursa: `{"status": "ok", "content": "..."}`
 - Ağ/istek hatası olursa: `{"status": "error", "error": "..."}`
 
-`route: "local"` kararında `cloud-bridge` hiç çağrılmaz (`local-runtime`'ın
-gerçek `generate()` çağrısına bağlanması ayrı bir adım — henüz yapılmadı).
+Her karar sadece kendi hedefini çağırır: `local` iken `cloud-bridge`
+çağrılmaz, `cloud` iken `local-runtime` çağrılmaz (testlerle doğrulandı).
 
 ## Kapsam dışı — henüz yapılmadı
 
-- `route: "local"` kararında `local-runtime`'ın gerçek `generate()` metodu
-  çağrılmıyor — sadece `route: "cloud"` için `cloud-bridge` entegrasyonu var.
 - `mcp-tools/` üzerinden gelen araç çağrıları `route_request` aracını
-  kullanıyor (bkz. `ai-stack/mcp-tools`) ama bu da aynı sınırlamayı taşıyor.
+  kullanıyor (bkz. `ai-stack/mcp-tools`) — bu artık hem `local` hem `cloud`
+  entegrasyonunu otomatik olarak miras alıyor.
+- Gerçek bir Ollama/Claude API yanıtı bu ortamda hiç görülmedi — sadece
+  "kurulu değil / kimlik bilgisi yok" yollarının doğru çalıştığı doğrulandı.
 
 ## Durum
 
-Faz 2 — karar/orkestrasyon katmanı ve **cloud-bridge entegrasyonu**
-tamamlandı (`decision.py`, `status.py`, `cloud.py`, `python3 -m router`
-CLI). 21 test geçiyor (saf karar mantığı unit testleri + gerçek 4 katmanlı
-subprocess zinciri: router → local-runtime → hardware-probe VE router →
-cloud-bridge, bu makinede uçtan uca doğrulandı — kimlik bilgisi olmadan
-graceful `unavailable` durumu dahil).
+Faz 2 — karar/orkestrasyon katmanı, **local-runtime entegrasyonu** ve
+**cloud-bridge entegrasyonu** tamamlandı (`decision.py`, `status.py`,
+`local.py`, `cloud.py`, `python3 -m router` CLI). 26 test geçiyor (saf karar
+mantığı unit testleri + iki gerçek subprocess zinciri: router →
+local-runtime → hardware-probe VE router → cloud-bridge, bu makinede uçtan
+uca doğrulandı — model/kimlik bilgisi olmadan graceful `unavailable`
+durumları dahil).

@@ -34,18 +34,17 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   test edilmedi, bkz. `shell/README.md`). `ai-stack/local-runtime`
   orkestrasyon/istemci katmanı tamamlandı (Ollama REST istemcisi,
   tier→model önerisi, 15 test) — Ollama kurulumu ve model indirme ayrı
-  bir onay bekliyor. `ai-stack/router` karar katmanı tamamlandı (yerel/bulut
-  yönlendirme mantığı, 17 test). `ai-stack/mcp-tools` ilk MCP sunucusunu
-  aldı (resmi SDK'sız, stdlib-only stdio JSON-RPC 2.0, 16 test) — dört
-  modül (`hardware-probe` → `local-runtime` → `router` → `mcp-tools`)
-  artık gerçek MCP protokolü üzerinden uçtan uca çalışıyor. `ai-stack/
-  cloud-bridge` kimlik bilgisi/istemci katmanını aldı (Anthropic Claude API,
-  stdlib-only ham HTTP, 15 test) ve **`router`'a gerçekten bağlandı**
-  (`route: "cloud"` kararında `cloud-bridge`'i subprocess ile çağırıyor,
-  21 test) — `ai-stack`'in beş modülünün tamamı en az bir implementasyon
-  aşamasına ulaştı ve iki gerçek subprocess zinciri (yerel + bulut) uçtan
-  uca çalışıyor. Sırada: gerçek Hyprland oturumunda config testi; Ollama
-  kurulumu+model indirme onayı.
+  bir onay bekliyor. `ai-stack/mcp-tools` ilk MCP sunucusunu aldı (resmi
+  SDK'sız, stdlib-only stdio JSON-RPC 2.0, 16 test). `ai-stack/cloud-bridge`
+  kimlik bilgisi/istemci katmanını aldı (Anthropic Claude API, stdlib-only
+  ham HTTP, 15 test). `ai-stack/router` karar katmanını VE hem
+  `local-runtime` hem `cloud-bridge` entegrasyonunu tamamladı (`route`
+  kararına göre ilgili modülü subprocess ile gerçekten çağırıyor, 26 test)
+  — `ai-stack`'in beş modülünün tamamı en az bir implementasyon aşamasına
+  ulaştı ve **iki gerçek uçtan uca subprocess zinciri** (router→local-runtime
+  ve router→cloud-bridge) bu makinede doğrulandı, Ollama/kimlik bilgisi
+  olmadan graceful "unavailable" durumları dahil. Sırada: gerçek Hyprland
+  oturumunda config testi; Ollama kurulumu+model indirme onayı.
 - **Faz 3 — İmaj build & test:** GitHub Actions üzerinde ilk gerçek
   `bootc`/`rpm-ostree` imaj build'i; sanal makinede boot testi.
 - **Faz 4 — AI stack tamamlama:** `router`, `mcp-tools`, `cloud-bridge`

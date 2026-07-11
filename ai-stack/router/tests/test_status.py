@@ -3,11 +3,27 @@ from unittest.mock import patch
 
 from router.status import route_request
 
+_NOOP_LOCAL_RESULT = {"status": "unavailable", "reason": "ollama_not_running"}
+_NOOP_CLOUD_RESULT = {"status": "unavailable", "reason": "credentials_not_configured"}
+
+
+def _noop_local_caller(prompt, cwd=None):
+    return _NOOP_LOCAL_RESULT
+
+
+def _noop_cloud_caller(prompt, cwd=None):
+    return _NOOP_CLOUD_RESULT
+
 
 class TestRouteRequest(unittest.TestCase):
     def test_uses_provided_status_without_subprocess(self):
         status = {"hardware_tier": "mid", "model_ready": True}
-        report = route_request("basit bir soru", preference="balanced", status=status)
+        report = route_request(
+            "basit bir soru",
+            preference="balanced",
+            status=status,
+            local_runtime_caller=_noop_local_caller,
+        )
         self.assertEqual(report["route"], "local")
         self.assertEqual(report["hardware_tier"], "mid")
 
@@ -28,27 +44,31 @@ class TestRouteRequest(unittest.TestCase):
     @patch("router.status.get_local_runtime_status")
     def test_calls_get_local_runtime_status_when_no_status_given(self, mock_get_status):
         mock_get_status.return_value = {"hardware_tier": "high", "model_ready": True}
-        report = route_request("selam")
+        report = route_request("selam", local_runtime_caller=_noop_local_caller)
         self.assertEqual(report["route"], "local")
         mock_get_status.assert_called_once()
 
     def test_prompt_preview_truncates_long_prompt(self):
         status = {"hardware_tier": "mid", "model_ready": True}
         long_prompt = "a" * 200
-        report = route_request(long_prompt, status=status)
+        report = route_request(
+            long_prompt, status=status, local_runtime_caller=_noop_local_caller
+        )
         self.assertEqual(len(report["prompt_preview"]), 80)
 
     def test_local_route_does_not_call_cloud_bridge(self):
         status = {"hardware_tier": "high", "model_ready": True}
-        called = []
+        cloud_called = []
         report = route_request(
             "basit bir soru",
             status=status,
-            cloud_bridge_caller=lambda prompt, cwd=None: called.append(prompt),
+            cloud_bridge_caller=lambda prompt, cwd=None: cloud_called.append(prompt),
+            local_runtime_caller=_noop_local_caller,
         )
         self.assertEqual(report["route"], "local")
         self.assertNotIn("cloud_bridge", report)
-        self.assertEqual(called, [])
+        self.assertEqual(cloud_called, [])
+        self.assertEqual(report["local_runtime"], _NOOP_LOCAL_RESULT)
 
     def test_cloud_route_calls_cloud_bridge_with_prompt(self):
         status = {"hardware_tier": "minimal", "model_ready": False}
@@ -69,6 +89,39 @@ class TestRouteRequest(unittest.TestCase):
         self.assertEqual(captured["prompt"], "selam navigator")
         self.assertEqual(captured["cwd"], "../cloud-bridge")
         self.assertEqual(report["cloud_bridge"]["content"], "merhaba!")
+
+    def test_cloud_route_does_not_call_local_runtime(self):
+        status = {"hardware_tier": "minimal", "model_ready": False}
+        local_called = []
+        report = route_request(
+            "selam navigator",
+            status=status,
+            cloud_bridge_caller=_noop_cloud_caller,
+            local_runtime_caller=lambda prompt, cwd=None: local_called.append(prompt),
+        )
+        self.assertEqual(report["route"], "cloud")
+        self.assertNotIn("local_runtime", report)
+        self.assertEqual(local_called, [])
+
+    def test_local_route_calls_local_runtime_with_prompt(self):
+        status = {"hardware_tier": "high", "model_ready": True}
+        captured = {}
+
+        def fake_caller(prompt, cwd=None):
+            captured["prompt"] = prompt
+            captured["cwd"] = cwd
+            return {"status": "ok", "content": "merhaba!"}
+
+        report = route_request(
+            "selam navigator",
+            status=status,
+            local_runtime_cwd="../local-runtime",
+            local_runtime_caller=fake_caller,
+        )
+        self.assertEqual(report["route"], "local")
+        self.assertEqual(captured["prompt"], "selam navigator")
+        self.assertEqual(captured["cwd"], "../local-runtime")
+        self.assertEqual(report["local_runtime"]["content"], "merhaba!")
 
 
 if __name__ == "__main__":
