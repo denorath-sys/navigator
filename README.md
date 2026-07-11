@@ -28,8 +28,11 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   `solopasha/hyprland` COPR). Shell teknolojisi olarak Quickshell seçildi.
 - **Faz 2 — Yerel prototip (devam ediyor):** `ai-stack/hardware-probe` ilk
   implementasyonu tamamlandı (Python, stdlib-only, 20 test, gerçek donanımda
-  doğrulandı). Sırada: `ai-stack/local-runtime`; Quickshell ile ilk shell
-  bileşenleri; gerçek Hyprland oturumunda config testi.
+  doğrulandı). Quickshell `image/Containerfile`'a eklendi ve build doğrulandı
+  (`errornointernet/quickshell` COPR). İlk QML shell dosyaları yazıldı
+  (`shell/shell.qml`, `Bar.qml`, `Theme.qml` vb. — henüz çalışma zamanında
+  test edilmedi, bkz. `shell/README.md`). Sırada: `ai-stack/local-runtime`;
+  gerçek Hyprland oturumunda config testi.
 - **Faz 3 — İmaj build & test:** GitHub Actions üzerinde ilk gerçek
   `bootc`/`rpm-ostree` imaj build'i; sanal makinede boot testi.
 - **Faz 4 — AI stack tamamlama:** `router`, `mcp-tools`, `cloud-bridge`
