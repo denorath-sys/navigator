@@ -21,19 +21,23 @@ FROM ${BASE_IMAGE}:${BASE_TAG}
 # ---------------------------------------------------------------------------
 # Katman 1: Temel masaüstü paketleri + Hyprland (Wayland compositor)
 # ---------------------------------------------------------------------------
-# hyprland, hypridle, hyprlock, hyprpaper, xdg-desktop-portal-hyprland ve
-# hyprpolkitagent şu an resmi Fedora depolarında (bu base image'ın izlediği
-# sürümde) bulunmuyor; solopasha/hyprland COPR'ı Hyprland ekosistemi için
-# fiili standart kaynaktır, bu yüzden burada etkinleştiriliyor.
-# polkit-gnome yerine Hyprland'a özel hyprpolkitagent kullanılıyor
-# (polkit-gnome upstream'de bakımsız ve Fedora depolarından kaldırılmış).
+# hyprland, hypridle, hyprlock, hyprpaper, xdg-desktop-portal-hyprland şu an
+# resmi Fedora depolarında (bu base image'ın izlediği sürümde) bulunmuyor;
+# solopasha/hyprland COPR'ı Hyprland ekosistemi için fiili standart
+# kaynaktır, bu yüzden burada etkinleştiriliyor.
+# polkit-gnome yerine (upstream'de bakımsız, Fedora depolarından kaldırılmış)
+# mate-polkit kullanılıyor — resmi Fedora deposunda, GTK tabanlı, Qt6'ya
+# bağımlı değil. Hyprland'a özel hyprpolkitagent DENENMEDİ: solopasha
+# COPR'ındaki hyprland-qt-support bağımlılığı aylardır Qt 6.9 private
+# API'sine sabitli kalmış (build log'da doğrulandı) ve Katman 2'deki
+# quickshell'in gerektirdiği Qt 6.10 ile çakışıyor.
 RUN dnf5 -y copr enable solopasha/hyprland \
     && rpm-ostree install \
         hyprland \
         hyprpaper \
         hypridle \
         hyprlock \
-        hyprpolkitagent \
+        mate-polkit \
         xdg-desktop-portal-hyprland \
         kitty \
         wofi \
