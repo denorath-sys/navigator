@@ -50,12 +50,13 @@ RUN dnf5 -y copr enable solopasha/hyprland \
 # Fedora 43/44 için aktif bakımlı, otomatik rebuild edilen tek kaynak
 # (0.3.0-3, fc43 için doğrulandı). Bu build Qt 6.10 ABI'sine karşı derlenmiş;
 # base-main imajında katmanlı halde daha eski qt6-qtbase (6.9.2) bulunduğundan
-# depsolve çakışması oluyordu (build log'da doğrulandı) — qt6-qtbase burada
-# açıkça istenerek 6.10'a yükseltiliyor.
+# depsolve çakışması oluyordu (build log'da doğrulandı). `rpm-ostree install`
+# taban katmandaki mevcut bir paketi yükseltemiyor — bunun için taban
+# paketin `override replace` ile açıkça değiştirilmesi gerekiyor.
 RUN dnf5 -y copr enable errornointernet/quickshell \
+    && rpm-ostree override replace qt6-qtbase \
     && rpm-ostree install \
         quickshell \
-        qt6-qtbase \
     && ostree container commit
 
 # ---------------------------------------------------------------------------
