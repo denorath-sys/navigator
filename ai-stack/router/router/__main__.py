@@ -19,11 +19,19 @@ def main() -> int:
         default="../local-runtime",
         help="ai-stack/local-runtime dizininin yolu (varsayılan: ../local-runtime)",
     )
+    parser.add_argument(
+        "--cloud-bridge-path",
+        default="../cloud-bridge",
+        help="ai-stack/cloud-bridge dizininin yolu (varsayılan: ../cloud-bridge)",
+    )
     args = parser.parse_args()
 
     try:
         report = route_request(
-            args.prompt, preference=args.prefer, local_runtime_cwd=args.local_runtime_path
+            args.prompt,
+            preference=args.prefer,
+            local_runtime_cwd=args.local_runtime_path,
+            cloud_bridge_cwd=args.cloud_bridge_path,
         )
     except Exception as e:
         print(json.dumps({"error": str(e)}, ensure_ascii=False), file=sys.stderr)

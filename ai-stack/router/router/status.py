@@ -1,4 +1,5 @@
-"""local-runtime durumunu sorgulayıp routing kararını üretir.
+"""local-runtime durumunu sorgulayıp routing kararını üretir; route "cloud"
+ise cloud-bridge'i gerçekten çağırır.
 
 router, hardware-probe'u ayrıca çağırmaz — local-runtime'ın raporu zaten
 hardware_tier ve model_ready alanlarını içeriyor (bkz.
@@ -8,6 +9,7 @@ yeterli.
 import json
 import subprocess
 
+from .cloud import call_cloud_bridge
 from .decision import decide_route, estimate_complexity
 
 SCHEMA_VERSION = "0.1"
@@ -25,7 +27,9 @@ def route_request(
     prompt: str,
     preference: str = "balanced",
     local_runtime_cwd: str | None = None,
+    cloud_bridge_cwd: str | None = None,
     status: dict | None = None,
+    cloud_bridge_caller=None,
 ) -> dict:
     status = status or get_local_runtime_status(cwd=local_runtime_cwd)
     complexity = estimate_complexity(prompt)
@@ -36,7 +40,7 @@ def route_request(
         complexity=complexity,
     )
 
-    return {
+    report = {
         "schema_version": SCHEMA_VERSION,
         "prompt_preview": prompt[:80],
         "complexity": complexity,
@@ -46,3 +50,9 @@ def route_request(
         "route": decision["target"],
         "reasoning": decision["reasoning"],
     }
+
+    if decision["target"] == "cloud":
+        caller = cloud_bridge_caller or call_cloud_bridge
+        report["cloud_bridge"] = caller(prompt, cwd=cloud_bridge_cwd)
+
+    return report

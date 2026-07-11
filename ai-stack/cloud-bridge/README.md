@@ -11,6 +11,10 @@ gönderen bir istemci sağlar.
 `mcp-tools/` üzerinden gelen araç çağrılarının bulut modeller için de aynı
 şekilde çalışmasını sağlamak (Faz 3+) bu modülün sorumluluğunda olacak.
 
+**`router` entegrasyonu (Faz 2):** `route: "cloud"` kararı verildiğinde
+`router/cloud.py` bu modülü subprocess ile `--prompt` bayrağıyla çağırır —
+bkz. `ai-stack/router/README.md` "Cloud-bridge entegrasyonu".
+
 ## Neden resmi SDK değil
 
 Anthropic'in resmi `anthropic` Python SDK'sı (kimlik bilgisi çözümlemesi,
@@ -37,7 +41,8 @@ Harici bağımlılık yok, sadece Python 3.11+ (stdlib).
 
 ```sh
 cd ai-stack/cloud-bridge
-python3 -m cloud_bridge --pretty
+python3 -m cloud_bridge --pretty                     # sadece kimlik bilgisi durumu
+python3 -m cloud_bridge --prompt "merhaba" --pretty   # gerçek istek (kimlik bilgisi varsa)
 ```
 
 Testler:
@@ -60,6 +65,19 @@ Bu makinede (kimlik bilgisi ayarlı değil):
 }
 ```
 
+`--prompt` verildiğinde (kimlik bilgisi yokken, gerçek makinede test edildi):
+
+```json
+{
+  "schema_version": "0.1",
+  "provider": "anthropic",
+  "model": "claude-opus-4-8",
+  "prompt_preview": "merhaba",
+  "status": "unavailable",
+  "reason": "credentials_not_configured"
+}
+```
+
 ## `is_available()` neden ağ çağrısı yapmıyor
 
 `local-runtime`'ın `OllamaClient.is_available()`'ı `localhost:11434/api/version`'a
@@ -74,13 +92,14 @@ ortam değişkeni varlığını kontrol ediyor, gerçek bir istek göndermiyor.
   denenmedi. `generate()` metodu yazıldı ve mock'lanmış testlerle
   doğrulandı, ama canlı bir isteğe karşı hiç çalıştırılmadı.
 - Gizlilik filtrelemesi (isteğe gönderilmeden önce hassas veri maskeleme) yok.
-- `router`/`mcp-tools` entegrasyonu yok — `route: "cloud"` kararı bu modülü
-  henüz gerçekten çağırmıyor.
+- `mcp-tools/` entegrasyonu yok (sadece `router` bu modülü çağırıyor).
 - Tool use / streaming yok — sadece tek turluk `generate()`.
 
 ## Durum
 
-Faz 2 — kimlik bilgisi/istemci katmanı tamamlandı (`client.py`, `status.py`,
-`python3 -m cloud_bridge` CLI). 14 test geçiyor (mock'lanmış HTTP + gerçek
-CLI entegrasyon testi, kimlik bilgisi olmadan). Bununla `ai-stack`'in beş
-modülünün tamamı en az bir implementasyon aşamasına ulaştı.
+Faz 2 — kimlik bilgisi/istemci katmanı VE `router` entegrasyonu tamamlandı
+(`client.py`, `status.py`, `python3 -m cloud_bridge [--prompt ...]` CLI).
+15 test geçiyor (mock'lanmış HTTP + gerçek CLI entegrasyon testleri, kimlik
+bilgisi olmadan — hem `--pretty` durum hem `--prompt` yolu). `ai-stack`'in
+beş modülünün tamamı en az bir implementasyon aşamasına ulaştı; `router`
+artık `route: "cloud"` kararında bu modülü gerçekten çağırıyor.

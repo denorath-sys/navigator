@@ -1,0 +1,13 @@
+"""cloud-bridge'i subprocess ile çağırır — route kararı "cloud" olduğunda."""
+import json
+import subprocess
+
+CLOUD_BRIDGE_CMD = ["python3", "-m", "cloud_bridge"]
+
+
+def call_cloud_bridge(prompt: str, cwd: str | None = None) -> dict:
+    result = subprocess.run(
+        CLOUD_BRIDGE_CMD + ["--prompt", prompt],
+        cwd=cwd, capture_output=True, text=True, check=True,
+    )
+    return json.loads(result.stdout)

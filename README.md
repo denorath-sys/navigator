@@ -40,9 +40,12 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   modül (`hardware-probe` → `local-runtime` → `router` → `mcp-tools`)
   artık gerçek MCP protokolü üzerinden uçtan uca çalışıyor. `ai-stack/
   cloud-bridge` kimlik bilgisi/istemci katmanını aldı (Anthropic Claude API,
-  stdlib-only ham HTTP, 14 test) — `ai-stack`'in beş modülünün tamamı en az
-  bir implementasyon aşamasına ulaştı. Sırada: gerçek Hyprland oturumunda
-  config testi; `router`↔`cloud-bridge` entegrasyonu.
+  stdlib-only ham HTTP, 15 test) ve **`router`'a gerçekten bağlandı**
+  (`route: "cloud"` kararında `cloud-bridge`'i subprocess ile çağırıyor,
+  21 test) — `ai-stack`'in beş modülünün tamamı en az bir implementasyon
+  aşamasına ulaştı ve iki gerçek subprocess zinciri (yerel + bulut) uçtan
+  uca çalışıyor. Sırada: gerçek Hyprland oturumunda config testi; Ollama
+  kurulumu+model indirme onayı.
 - **Faz 3 — İmaj build & test:** GitHub Actions üzerinde ilk gerçek
   `bootc`/`rpm-ostree` imaj build'i; sanal makinede boot testi.
 - **Faz 4 — AI stack tamamlama:** `router`, `mcp-tools`, `cloud-bridge`
