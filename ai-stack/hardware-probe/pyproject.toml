@@ -1,0 +1,13 @@
+[project]
+name = "navigator-hardware-probe"
+version = "0.1.0"
+description = "Navigator OS donanım tarayıcı — CPU/RAM/GPU sinyallerinden AI model tier kararı üretir"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+navigator-hardware-probe = "hardware_probe.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

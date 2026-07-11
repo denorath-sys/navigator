@@ -26,8 +26,9 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   GitHub Actions üzerinde build edilip `ghcr.io/denorath-sys/navigator`'a
   push edilerek doğrulandı (base image: `ublue-os/base-main:43` +
   `solopasha/hyprland` COPR). Shell teknolojisi olarak Quickshell seçildi.
-- **Faz 2 — Yerel prototip:** `ai-stack/hardware-probe` ve
-  `ai-stack/local-runtime` ilk implementasyonu; Quickshell ile ilk shell
+- **Faz 2 — Yerel prototip (devam ediyor):** `ai-stack/hardware-probe` ilk
+  implementasyonu tamamlandı (Python, stdlib-only, 20 test, gerçek donanımda
+  doğrulandı). Sırada: `ai-stack/local-runtime`; Quickshell ile ilk shell
   bileşenleri; gerçek Hyprland oturumunda config testi.
 - **Faz 3 — İmaj build & test:** GitHub Actions üzerinde ilk gerçek
   `bootc`/`rpm-ostree` imaj build'i; sanal makinede boot testi.

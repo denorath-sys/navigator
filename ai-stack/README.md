@@ -7,7 +7,7 @@ Beş bileşenden oluşur, her biri kendi README'sinde detaylandırılmıştır:
 
 | Modül | Sorumluluk |
 |---|---|
-| [`hardware-probe/`](hardware-probe/README.md) | Donanımı tespit eder, model tier'ını belirler |
+| [`hardware-probe/`](hardware-probe/README.md) | Donanımı tespit eder, model tier'ını belirler — **Faz 2: ilk implementasyon hazır** |
 | [`local-runtime/`](local-runtime/README.md) | Yerel model çalıştırma (llama.cpp/Ollama) |
 | [`mcp-tools/`](mcp-tools/README.md) | MCP tabanlı sistem/araç erişimi |
 | [`router/`](router/README.md) | Yerel↔bulut hibrit istek yönlendirme |
@@ -31,6 +31,7 @@ kullanıcı isteği (shell/ asistan paneli)
 
 ## Durum
 
-Faz 1 — sadece mimari niyet ve modül sınırları belgeleniyor. Kod yok.
-İlk implementasyon Faz 2'de `hardware-probe/` ile başlayacak (diğer tüm
-modüller donanım tier kararına bağımlı).
+`hardware-probe/` Faz 2'de ilk implementasyonunu aldı (Python, stdlib-only,
+20 test). Diğer dört modül (`local-runtime`, `mcp-tools`, `router`,
+`cloud-bridge`) hâlâ Faz 1 placeholder aşamasında — hepsi `hardware-probe`'un
+ürettiği tier kararına bağımlı olduğundan sırayla ele alınacak.
