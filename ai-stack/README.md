@@ -11,7 +11,7 @@ Beş bileşenden oluşur, her biri kendi README'sinde detaylandırılmıştır:
 | [`local-runtime/`](local-runtime/README.md) | Yerel model çalıştırma (Ollama) — **Faz 2: orkestrasyon/istemci katmanı hazır, model indirme onay bekliyor** |
 | [`mcp-tools/`](mcp-tools/README.md) | MCP tabanlı sistem/araç erişimi — **Faz 2: ilk MCP sunucusu hazır** |
 | [`router/`](router/README.md) | Yerel↔bulut hibrit istek yönlendirme — **Faz 2: karar/orkestrasyon katmanı hazır** |
-| [`cloud-bridge/`](cloud-bridge/README.md) | Bulut model sağlayıcılarına bağlantı |
+| [`cloud-bridge/`](cloud-bridge/README.md) | Bulut model sağlayıcılarına bağlantı (Anthropic Claude API) — **Faz 2: kimlik bilgisi/istemci katmanı hazır** |
 
 ## Veri akışı (hedeflenen, Faz 2+)
 
@@ -31,17 +31,21 @@ kullanıcı isteği (shell/ asistan paneli)
 
 ## Durum
 
-`hardware-probe/` Faz 2'de ilk implementasyonunu aldı (Python, stdlib-only,
-20 test). `local-runtime/` de Faz 2'de orkestrasyon/istemci katmanını aldı
-(tier→model önerisi, Ollama REST istemcisi, 15 test) — Ollama kurulumu ve
-gerçek model indirme ayrı bir onay bekliyor. `router/` karar/orkestrasyon
-katmanını aldı (yerel/bulut yönlendirme mantığı, 17 test) — `cloud-bridge`
-henüz yok olduğundan `route: "cloud"` kararı şu an sadece etiket üretiyor,
-gerçek bir çağrı yapmıyor. `mcp-tools/` ilk MCP sunucusunu aldı (resmi SDK
-kurmadan, stdlib-only JSON-RPC 2.0 stdio transport; `hardware_tier` ve
-`route_request` araçları, 16 test). `cloud-bridge` hâlâ Faz 1 placeholder
-aşamasında — kalan tek modül.
+Beş modülün tamamı Faz 2'de en az bir implementasyon aşamasına ulaştı:
+
+- `hardware-probe/` — ilk implementasyon tamamlandı (Python, stdlib-only, 20 test)
+- `local-runtime/` — orkestrasyon/istemci katmanı hazır (tier→model önerisi,
+  Ollama REST istemcisi, 15 test) — Ollama kurulumu ve model indirme ayrı bir onay bekliyor
+- `router/` — karar/orkestrasyon katmanı hazır (yerel/bulut yönlendirme
+  mantığı, 17 test)
+- `mcp-tools/` — ilk MCP sunucusu hazır (resmi SDK kurmadan, stdlib-only
+  JSON-RPC 2.0 stdio transport; `hardware_tier` ve `route_request` araçları, 16 test)
+- `cloud-bridge/` — kimlik bilgisi/istemci katmanı hazır (Anthropic Claude
+  API, ham HTTP; 14 test) — gerçek bir API çağrısı henüz yapılmadı/test
+  edilmedi (kimlik bilgisi yok)
 
 Dört modül (`hardware-probe` → `local-runtime` → `router` → `mcp-tools`)
-artık gerçek MCP protokolü/subprocess zinciriyle uçtan uca çalışıyor ve bu
-makinede doğrulandı.
+gerçek MCP protokolü/subprocess zinciriyle uçtan uca çalışıyor ve bu
+makinede doğrulandı. `cloud-bridge` henüz `router`'a bağlanmadı —
+`route: "cloud"` kararı hâlâ sadece etiket üretiyor, gerçek bir çağrı
+yapmıyor.

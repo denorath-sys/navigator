@@ -1,0 +1,13 @@
+[project]
+name = "navigator-cloud-bridge"
+version = "0.1.0"
+description = "Navigator OS cloud-bridge — Anthropic Claude API'sine bağlantı ve kimlik bilgisi yönetimi"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+navigator-cloud-bridge = "cloud_bridge.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

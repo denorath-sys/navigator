@@ -38,8 +38,11 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   yönlendirme mantığı, 17 test). `ai-stack/mcp-tools` ilk MCP sunucusunu
   aldı (resmi SDK'sız, stdlib-only stdio JSON-RPC 2.0, 16 test) — dört
   modül (`hardware-probe` → `local-runtime` → `router` → `mcp-tools`)
-  artık gerçek MCP protokolü üzerinden uçtan uca çalışıyor. Sırada: gerçek
-  Hyprland oturumunda config testi; `cloud-bridge` (son placeholder).
+  artık gerçek MCP protokolü üzerinden uçtan uca çalışıyor. `ai-stack/
+  cloud-bridge` kimlik bilgisi/istemci katmanını aldı (Anthropic Claude API,
+  stdlib-only ham HTTP, 14 test) — `ai-stack`'in beş modülünün tamamı en az
+  bir implementasyon aşamasına ulaştı. Sırada: gerçek Hyprland oturumunda
+  config testi; `router`↔`cloud-bridge` entegrasyonu.
 - **Faz 3 — İmaj build & test:** GitHub Actions üzerinde ilk gerçek
   `bootc`/`rpm-ostree` imaj build'i; sanal makinede boot testi.
 - **Faz 4 — AI stack tamamlama:** `router`, `mcp-tools`, `cloud-bridge`
