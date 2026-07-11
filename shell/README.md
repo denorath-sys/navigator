@@ -5,10 +5,14 @@ uygulama başlatıcı vb.) burada yaşayacak.
 
 ## Planlanan teknoloji
 
-[Quickshell](https://quickshell.outfoxxed.me/) veya [AGS](https://aylur.github.io/ags-docs/)
-tabanlı, Hyprland ile doğrudan konuşan özgün bir shell. İkisi arasındaki seçim
-Faz 2 başında yapılacak; kriterler: Wayland/Hyprland entegrasyon olgunluğu,
-performans, ve `ai-stack/router` ile IPC kolaylığı.
+**Karar (Faz 1 sonu): [Quickshell](https://quickshell.outfoxxed.me/)** — Qt6/QML
+tabanlı, Hyprland ile doğrudan konuşan özgün bir shell. AGS/Astal'a (GTK4/GJS)
+karşı tercih edildi; gerekçe: QML'in performans/render avantajı ve Navigator'ın
+kendine özgü kimliğini sıfırdan, daha az hazır şablona bağımlı kurma tercihi.
+
+Not: Qt6 + QML modülleri kurulumu büyük bir bağımlılık ağacı getirir (200 MB
+kısıtı nedeniyle Faz 1'de yerel ortamda kurulmadı) — gerçek implementasyon ve
+bağımlılık kurulumu Faz 2'de, GitHub Actions üzerinden doğrulanacak.
 
 ## Kapsam (ileride)
 

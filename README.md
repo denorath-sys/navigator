@@ -13,7 +13,7 @@ temalı nautical/gökyüzü estetiğine dayanır (bkz. [`theme/palette.json`](th
 |---|---|
 | Taban | Fedora Atomic (OSTree, aylık immutable imaj, [`image/Containerfile`](image/Containerfile)) |
 | Compositor | [Hyprland](https://hyprland.org) (Wayland) — [`hyprland/`](hyprland/) |
-| Shell | Quickshell veya AGS tabanlı özgün kabuk — [`shell/`](shell/) |
+| Shell | [Quickshell](https://quickshell.outfoxxed.me/) (Qt6/QML) tabanlı özgün kabuk — [`shell/`](shell/) |
 | AI Stack | Donanıma göre otomatik model tier seçimi, MCP tabanlı araç erişimi, yerel↔bulut hibrit router — [`ai-stack/`](ai-stack/) |
 | Tema | Marka renk paleti + GTK/Qt tema — [`theme/`](theme/) |
 
@@ -21,11 +21,14 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
 
 ## Yol haritası
 
-- **Faz 1 — İskelet (şu an):** Repo yapısı, config/doküman taslakları,
-  CI pipeline tanımı. Hiçbir büyük indirme veya gerçek build yapılmadı.
+- **Faz 1 — İskelet (tamamlandı):** Repo yapısı, config/doküman taslakları,
+  CI pipeline tanımı. Yerel ortamda büyük indirme yapılmadı; Containerfile
+  GitHub Actions üzerinde build edilip `ghcr.io/denorath-sys/navigator`'a
+  push edilerek doğrulandı (base image: `ublue-os/base-main:43` +
+  `solopasha/hyprland` COPR). Shell teknolojisi olarak Quickshell seçildi.
 - **Faz 2 — Yerel prototip:** `ai-stack/hardware-probe` ve
-  `ai-stack/local-runtime` ilk implementasyonu; shell teknolojisi (Quickshell
-  vs AGS) kararı; gerçek Hyprland oturumunda config testi.
+  `ai-stack/local-runtime` ilk implementasyonu; Quickshell ile ilk shell
+  bileşenleri; gerçek Hyprland oturumunda config testi.
 - **Faz 3 — İmaj build & test:** GitHub Actions üzerinde ilk gerçek
   `bootc`/`rpm-ostree` imaj build'i; sanal makinede boot testi.
 - **Faz 4 — AI stack tamamlama:** `router`, `mcp-tools`, `cloud-bridge`

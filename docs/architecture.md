@@ -20,8 +20,10 @@ katmanladığımız bir katman). Tanım dosyası: [`image/Containerfile`](../ima
 
 **Hyprland**, dinamik tiling özellikli bir Wayland compositor'ü olarak
 seçildi — performans ve özelleştirilebilirlik önceliği. Üzerine
-**Quickshell** veya **AGS** tabanlı özgün bir shell inşa edilecek (panel,
-bildirimler, asistan paneli, launcher). Bkz. [`hyprland/`](../hyprland/) ve
+**Quickshell** (Qt6/QML) tabanlı özgün bir shell inşa edilecek (panel,
+bildirimler, asistan paneli, launcher) — AGS/Astal'a karşı QML'in
+performans avantajı ve daha az hazır şablona bağımlı, özgün bir kimlik
+kurma tercihiyle seçildi. Bkz. [`hyprland/`](../hyprland/) ve
 [`shell/`](../shell/).
 
 ### AI Stack
