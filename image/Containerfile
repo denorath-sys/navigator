@@ -52,9 +52,10 @@ RUN dnf5 -y copr enable solopasha/hyprland \
 # base-main imajında katmanlı halde daha eski qt6-qtbase (6.9.2) bulunduğundan
 # depsolve çakışması oluyordu (build log'da doğrulandı). `rpm-ostree install`
 # taban katmandaki mevcut bir paketi yükseltemiyor — bunun için taban
-# paketin `override replace` ile açıkça değiştirilmesi gerekiyor.
+# paketin `override replace --experimental` ile açıkça değiştirilmesi
+# gerekiyor (repo tabanlı/"non-local" replace bu bayrağı zorunlu kılıyor).
 RUN dnf5 -y copr enable errornointernet/quickshell \
-    && rpm-ostree override replace qt6-qtbase \
+    && rpm-ostree override replace --experimental qt6-qtbase \
     && rpm-ostree install \
         quickshell \
     && ostree container commit
