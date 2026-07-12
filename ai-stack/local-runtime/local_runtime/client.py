@@ -18,18 +18,18 @@ class OllamaClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
-    def _get(self, path: str) -> dict:
-        with urllib.request.urlopen(f"{self.base_url}{path}", timeout=self.timeout) as resp:
+    def _get(self, path: str, timeout: float | None = None) -> dict:
+        with urllib.request.urlopen(f"{self.base_url}{path}", timeout=timeout or self.timeout) as resp:
             return json.loads(resp.read())
 
-    def _post(self, path: str, payload: dict) -> dict:
+    def _post(self, path: str, payload: dict, timeout: float | None = None) -> dict:
         data = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
             f"{self.base_url}{path}",
             data=data,
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(request, timeout=self.timeout) as resp:
+        with urllib.request.urlopen(request, timeout=timeout or self.timeout) as resp:
             return json.loads(resp.read())
 
     def is_available(self) -> bool:
@@ -46,8 +46,15 @@ class OllamaClient:
             raise OllamaError(f"Ollama'ya bağlanılamadı: {e}") from e
         return [m["name"] for m in data.get("models", [])]
 
-    def generate(self, model: str, prompt: str, stream: bool = False) -> dict:
+    def generate(self, model: str, prompt: str, stream: bool = False, timeout: float = 300.0) -> dict:
+        """Model belleğe yüklenip (özellikle ilk çağrıda) CPU'da çıkarım
+        yapması dakikalar sürebilir — varsayılan timeout `is_available()`/
+        `list_models()` gibi metadata uç noktalarından çok daha yüksek (300s)."""
         try:
-            return self._post("/api/generate", {"model": model, "prompt": prompt, "stream": stream})
+            return self._post(
+                "/api/generate",
+                {"model": model, "prompt": prompt, "stream": stream},
+                timeout=timeout,
+            )
         except (urllib.error.URLError, OSError, ValueError) as e:
             raise OllamaError(f"Ollama generate isteği başarısız: {e}") from e

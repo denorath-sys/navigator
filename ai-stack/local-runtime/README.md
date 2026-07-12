@@ -10,6 +10,9 @@ istemcisiyle konuşması yeterli, ayrı bir model dosyası/quantization yönetim
 gerekmiyor. Amaç, internet bağlantısı olmadan da temel asistan işlevlerinin
 çalışabilmesi.
 
+**Bu makinede artık tam çalışır durumda**: Ollama kurulu + `llama3.2:3b`
+indirilmiş → `model_ready: true` → gerçek yerel üretim yapılabiliyor.
+
 **`router` entegrasyonu (Faz 2):** `route: "local"` kararı verildiğinde
 `router/local.py` bu modülü subprocess ile `--prompt` bayrağıyla çağırır —
 bkz. `ai-stack/router/README.md` "local-runtime entegrasyonu".
@@ -34,9 +37,8 @@ python3 -m unittest discover -v -s tests
 
 ## Çıktı örneği
 
-Bu makinede (Ollama **kurulu ve çalışıyor** — `curl -fsSL https://ollama.com/install.sh | sh`
-ile kuruldu, systemd servisi `active`; hardware-probe tier="low" tespit
-etti; önerilen model henüz indirilmedi):
+Bu makinede (Ollama kurulu ve çalışıyor, `llama3.2:3b` indirilmiş —
+`hardware-probe` tier="low" tespit etti):
 
 ```json
 {
@@ -44,28 +46,30 @@ etti; önerilen model henüz indirilmedi):
   "hardware_tier": "low",
   "recommended_model": {"model": "llama3.2:3b", "approx_size_gb": 2.0},
   "ollama_available": true,
-  "installed_models": [],
-  "model_ready": false
+  "installed_models": ["llama3.2:3b"],
+  "model_ready": true
 }
 ```
 
-`--prompt` verildiğinde (aynı durum — Ollama açık, model kurulu değil):
+`--prompt` verildiğinde — **gerçek bir yerel üretim** (bu makinede test
+edildi):
 
 ```json
 {
   "schema_version": "0.1",
   "provider": "ollama",
   "hardware_tier": "low",
-  "prompt_preview": "merhaba",
-  "status": "unavailable",
-  "reason": "model_not_installed",
-  "model": "llama3.2:3b"
+  "prompt_preview": "Merhaba, sen kimsin?",
+  "model": "llama3.2:3b",
+  "status": "ok",
+  "content": "Merhaba! Ben bir model conversasyon otomatuım. Ne gibi yardımcı olabilirim?"
 }
 ```
 
-`reason` üç değerden biri olabilir: `no_local_model_recommended` (tier
+Model kurulu değilken/Ollama kapalıyken `status: "unavailable"` ve şu üç
+`reason` değerinden biri döner: `no_local_model_recommended` (tier
 "minimal"), `ollama_not_running` (Ollama kapalı), `model_not_installed`
-(Ollama açık ama önerilen model çekilmemiş — şu anki durum).
+(Ollama açık ama model çekilmemiş).
 
 ## Tier → model eşlemesi (taslak, `local_runtime/models.py`)
 
@@ -77,32 +81,32 @@ etti; önerilen model henüz indirilmedi):
 | `high` | `llama3.1:70b` | ~40 GB |
 
 Bu eşleme taslaktır, gerçek kullanım/benchmark verisi biriktikçe Faz 3+'ta
-revize edilecek.
+revize edilecek. Bu makinede sadece `low` tier'ın modeli (`llama3.2:3b`)
+indirildi — `mid`/`high` bu donanıma hiç uygulanmıyor.
 
-## İndirme gerektiren kısım — kısmen yapıldı
+## İndirme tamamlandı (kullanıcı onayıyla, iki ayrı adımda)
 
-**Ollama'nın kendisi kuruldu** (kullanıcı onayıyla, `curl -fsSL
-https://ollama.com/install.sh | sh` — ~1.37 GB, resmi kurulum betiği,
-sudo ile systemd servisi olarak). Bu makinede ayrık GPU olmadığından
-CPU-only modda kuruldu.
+1. **Ollama'nın kendisi**: `curl -fsSL https://ollama.com/install.sh | sh`
+   (~1.37 GB, resmi kurulum betiği, sudo ile systemd servisi olarak). Bu
+   makinede ayrık GPU olmadığından CPU-only modda kuruldu.
+2. **Model ağırlığı**: `ollama pull llama3.2:3b` (~2 GB).
 
-**Model ağırlığı henüz indirilmedi** — proje kısıtı gereği (birkaç GB'lık
-model dosyaları için ayrı, açık bir onay gerekiyor). Şu an:
+İkisi de ayrı, açık onaylarla yapıldı (proje kısıtı: 200 MB üstü indirme
+onaysız başlatılmaz).
 
-- Tier→model önerisi üretiyor (saf mantık)
-- Ollama'nın REST API'sine gerçekten konuşuyor (`ollama_available: true`,
-  gerçek makinede doğrulandı)
-- Model kurulu olmadığından **çökmeden** `model_ready: false` /
-  `reason: "model_not_installed"` raporluyor
+## Bilinen sınırlama — zaman aşımı
 
-`ollama pull llama3.2:3b` (~2 GB) ayrı, açık bir onay gerektiren bir
-sonraki adım olacak.
+`OllamaClient.generate()`'ın varsayılan timeout'u 300 saniye —
+`is_available()`/`list_models()` gibi hafif metadata çağrılarından çok daha
+yüksek, çünkü model ilk çağrıda belleğe yüklenip CPU'da çıkarım yapması
+dakikalar sürebilir (bu hata gerçek makinede yakalanıp düzeltildi: ilk
+denemede varsayılan 5 saniyelik timeout'la `"error": "timed out"` alınmıştı).
 
 ## Durum
 
-Faz 2 — orkestrasyon/istemci katmanı, `router` entegrasyonu VE **gerçek
-Ollama kurulumu** tamamlandı (`models.py`, `client.py`, `status.py`,
-`python3 -m local_runtime [--prompt ...]` CLI). 16 test geçiyor (mock'lanmış
-Ollama HTTP + gerçek Ollama'ya karşı entegrasyon testleri — hem durum hem
-`--prompt` yolu, `ollama_available: true` durumuyla). Model indirme Faz 3+'ta,
-ayrı onayla yapılacak.
+Faz 2 — orkestrasyon/istemci katmanı, `router` entegrasyonu, **gerçek
+Ollama kurulumu VE gerçek model indirme** tamamlandı (`models.py`,
+`client.py`, `status.py`, `python3 -m local_runtime [--prompt ...]` CLI).
+16 test geçiyor — biri gerçek bir Ollama `generate()` çağrısı (model
+belleğe yüklenip gerçek metin üretiyor). `route: "local"` artık bu
+makinede gerçekten uçtan uca çalışıyor.

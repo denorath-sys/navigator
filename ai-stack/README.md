@@ -8,12 +8,12 @@ Beş bileşenden oluşur, her biri kendi README'sinde detaylandırılmıştır:
 | Modül | Sorumluluk |
 |---|---|
 | [`hardware-probe/`](hardware-probe/README.md) | Donanımı tespit eder, model tier'ını belirler — **Faz 2: ilk implementasyon hazır** |
-| [`local-runtime/`](local-runtime/README.md) | Yerel model çalıştırma (Ollama) — **Faz 2: orkestrasyon/istemci katmanı hazır, router'a bağlı, model indirme onay bekliyor** |
+| [`local-runtime/`](local-runtime/README.md) | Yerel model çalıştırma (Ollama) — **Faz 2: uçtan uca çalışıyor** (Ollama + `llama3.2:3b` kurulu) |
 | [`mcp-tools/`](mcp-tools/README.md) | MCP tabanlı sistem/araç erişimi — **Faz 2: ilk MCP sunucusu hazır** |
-| [`router/`](router/README.md) | Yerel↔bulut hibrit istek yönlendirme — **Faz 2: karar katmanı + local-runtime/cloud-bridge entegrasyonu hazır** |
+| [`router/`](router/README.md) | Yerel↔bulut hibrit istek yönlendirme — **Faz 2: her iki yol da uçtan uca gerçek** |
 | [`cloud-bridge/`](cloud-bridge/README.md) | Bulut model sağlayıcılarına bağlantı (Anthropic Claude API) — **Faz 2: kimlik bilgisi/istemci katmanı hazır, router'a bağlı** |
 
-## Veri akışı (hedeflenen, Faz 2+)
+## Veri akışı (Faz 2'de gerçek kod — sadece niyet değil)
 
 ```
 kullanıcı isteği (shell/ asistan paneli)
@@ -21,7 +21,7 @@ kullanıcı isteği (shell/ asistan paneli)
         ▼
     router/  ──► hardware-probe/ (tier kararı)
         │
-        ├──► local-runtime/  (yerel model yeterliyse)
+        ├──► local-runtime/  (yerel model yeterliyse) — GERÇEKTEN ÇALIŞIYOR
         │
         └──► cloud-bridge/   (yerel yetersiz/kullanıcı tercih ederse)
                      │
@@ -31,28 +31,30 @@ kullanıcı isteği (shell/ asistan paneli)
 
 ## Durum
 
-Beş modülün tamamı Faz 2'de en az bir implementasyon aşamasına ulaştı ve
-`router` artık **her iki yolu da** (`local` ve `cloud`) gerçek subprocess
-çağrılarıyla sürüyor — "veri akışı" diyagramındaki `router → local-runtime`
-ve `router → cloud-bridge` okları artık gerçek kod, sadece niyet değil:
+Beş modülün tamamı Faz 2'de en az bir implementasyon aşamasına ulaştı.
+`router` her iki yolu da (`local` ve `cloud`) gerçek subprocess
+çağrılarıyla sürüyor, ve **yerel yol artık bu makinede tamamen gerçek**:
+Ollama kuruldu (`curl -fsSL https://ollama.com/install.sh | sh`, ~1.37 GB)
+ve önerilen model indirildi (`ollama pull llama3.2:3b`, ~2 GB) — basit
+istekler gerçekten yerel LLM'de üretiliyor.
 
 - `hardware-probe/` — ilk implementasyon tamamlandı (Python, stdlib-only, 20 test)
-- `local-runtime/` — orkestrasyon/istemci katmanı hazır (tier→model önerisi,
-  Ollama REST istemcisi, 15 test) — **`router`'a bağlı**; Ollama kurulumu ve
-  model indirme ayrı bir onay bekliyor
+- `local-runtime/` — **uçtan uca çalışıyor**: `ollama_available: true`,
+  `model_ready: true`, gerçek `generate()` çağrıları başarılı (tier→model
+  önerisi, Ollama REST istemcisi, 16 test)
 - `router/` — karar katmanı + **local-runtime ve cloud-bridge entegrasyonu**
-  hazır (yerel/bulut yönlendirme mantığı; `route` kararına göre ilgili
-  modülü gerçekten çağırıyor, 26 test)
+  tam çalışıyor (`route` kararına göre ilgili modülü gerçekten çağırıyor ve
+  gerçek sonuç alıyor, 26 test)
 - `mcp-tools/` — ilk MCP sunucusu hazır (resmi SDK kurmadan, stdlib-only
   JSON-RPC 2.0 stdio transport; `hardware_tier` ve `route_request` araçları,
-  16 test — `route_request` artık her iki entegrasyonu da miras alıyor)
+  16 test — `route_request` artık gerçek yerel üretimi de miras alıyor)
 - `cloud-bridge/` — kimlik bilgisi/istemci katmanı hazır (Anthropic Claude
   API, ham HTTP; 15 test) — **`router`'a bağlı**; gerçek bir API çağrısı
-  henüz yapılmadı/test edilmedi (kimlik bilgisi yok)
+  henüz yapılmadı/test edilmedi (kimlik bilgisi yok, `router` karmaşık
+  isteklerde buraya gerçekten düşüyor ama "unavailable" ile sonuçlanıyor)
 
 Beş modülün dördü (`hardware-probe` → `local-runtime` → `router` →
-`mcp-tools`) gerçek MCP protokolü/subprocess zinciriyle, `router` →
-`local-runtime` ve `router` → `cloud-bridge` de ayrıca gerçek subprocess
-zincirleriyle uçtan uca çalışıyor — hepsi bu makinede doğrulandı (Ollama
-kurulu değilken ve Claude API kimlik bilgisi yokken graceful "unavailable"
-durumları dahil).
+`mcp-tools`) gerçek MCP protokolü/subprocess zinciriyle çalışıyor.
+`router → local-runtime` zinciri artık **gerçek bir yerel LLM yanıtı**
+üretiyor (mock değil); `router → cloud-bridge` zinciri de gerçek çalışıyor
+ama Claude API kimlik bilgisi olmadığından "unavailable" ile sonuçlanıyor.

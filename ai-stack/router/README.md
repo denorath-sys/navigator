@@ -14,6 +14,10 @@ birleştiği merkezi nokta olması planlanıyor.
 zaten `hardware_tier` ve `model_ready` alanlarını içeriyor, tek bir
 subprocess hop'u yeterli (bkz. `router/status.py`).
 
+**Bu makinede artık her iki yol da uçtan uca gerçek**: basit istekler
+gerçekten yerel Ollama'da (`llama3.2:3b`) üretiliyor; karmaşık istekler
+(tier="low" düşük kapasiteli sayıldığından) `cloud-bridge`'e düşüyor.
+
 ## Kullanım
 
 Harici bağımlılık yok, sadece Python 3.11+ (stdlib). `local-runtime` ve
@@ -21,7 +25,7 @@ Harici bağımlılık yok, sadece Python 3.11+ (stdlib). `local-runtime` ve
 
 ```sh
 cd ai-stack/router
-python3 -m router --prompt "Navigator'da workspace nasıl değiştiririm?" --pretty
+python3 -m router --prompt "Merhaba, sen kimsin?" --pretty
 python3 -m router --prompt "..." --prefer privacy   # balanced|privacy|cost|speed
 ```
 
@@ -32,35 +36,51 @@ cd ai-stack/router
 python3 -m unittest discover -v -s tests
 ```
 
-## Çıktı örneği
+## Çıktı örneği — yerel yol (gerçek üretim)
 
-Bu makinede (Ollama kurulu ve çalışıyor ama önerilen model henüz
-indirilmedi → `model_ready: false` → her zaman `cloud` → `cloud-bridge`
-çağrılır ama kimlik bilgisi de yok):
+Basit bir istek, bu makinede gerçekten çalıştırıldı:
 
 ```json
 {
   "schema_version": "0.1",
-  "prompt_preview": "Navigator'da workspace nasıl değiştiririm?",
+  "prompt_preview": "Merhaba, sen kimsin?",
   "complexity": "simple",
   "preference": "balanced",
   "hardware_tier": "low",
-  "model_ready": false,
-  "route": "cloud",
-  "reasoning": "yerel model hazır değil (Ollama kapalı veya model indirilmemiş)",
-  "cloud_bridge": {
+  "model_ready": true,
+  "route": "local",
+  "reasoning": "model hazır ve istek yerel için uygun",
+  "local_runtime": {
     "schema_version": "0.1",
-    "provider": "anthropic",
-    "model": "claude-opus-4-8",
-    "prompt_preview": "Navigator'da workspace nasıl değiştiririm?",
+    "provider": "ollama",
+    "hardware_tier": "low",
+    "prompt_preview": "Merhaba, sen kimsin?",
+    "model": "llama3.2:3b",
+    "status": "ok",
+    "content": "Merhaba! Ben bir model conversasyon otomatuım. Ne gibi yardımcı olabilirim?"
+  }
+}
+```
+
+## Çıktı örneği — bulut yolu
+
+Karmaşık (uzun) bir istek — tier="low" düşük kapasiteli sayıldığından
+`model_ready: true` olsa bile `cloud`'a düşüyor; Claude API kimlik bilgisi
+olmadığından "unavailable":
+
+```json
+{
+  "schema_version": "0.1",
+  "complexity": "complex",
+  "hardware_tier": "low",
+  "model_ready": true,
+  "route": "cloud",
+  "cloud_bridge": {
     "status": "unavailable",
     "reason": "credentials_not_configured"
   }
 }
 ```
-
-`model_ready: true` olsaydı (`route: "local"`), rapora `cloud_bridge` yerine
-`local_runtime` alanı eklenirdi — bkz. "local-runtime entegrasyonu" aşağıda.
 
 ## Karar mantığı (taslak, `router/decision.py`)
 
@@ -82,20 +102,19 @@ Faz 3+'ta ele alınacak. Tüm eşikler taslaktır.
 local_runtime --prompt "<istek>"` komutunu subprocess ile çalıştırır ve
 sonucu raporun `local_runtime` alanına ekler. Olası durumlar:
 
+- `{"status": "ok", "content": "..."}` — gerçek istek başarılı (bu makinede
+  doğrulandı)
 - `{"status": "unavailable", "reason": "ollama_not_running"}` — Ollama kapalı
 - `{"status": "unavailable", "reason": "model_not_installed"}` — Ollama açık
   ama önerilen model çekilmemiş
 - `{"status": "unavailable", "reason": "no_local_model_recommended"}` — tier
   "minimal", yerel model önerilmiyor
-- `{"status": "ok", "content": "..."}` — gerçek istek başarılı
-- `{"status": "error", "error": "..."}` — ağ/istek hatası
+- `{"status": "error", "error": "..."}` — ağ/istek hatası (ör. timeout)
 
-Bu makinede Ollama kurulu ve çalışıyor ama önerilen model henüz
-indirilmediğinden gerçek karar hep `cloud`'a düşüyor (`model_ready` her
-zaman `false`, `reason: "model_not_installed"`); `local` yolu, karar
-adımına sahte bir durum (`model_ready: true`) enjekte edilerek test edildi
-— gerçek `local-runtime` subprocess'i yine de gerçek Ollama durumunu doğru
-raporladı (bkz. `tests/test_integration.py`).
+**Bilinen sınırlama:** `OllamaClient.generate()`'ın varsayılan timeout'u
+300 saniye — ilk denemede 5 saniyelik varsayılan timeout'la gerçek bir
+üretim çağrısı zaman aşımına uğramıştı (model belleğe yükleniyor + CPU'da
+çıkarım yapıyor), bu gerçek makinede yakalanıp düzeltildi.
 
 ## Cloud-bridge entegrasyonu
 
@@ -115,17 +134,15 @@ Her karar sadece kendi hedefini çağırır: `local` iken `cloud-bridge`
 - `mcp-tools/` üzerinden gelen araç çağrıları `route_request` aracını
   kullanıyor (bkz. `ai-stack/mcp-tools`) — bu artık hem `local` hem `cloud`
   entegrasyonunu otomatik olarak miras alıyor.
-- Gerçek bir Ollama/Claude API yanıtı bu ortamda hiç görülmedi — Ollama
-  kurulu olsa da model henüz indirilmediğinden ve Claude API kimlik bilgisi
-  olmadığından, sadece "kullanılamıyor" yollarının doğru çalıştığı
-  doğrulandı.
+- Bulut yolu hâlâ hiç gerçek bir Claude API yanıtı görmedi — Claude API
+  kimlik bilgisi yok, sadece "kullanılamıyor" durumu doğrulandı.
 
 ## Durum
 
 Faz 2 — karar/orkestrasyon katmanı, **local-runtime entegrasyonu** ve
 **cloud-bridge entegrasyonu** tamamlandı (`decision.py`, `status.py`,
-`local.py`, `cloud.py`, `python3 -m router` CLI). 26 test geçiyor (saf karar
-mantığı unit testleri + iki gerçek subprocess zinciri: router →
-local-runtime → hardware-probe VE router → cloud-bridge, bu makinede uçtan
-uca doğrulandı — model/kimlik bilgisi olmadan graceful `unavailable`
-durumları dahil).
+`local.py`, `cloud.py`, `python3 -m router` CLI). 26 test geçiyor — biri
+gerçek bir yerel Ollama üretimi (`route: "local"` uçtan uca, gerçek metin
+üretiyor), biri gerçek bulut yönlendirmesi (`route: "cloud"`, kimlik
+bilgisi olmadan graceful "unavailable"). **`router` artık bu makinede
+tamamen gerçek çalışan bir sistem** — hiçbir yol mock/placeholder değil.
