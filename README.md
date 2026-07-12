@@ -36,13 +36,15 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   tier→model önerisi, 16 test). `ai-stack/mcp-tools` ilk MCP sunucusunu
   aldı (resmi SDK'sız, stdlib-only stdio JSON-RPC 2.0) ve ardından
   genişletildi: sandbox'lı dosya sistemi araçları (`read_file`/
-  `list_directory`/`write_file` — path traversal engellemeli, yazma için
-  ayrıca overwrite koruması ve boyut sınırı), klasik HTTP+SSE transport
-  (`GET /sse` + `POST /messages`, stdio'ya ek olarak) ve HTTP+SSE için
-  zorunlu Bearer token kimlik doğrulaması (otomatik token üretimi,
-  `hmac.compare_digest` ile zamanlama saldırısına dayanıklı karşılaştırma
-  — kimliksiz çalışma hiçbir zaman mümkün değil) — toplam 66 test, gerçek
-  subprocess/TCP soketleriyle uçtan uca doğrulandı. `ai-stack/cloud-bridge`
+  `list_directory`/`write_file`/`delete_file`/`rename_file` — path
+  traversal engellemeli; yazma için overwrite koruması, silme için
+  zorunlu `confirm=true`, yeniden adlandırma için hem kaynak hem hedef
+  sandbox kontrolü), klasik HTTP+SSE transport (`GET /sse` +
+  `POST /messages`, stdio'ya ek olarak) ve HTTP+SSE için zorunlu Bearer
+  token kimlik doğrulaması (otomatik token üretimi, `hmac.compare_digest`
+  ile zamanlama saldırısına dayanıklı karşılaştırma — kimliksiz çalışma
+  hiçbir zaman mümkün değil) — toplam 79 test, gerçek subprocess/TCP
+  soketleriyle uçtan uca doğrulandı. `ai-stack/cloud-bridge`
   kimlik bilgisi/istemci katmanını aldı (Anthropic Claude API, stdlib-only
   ham HTTP, 16 test) ve kullanıcı onayıyla **gerçek bir API key bağlandı**
   (`.env.local`'a yazıldı, `.gitignore` ile hariç tutulmuş — asla commit

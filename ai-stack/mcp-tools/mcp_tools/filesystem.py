@@ -8,7 +8,12 @@ symlink) saldırılarını engeller. `write_file` ek olarak: var olan bir
 dosyanın üzerine ancak `overwrite=true` ile yazılabilir (yanlışlıkla
 üzerine yazmayı engellemek için) ve üst dizin zaten var olmalı (araç
 kendiliğinden dizin oluşturmaz — kapsamı dosya içeriğiyle sınırlı tutmak
-için). Silme/yeniden adlandırma hâlâ YOK.
+için). `delete_file` geri alınamaz olduğundan `confirm=true` olmadan
+çalışmaz. `rename_file` hem kaynak hem hedef için aynı sandbox
+kontrolünü uygular ve hedef zaten varsa `overwrite=true` ister
+(`write_file` ile tutarlı). Tüm araçlar sadece dosyalarla çalışır —
+dizin silme/yeniden adlandırma desteklenmiyor (kapsam bilinçli olarak
+dar tutuluyor).
 """
 import json
 import os
@@ -67,6 +72,44 @@ def write_file(path: str, content: str, overwrite: bool = False, root: str = DEF
     except OSError as e:
         raise FilesystemError(f"Dosya yazılamadı: {path} ({e})") from e
     return f"{len(encoded)} bayt yazıldı: {path}"
+
+
+def delete_file(path: str, confirm: bool = False, root: str = DEFAULT_ROOT) -> str:
+    resolved = _resolve_within_root(path, root)
+    if not os.path.exists(resolved):
+        raise FilesystemError(f"Dosya bulunamadı: {path}")
+    if os.path.isdir(resolved):
+        raise FilesystemError(f"'{path}' bir dizin, dosya değil (dizin silme desteklenmiyor)")
+    if not confirm:
+        raise FilesystemError(f"Silme geri alınamaz — onaylamak için confirm=true gerekir: {path}")
+
+    try:
+        os.remove(resolved)
+    except OSError as e:
+        raise FilesystemError(f"Dosya silinemedi: {path} ({e})") from e
+    return f"Silindi: {path}"
+
+
+def rename_file(path: str, new_path: str, overwrite: bool = False, root: str = DEFAULT_ROOT) -> str:
+    resolved = _resolve_within_root(path, root)
+    resolved_new = _resolve_within_root(new_path, root)
+    if not os.path.isfile(resolved):
+        raise FilesystemError(f"Dosya bulunamadı: {path}")
+    if os.path.isdir(resolved_new):
+        raise FilesystemError(f"'{new_path}' bir dizin, hedef dosya olamaz")
+    if os.path.exists(resolved_new) and not overwrite:
+        raise FilesystemError(
+            f"Hedef dosya zaten var: {new_path} (üzerine yazmak için overwrite=true gerekir)"
+        )
+    parent = os.path.dirname(resolved_new)
+    if not os.path.isdir(parent):
+        raise FilesystemError(f"Üst dizin yok: {new_path}")
+
+    try:
+        os.replace(resolved, resolved_new)
+    except OSError as e:
+        raise FilesystemError(f"Dosya yeniden adlandırılamadı: {path} -> {new_path} ({e})") from e
+    return f"Yeniden adlandırıldı: {path} -> {new_path}"
 
 
 def list_directory(path: str = ".", root: str = DEFAULT_ROOT) -> list[dict]:
@@ -156,5 +199,58 @@ def register_filesystem_tools(server, root: str = DEFAULT_ROOT) -> None:
         },
         handler=lambda path, content, overwrite=False: write_file(
             path, content, overwrite=overwrite, root=root
+        ),
+    )
+    server.register_tool(
+        name="delete_file",
+        description=(
+            "Bir dosyayı siler (sandbox'lı — sadece "
+            f"'{root}' kök dizini altında). Bu işlem GERİ ALINAMAZ; "
+            "confirm=true olmadan çalışmaz. Sadece dosyalar silinebilir, "
+            "dizinler değil."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Kök dizine göre göreli veya kök içinde mutlak dosya yolu",
+                },
+                "confirm": {
+                    "type": "boolean",
+                    "description": "Silmeyi onayla (varsayılan: false — onaylanmadan hiçbir şey silinmez)",
+                },
+            },
+            "required": ["path"],
+        },
+        handler=lambda path, confirm=False: delete_file(path, confirm=confirm, root=root),
+    )
+    server.register_tool(
+        name="rename_file",
+        description=(
+            "Bir dosyayı yeniden adlandırır/taşır (sandbox'lı — hem kaynak "
+            f"hem hedef '{root}' kök dizini altında olmalı). Hedef zaten "
+            "varsa overwrite=true gerekir. Sadece dosyalar için, dizinler için değil."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Kaynak dosya yolu",
+                },
+                "new_path": {
+                    "type": "string",
+                    "description": "Hedef dosya yolu",
+                },
+                "overwrite": {
+                    "type": "boolean",
+                    "description": "Hedef dosya zaten varsa üzerine yaz (varsayılan: false)",
+                },
+            },
+            "required": ["path", "new_path"],
+        },
+        handler=lambda path, new_path, overwrite=False: rename_file(
+            path, new_path, overwrite=overwrite, root=root
         ),
     )

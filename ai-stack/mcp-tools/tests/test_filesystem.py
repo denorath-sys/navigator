@@ -6,8 +6,10 @@ from mcp_tools import filesystem as fs_module
 from mcp_tools.filesystem import (
     FilesystemError,
     _resolve_within_root,
+    delete_file,
     list_directory,
     read_file,
+    rename_file,
     write_file,
 )
 
@@ -137,6 +139,90 @@ class TestWriteFile(unittest.TestCase):
                 write_file("new.txt", "x" * 10, root=self.root)
         finally:
             fs_module.MAX_WRITE_BYTES = original_limit
+
+
+class TestDeleteFile(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        with open(os.path.join(self.root, "existing.txt"), "w") as f:
+            f.write("silinecek")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_deletes_file_with_confirm(self):
+        delete_file("existing.txt", confirm=True, root=self.root)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "existing.txt")))
+
+    def test_without_confirm_raises_and_does_not_delete(self):
+        with self.assertRaises(FilesystemError):
+            delete_file("existing.txt", root=self.root)
+        self.assertTrue(os.path.exists(os.path.join(self.root, "existing.txt")))
+
+    def test_missing_file_raises(self):
+        with self.assertRaises(FilesystemError):
+            delete_file("yok.txt", confirm=True, root=self.root)
+
+    def test_directory_path_raises(self):
+        os.makedirs(os.path.join(self.root, "adir"))
+        with self.assertRaises(FilesystemError):
+            delete_file("adir", confirm=True, root=self.root)
+
+    def test_path_traversal_raises(self):
+        with self.assertRaises(FilesystemError):
+            delete_file("../../../etc/passwd", confirm=True, root=self.root)
+
+
+class TestRenameFile(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        with open(os.path.join(self.root, "kaynak.txt"), "w") as f:
+            f.write("içerik")
+        with open(os.path.join(self.root, "hedef-var.txt"), "w") as f:
+            f.write("eski hedef")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_renames_file(self):
+        rename_file("kaynak.txt", "yeni-ad.txt", root=self.root)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "kaynak.txt")))
+        with open(os.path.join(self.root, "yeni-ad.txt"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), "içerik")
+
+    def test_missing_source_raises(self):
+        with self.assertRaises(FilesystemError):
+            rename_file("yok.txt", "yeni.txt", root=self.root)
+
+    def test_existing_target_without_overwrite_raises(self):
+        with self.assertRaises(FilesystemError):
+            rename_file("kaynak.txt", "hedef-var.txt", root=self.root)
+        self.assertTrue(os.path.exists(os.path.join(self.root, "kaynak.txt")))
+
+    def test_existing_target_with_overwrite_succeeds(self):
+        rename_file("kaynak.txt", "hedef-var.txt", overwrite=True, root=self.root)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "kaynak.txt")))
+        with open(os.path.join(self.root, "hedef-var.txt"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), "içerik")
+
+    def test_source_path_traversal_raises(self):
+        with self.assertRaises(FilesystemError):
+            rename_file("../../../etc/passwd", "yeni.txt", root=self.root)
+
+    def test_target_path_traversal_raises(self):
+        with self.assertRaises(FilesystemError):
+            rename_file("kaynak.txt", "../../../tmp/kotu.txt", root=self.root)
+
+    def test_target_missing_parent_directory_raises(self):
+        with self.assertRaises(FilesystemError):
+            rename_file("kaynak.txt", "yok/yeni.txt", root=self.root)
+
+    def test_target_directory_raises(self):
+        os.makedirs(os.path.join(self.root, "adir"))
+        with self.assertRaises(FilesystemError):
+            rename_file("kaynak.txt", "adir", root=self.root)
 
 
 class TestListDirectory(unittest.TestCase):

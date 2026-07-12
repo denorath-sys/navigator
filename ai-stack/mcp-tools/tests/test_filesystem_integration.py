@@ -45,6 +45,8 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                 self.assertIn("read_file", tool_names)
                 self.assertIn("list_directory", tool_names)
                 self.assertIn("write_file", tool_names)
+                self.assertIn("delete_file", tool_names)
+                self.assertIn("rename_file", tool_names)
 
                 self._send(
                     proc,
@@ -147,6 +149,87 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                 write_traversal_response = self._recv(proc)
                 self.assertTrue(write_traversal_response["result"]["isError"])
                 self.assertIn("dışına çıkıyor", write_traversal_response["result"]["content"][0]["text"])
+
+                self._send(
+                    proc,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 10,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "rename_file",
+                            "arguments": {"path": "yeni.txt", "new_path": "yeniden-adli.txt"},
+                        },
+                    },
+                )
+                rename_response = self._recv(proc)
+                self.assertFalse(rename_response["result"]["isError"])
+                self.assertFalse(os.path.exists(os.path.join(tmp, "yeni.txt")))
+                self.assertTrue(os.path.isfile(os.path.join(tmp, "yeniden-adli.txt")))
+
+                self._send(
+                    proc,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 11,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "rename_file",
+                            "arguments": {"path": "../../../../etc/passwd", "new_path": "kotu.txt"},
+                        },
+                    },
+                )
+                rename_traversal_response = self._recv(proc)
+                self.assertTrue(rename_traversal_response["result"]["isError"])
+                self.assertIn("dışına çıkıyor", rename_traversal_response["result"]["content"][0]["text"])
+
+                self._send(
+                    proc,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 12,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "delete_file",
+                            "arguments": {"path": "yeniden-adli.txt"},
+                        },
+                    },
+                )
+                delete_denied_response = self._recv(proc)
+                self.assertTrue(delete_denied_response["result"]["isError"])
+                self.assertTrue(os.path.isfile(os.path.join(tmp, "yeniden-adli.txt")))
+
+                self._send(
+                    proc,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 13,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "delete_file",
+                            "arguments": {"path": "yeniden-adli.txt", "confirm": True},
+                        },
+                    },
+                )
+                delete_response = self._recv(proc)
+                self.assertFalse(delete_response["result"]["isError"])
+                self.assertFalse(os.path.exists(os.path.join(tmp, "yeniden-adli.txt")))
+
+                self._send(
+                    proc,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 14,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "delete_file",
+                            "arguments": {"path": "../../../../etc/passwd", "confirm": True},
+                        },
+                    },
+                )
+                delete_traversal_response = self._recv(proc)
+                self.assertTrue(delete_traversal_response["result"]["isError"])
+                self.assertIn("dışına çıkıyor", delete_traversal_response["result"]["content"][0]["text"])
             finally:
                 proc.stdin.close()
                 proc.terminate()
