@@ -144,7 +144,17 @@ jobs:
         run: |
           set -euo pipefail
           QCOW2="$(find ./disk-output -name '*.qcow2' | head -n1)"
-          cp /usr/share/OVMF/OVMF_VARS.fd ./OVMF_VARS.fd
+
+          # Ubuntu 24.04'ten itibaren ovmf paketi dosyaları
+          # OVMF_CODE.fd/OVMF_VARS.fd değil, *_4M.fd olarak veriyor —
+          # ilk çalıştırmada gerçek hatayla yakalandı ("No such file or
+          # directory"). Sürüm/isimlendirme değişikliklerine dayanıklı
+          # olmak için find ile buluyoruz.
+          OVMF_CODE="$(find /usr/share/OVMF -iname 'OVMF_CODE*.fd' | grep -vi secboot | sort | head -n1)"
+          OVMF_VARS_SRC="$(find /usr/share/OVMF -iname 'OVMF_VARS*.fd' | grep -vi secboot | sort | head -n1)"
+          echo "OVMF_CODE=${OVMF_CODE}"
+          echo "OVMF_VARS_SRC=${OVMF_VARS_SRC}"
+          cp "${OVMF_VARS_SRC}" ./OVMF_VARS.fd
           sg kvm -c "
             nohup qemu-system-x86_64 \
               -machine accel=kvm,type=q35 \
@@ -152,7 +162,7 @@ jobs:
               -smp 2 \
               -m 4096 \
               -nographic \
-              -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
+              -drive if=pflash,format=raw,readonly=on,file=${OVMF_CODE} \
               -drive if=pflash,format=raw,file=$(pwd)/OVMF_VARS.fd \
               -drive file=${QCOW2},format=qcow2,if=virtio \
               -netdev user,id=net0,hostfwd=tcp::2222-:22 \
