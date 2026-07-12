@@ -25,5 +25,35 @@ class TestPromptCLI(unittest.TestCase):
         self.assertEqual(report["model"], "claude-opus-4-8")
 
 
+HAS_CLOUD_CREDENTIALS = bool(
+    os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+)
+
+
+class TestPromptCLICredentialed(unittest.TestCase):
+    """Kimlik bilgisi mevcutsa (örn. .env.local source edilmişse) GERÇEK bir
+    Claude API çağrısı yapar — kimlik bilgisi yoksa (CI dahil) atlanır."""
+
+    @unittest.skipUnless(
+        HAS_CLOUD_CREDENTIALS, "ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN ayarlı değil"
+    )
+    def test_prompt_with_credentials_gets_real_response(self):
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        result = subprocess.run(
+            [
+                "python3", "-m", "cloud_bridge",
+                "--prompt", "Tek kelimeyle cevap ver: Türkiye'nin başkenti neresi?",
+                "--max-tokens", "20",
+            ],
+            cwd=here,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "ok")
+        self.assertIn("ankara", report["content"].lower())
+
+
 if __name__ == "__main__":
     unittest.main()

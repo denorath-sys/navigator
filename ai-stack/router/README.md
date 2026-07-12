@@ -65,8 +65,10 @@ Basit bir istek, bu makinede gerçekten çalıştırıldı:
 ## Çıktı örneği — bulut yolu
 
 Karmaşık (uzun) bir istek — tier="low" düşük kapasiteli sayıldığından
-`model_ready: true` olsa bile `cloud`'a düşüyor; Claude API kimlik bilgisi
-olmadığından "unavailable":
+`model_ready: true` olsa bile `cloud`'a düşüyor. Claude API kimlik bilgisi
+`cloud-bridge/.env.local` ile source edildiğinde (bkz. `ai-stack/
+cloud-bridge/README.md`) gerçek bir yanıt döner, source edilmediğinde
+(varsayılan, CI dahil) graceful "unavailable":
 
 ```json
 {
@@ -76,8 +78,9 @@ olmadığından "unavailable":
   "model_ready": true,
   "route": "cloud",
   "cloud_bridge": {
-    "status": "unavailable",
-    "reason": "credentials_not_configured"
+    "status": "ok",
+    "model": "claude-opus-4-8",
+    "content": "Ankara"
   }
 }
 ```
@@ -134,15 +137,20 @@ Her karar sadece kendi hedefini çağırır: `local` iken `cloud-bridge`
 - `mcp-tools/` üzerinden gelen araç çağrıları `route_request` aracını
   kullanıyor (bkz. `ai-stack/mcp-tools`) — bu artık hem `local` hem `cloud`
   entegrasyonunu otomatik olarak miras alıyor.
-- Bulut yolu hâlâ hiç gerçek bir Claude API yanıtı görmedi — Claude API
-  kimlik bilgisi yok, sadece "kullanılamıyor" durumu doğrulandı.
+- Bulut kimlik bilgisi sadece bu geliştirme makinesinde (`cloud-bridge/
+  .env.local`, gitignore'lı) — CI'da secret olarak tanımlı değil, GitHub
+  Actions'ta bulut yolu hâlâ "unavailable" raporlar.
 
 ## Durum
 
 Faz 2 — karar/orkestrasyon katmanı, **local-runtime entegrasyonu** ve
 **cloud-bridge entegrasyonu** tamamlandı (`decision.py`, `status.py`,
-`local.py`, `cloud.py`, `python3 -m router` CLI). 26 test geçiyor — biri
-gerçek bir yerel Ollama üretimi (`route: "local"` uçtan uca, gerçek metin
-üretiyor), biri gerçek bulut yönlendirmesi (`route: "cloud"`, kimlik
-bilgisi olmadan graceful "unavailable"). **`router` artık bu makinede
-tamamen gerçek çalışan bir sistem** — hiçbir yol mock/placeholder değil.
+`local.py`, `cloud.py`, `python3 -m router` CLI). 27 test geçiyor —
+biri gerçek bir yerel Ollama üretimi (`route: "local"` uçtan uca, gerçek
+metin üretiyor), biri kimlik bilgisiz bulut yönlendirmesi (`route:
+"cloud"`, graceful "unavailable" — her zaman çalışır, CI dahil), biri de
+kimlik bilgili gerçek bulut üretimi (`.env.local` source edildiğinde
+gerçek bir Claude API yanıtı — kimlik bilgisi yoksa otomatik `skip`).
+**`router` artık bu makinede tamamen gerçek çalışan bir sistem** —
+hiçbir yol mock/placeholder değil, hem yerel hem bulut ucu gerçekten
+üretim yapıyor.

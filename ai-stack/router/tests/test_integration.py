@@ -56,5 +56,43 @@ class TestRouterIntegration(unittest.TestCase):
         self.assertEqual(report["cloud_bridge"]["reason"], "credentials_not_configured")
 
 
+HAS_CLOUD_CREDENTIALS = bool(
+    os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+)
+
+
+class TestRouterCloudCredentialedIntegration(unittest.TestCase):
+    """Claude API kimlik bilgisi mevcutsa (örn. cloud-bridge/.env.local
+    source edilmişse) router -> cloud-bridge zincirinin GERÇEK bir Claude
+    API çağrısıyla uçtan uca çalıştığını doğrular. Kimlik bilgisi yoksa
+    (CI dahil, .env.local hiçbir yerde commit edilmediğinden) atlanır —
+    bkz. cloud-bridge/README.md "Neden .env.local"."""
+
+    @unittest.skipUnless(
+        HAS_CLOUD_CREDENTIALS, "ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN ayarlı değil"
+    )
+    def test_complex_prompt_routes_cloud_with_real_generation(self):
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        long_prompt = "Tek kelimeyle cevap ver: Türkiye'nin başkenti neresi? " + " ".join(
+            ["lütfen"] * 45
+        )
+        result = subprocess.run(
+            ["python3", "-m", "router", "--prompt", long_prompt],
+            cwd=here,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+
+        self.assertEqual(report["complexity"], "complex")
+        self.assertEqual(report["route"], "cloud")
+        self.assertIn("cloud_bridge", report)
+        self.assertNotIn("local_runtime", report)
+        self.assertEqual(report["cloud_bridge"]["status"], "ok")
+        self.assertIn("ankara", report["cloud_bridge"]["content"].lower())
+
+
 if __name__ == "__main__":
     unittest.main()

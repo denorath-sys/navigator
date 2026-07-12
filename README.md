@@ -43,24 +43,25 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   `hmac.compare_digest` ile zamanlama saldırısına dayanıklı karşılaştırma
   — kimliksiz çalışma hiçbir zaman mümkün değil) — toplam 66 test, gerçek
   subprocess/TCP soketleriyle uçtan uca doğrulandı. `ai-stack/cloud-bridge`
-  kimlik bilgisi/istemci katmanını
-  aldı (Anthropic Claude API, stdlib-only ham HTTP, 15 test).
-  `ai-stack/router` karar katmanını VE hem `local-runtime` hem
+  kimlik bilgisi/istemci katmanını aldı (Anthropic Claude API, stdlib-only
+  ham HTTP, 16 test) ve kullanıcı onayıyla **gerçek bir API key bağlandı**
+  (`.env.local`'a yazıldı, `.gitignore` ile hariç tutulmuş — asla commit
+  edilmiyor). `ai-stack/router` karar katmanını VE hem `local-runtime` hem
   `cloud-bridge` entegrasyonunu tamamladı (`route` kararına göre ilgili
-  modülü subprocess ile gerçekten çağırıyor, 26 test). Kullanıcı onayıyla
+  modülü subprocess ile gerçekten çağırıyor, 27 test). Kullanıcı onayıyla
   **Ollama kuruldu** (`curl -fsSL https://ollama.com/install.sh | sh`,
   ~1.37 GB) ve **`llama3.2:3b` modeli indirildi** (`ollama pull`, ~2 GB)
   — `route: "local"` artık bu makinede gerçekten uçtan uca çalışıyor,
-  gerçek metin üretiyor. `ai-stack`'in beş modülünün tamamı en az bir
-  implementasyon aşamasına ulaştı; yerel yol tamamen gerçek, bulut yolu
-  (`cloud-bridge`) Claude API kimlik bilgisi olmadığından hâlâ
-  "unavailable". `hyprland/
+  gerçek metin üretiyor; **`route: "cloud"` de artık gerçek bir Claude API
+  yanıtı üretiyor** (kimlik bilgili testler `.env.local` yoksa/CI'da
+  otomatik `skip` olacak şekilde tasarlandı). `ai-stack`'in beş modülünün
+  tamamı gerçek: hem yerel hem bulut yolu bu makinede uçtan uca çalışıyor.
+  `hyprland/
   hyprland.conf` statik sözdizimi incelemesinden geçti (bu Debian
   geliştirme ortamında Hyprland paketli olmadığından gerçek compositor
   çalıştırılamadı — bkz. `hyprland/README.md`); sözdizimsel hata
   bulunmadı, bir açık nokta (`e+1`/`e-1` mouse-scroll workspace geçişi)
-  not edildi. Gerçek runtime doğrulaması Faz 3'e kaldı. Sırada: Claude API
-  kimlik bilgisi (isteğe bağlı).
+  not edildi. Gerçek runtime doğrulaması Faz 3'e kaldı.
 - **Faz 3 — İmaj build & test:** GitHub Actions üzerinde ilk gerçek
   `bootc`/`rpm-ostree` imaj build'i; sanal makinede boot testi.
 - **Faz 4 — AI stack tamamlama:** `router`, `mcp-tools`, `cloud-bridge`

@@ -52,9 +52,29 @@ cd ai-stack/cloud-bridge
 python3 -m unittest discover -v -s tests
 ```
 
+### Kimlik bilgisini yerel olarak bağlamak (`.env.local`)
+
+Bu makinede gerçek bir Anthropic API key `.env.local` dosyasına yazıldı
+(`.gitignore`'da `.env*` deseni ile hariç tutuluyor — asla commit
+edilmez, sadece bu geliştirme makinesinde var). Kullanmak için her
+zaman elle source edilmesi gerekiyor (Bash tool çağrıları arasında
+shell state kalıcı değil):
+
+```sh
+cd ai-stack/cloud-bridge
+set -a && source .env.local && set +a
+python3 -m cloud_bridge --prompt "merhaba" --pretty
+```
+
+Kimlik bilgisine bağlı testler (`test_prompt_cli.py`,
+`router/tests/test_integration.py`) `.env.local` source edilmediğinde
+otomatik `skip` olur (CI'da da böyle davranır — GitHub Actions'ta bu
+secret yok) — sadece source edildiğinde gerçek bir API çağrısıyla
+çalışır.
+
 ## Çıktı örneği
 
-Bu makinede (kimlik bilgisi ayarlı değil):
+Kimlik bilgisi ayarlı değilken:
 
 ```json
 {
@@ -65,7 +85,7 @@ Bu makinede (kimlik bilgisi ayarlı değil):
 }
 ```
 
-`--prompt` verildiğinde (kimlik bilgisi yokken, gerçek makinede test edildi):
+`--prompt` verildiğinde (kimlik bilgisi yokken):
 
 ```json
 {
@@ -78,6 +98,20 @@ Bu makinede (kimlik bilgisi ayarlı değil):
 }
 ```
 
+`.env.local` source edilip kimlik bilgisi varken (bu makinede gerçek bir
+API çağrısıyla doğrulandı):
+
+```json
+{
+  "schema_version": "0.1",
+  "provider": "anthropic",
+  "model": "claude-opus-4-8",
+  "prompt_preview": "Tek kelimeyle cevap ver: Türkiye'nin başkenti neresi?",
+  "status": "ok",
+  "content": "Ankara"
+}
+```
+
 ## `is_available()` neden ağ çağrısı yapmıyor
 
 `local-runtime`'ın `OllamaClient.is_available()`'ı `localhost:11434/api/version`'a
@@ -87,19 +121,24 @@ ortam değişkeni varlığını kontrol ediyor, gerçek bir istek göndermiyor.
 
 ## Kapsam dışı — henüz yapılmadı
 
-- **Hiçbir gerçek API çağrısı yapılmadı/test edilmedi** — bu ortamda kimlik
-  bilgisi yok, gerçek bir Claude API çağrısı maliyetli olacağından onaysız
-  denenmedi. `generate()` metodu yazıldı ve mock'lanmış testlerle
-  doğrulandı, ama canlı bir isteğe karşı hiç çalıştırılmadı.
 - Gizlilik filtrelemesi (isteğe gönderilmeden önce hassas veri maskeleme) yok.
 - `mcp-tools/` entegrasyonu yok (sadece `router` bu modülü çağırıyor).
 - Tool use / streaming yok — sadece tek turluk `generate()`.
+- Kimlik bilgisi sadece bu geliştirme makinesinde (`.env.local`) —
+  GitHub Actions'ta secret olarak tanımlı değil, dolayısıyla CI'da bulut
+  yolu hâlâ "unavailable" (bu bilinçli bir sınır: `.env.local` hiçbir
+  yerde commit edilmiyor).
 
 ## Durum
 
-Faz 2 — kimlik bilgisi/istemci katmanı VE `router` entegrasyonu tamamlandı
-(`client.py`, `status.py`, `python3 -m cloud_bridge [--prompt ...]` CLI).
-15 test geçiyor (mock'lanmış HTTP + gerçek CLI entegrasyon testleri, kimlik
-bilgisi olmadan — hem `--pretty` durum hem `--prompt` yolu). `ai-stack`'in
-beş modülünün tamamı en az bir implementasyon aşamasına ulaştı; `router`
-artık `route: "cloud"` kararında bu modülü gerçekten çağırıyor.
+Faz 2 — kimlik bilgisi/istemci katmanı, `router` entegrasyonu VE gerçek
+bir Claude API kimlik bilgisi bağlantısı tamamlandı (`client.py`,
+`status.py`, `python3 -m cloud_bridge [--prompt ...]` CLI). Gerçek bir
+API key `.env.local`'a yazıldı (gitignore'lı) ve gerçek bir istekle
+uçtan uca doğrulandı (`content: "Ankara"`) — hem doğrudan `cloud_bridge`
+CLI'ı hem de `router → cloud_bridge` zinciri üzerinden. 16 test geçiyor
+(mock'lanmış HTTP + gerçek CLI entegrasyon testleri; kimlik bilgisiz yol
+her zaman çalışır, kimlik bilgili gerçek-API testi `.env.local`
+source edilmediğinde otomatik `skip` olur). `ai-stack`'in beş modülünün
+tamamı artık gerçek: yerel yol (`local-runtime`) VE bulut yolu
+(`cloud-bridge`) bu makinede uçtan uca çalışıyor.
