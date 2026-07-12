@@ -68,8 +68,17 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   çalıştırılamadı — bkz. `hyprland/README.md`); sözdizimsel hata
   bulunmadı, bir açık nokta (`e+1`/`e-1` mouse-scroll workspace geçişi)
   not edildi. Gerçek runtime doğrulaması Faz 3'e kaldı.
-- **Faz 3 — İmaj build & test:** GitHub Actions üzerinde ilk gerçek
-  `bootc`/`rpm-ostree` imaj build'i; sanal makinede boot testi.
+- **Faz 3 — İmaj build & test (başladı):** [`build-disk-and-boot-test.yml`](.github/workflows/build-disk-and-boot-test.yml)
+  eklendi — `ghcr.io`'ya push edilmiş Navigator imajını `bootc-image-builder`
+  ile gerçek bir qcow2 disk imajına çevirir, sonra GitHub Actions
+  runner'ının KVM'i (ücretsiz `ubuntu-24.04` runner'larda 2024'ten beri
+  `/dev/kvm` var) ile bu disk imajını GERÇEKTEN boot edip SSH üzerinden
+  sistemin ayağa kalktığını doğrular (`systemctl is-system-running`).
+  Manuel tetiklemeyle (`workflow_dispatch`) çalışır — `build-image.yml`'nin
+  aksine her push'ta otomatik çalışmaz. Bu, `hyprland.conf`'un statik
+  incelemesinin ve `mcp-tools`'un Hyprland sorgu araçlarının ilk kez
+  gerçek bir Fedora Atomic ortamında (kısmen — GUI/compositor değil, temel
+  sistem boot'u) doğrulanacağı adım.
 - **Faz 4 — AI stack tamamlama:** `router`, `mcp-tools`, `cloud-bridge`
   implementasyonu; uçtan uca asistan paneli deneyimi.
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
@@ -85,7 +94,8 @@ Bu proje şu an roaming/kısıtlı internet ile geliştiriliyor:
   yerel ortamda çalıştırılmaz; bunun yerine gereken script/config/CI
   pipeline dosyaları yazılır.
 - Gerçek build/test işlemleri GitHub Actions üzerinde çalışır
-  ([`.github/workflows/build-image.yml`](.github/workflows/build-image.yml)),
+  ([`build-image.yml`](.github/workflows/build-image.yml),
+  [`build-disk-and-boot-test.yml`](.github/workflows/build-disk-and-boot-test.yml)),
   proje sahibi tarafından tetiklenir.
 
 ## Katkı rehberi (taslak)

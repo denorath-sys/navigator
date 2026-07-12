@@ -1,0 +1,206 @@
+# Navigator OS — Disk İmajı Build & VM Boot Testi (Faz 3)
+#
+# build-image.yml tarafından ghcr.io'ya push edilmiş Navigator container
+# imajını bootc-image-builder ile gerçek bir qcow2 disk imajına çevirir,
+# sonra bu disk imajını GitHub Actions runner'ının KVM'i ile GERÇEKTEN
+# boot edip SSH üzerinden sistemin ayağa kalktığını doğrular — bu, Faz
+# 1-2'de statik incelemeyle sınırlı kalan hyprland.conf/mcp-tools
+# Hyprland araçları gibi parçaların ilk kez gerçek bir compositor/Fedora
+# ortamında (kısmen) doğrulanacağı adım.
+#
+# Yerel ortamda ÇALIŞTIRILMAZ — GitHub'ın kendi runner'ında (ücretsiz,
+# ubuntu-24.04'ten beri /dev/kvm destekli) çalışır. Sadece manuel
+# tetikleme (workflow_dispatch) ile başlar; build-image.yml'nin aksine
+# main'e her push'ta otomatik çalışmaz — daha ağır bir işlem olduğundan
+# tetikleme kararı proje sahibine bırakıldı.
+
+name: Build Disk Image & Boot Test
+
+on:
+  workflow_dispatch: {}
+
+env:
+  IMAGE_NAME: navigator
+  IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+  DEFAULT_TAG: latest
+  BIB_IMAGE: quay.io/centos-bootc/bootc-image-builder:latest
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-disk:
+    name: Disk imajı build et (qcow2)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Maximize build space
+        uses: ublue-os/remove-unwanted-software@v7
+
+      - name: Ortamı hazırla
+        run: |
+          USER_UID=$(id -u)
+          USER_GID=$(id -g)
+          echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> "${GITHUB_ENV}"
+          echo "IMAGE_NAME=${IMAGE_NAME,,}" >> "${GITHUB_ENV}"
+          echo "USER_UID=${USER_UID}" >> "${GITHUB_ENV}"
+          echo "USER_GID=${USER_GID}" >> "${GITHUB_ENV}"
+
+      - name: Boot testi için tek kullanımlık SSH anahtarı üret
+        run: ssh-keygen -t ed25519 -N "" -f boot-test-key -C "navigator-boot-test"
+
+      - name: disk.toml oluştur (bu run'a özel SSH public key ile)
+        run: |
+          mkdir -p disk_config
+          {
+            echo '[[customizations.filesystem]]'
+            echo 'mountpoint = "/"'
+            echo 'minsize = "20 GiB"'
+            echo ''
+            echo '[[customizations.user]]'
+            echo 'name = "navtest"'
+            echo 'groups = ["wheel"]'
+            echo "ssh_authorized_keys = [\"$(cat boot-test-key.pub)\"]"
+          } > disk_config/boot-test.toml
+
+      - name: ghcr.io'ya giriş yap
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: qcow2 disk imajı build et
+        id: build
+        uses: osbuild/bootc-image-builder-action@8661cd3832544ad68c12dcde8681b13ab0f56a8d # main
+        with:
+          builder-image: ${{ env.BIB_IMAGE }}
+          config-file: ./disk_config/boot-test.toml
+          image: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}
+          chown: ${{ env.USER_UID }}:${{ env.USER_GID }}
+          types: qcow2
+
+      - name: Disk imajını artifact olarak yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: navigator-disk-image
+          path: ${{ steps.build.outputs.output-directory }}
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: SSH anahtarını ayrı bir artifact olarak yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: navigator-boot-test-ssh-key
+          path: boot-test-key
+          if-no-files-found: error
+          retention-days: 1
+
+  boot-test:
+    name: VM'i boot et ve SSH ile doğrula
+    needs: build-disk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Disk imajı artifact'ını indir
+        uses: actions/download-artifact@v4
+        with:
+          name: navigator-disk-image
+          path: ./disk-output
+
+      - name: SSH anahtarı artifact'ını indir
+        uses: actions/download-artifact@v4
+        with:
+          name: navigator-boot-test-ssh-key
+          path: ./disk-output
+
+      - name: QEMU + OVMF kur
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd
+
+      - name: KVM erişimini doğrula
+        run: |
+          ls -l /dev/kvm
+          sudo usermod -aG kvm "$USER"
+
+      - name: SSH anahtar iznini düzelt
+        run: |
+          KEY="$(find ./disk-output -name boot-test-key)"
+          chmod 600 "${KEY}"
+          echo "SSH_KEY=${KEY}" >> "${GITHUB_ENV}"
+
+      - name: VM'i KVM ile arka planda boot et
+        run: |
+          set -euo pipefail
+          QCOW2="$(find ./disk-output -name '*.qcow2' | head -n1)"
+          cp /usr/share/OVMF/OVMF_VARS.fd ./OVMF_VARS.fd
+          sg kvm -c "
+            nohup qemu-system-x86_64 \
+              -machine accel=kvm,type=q35 \
+              -cpu host \
+              -smp 2 \
+              -m 4096 \
+              -nographic \
+              -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
+              -drive if=pflash,format=raw,file=$(pwd)/OVMF_VARS.fd \
+              -drive file=${QCOW2},format=qcow2,if=virtio \
+              -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+              -device virtio-net-pci,netdev=net0 \
+              > qemu.log 2>&1 &
+            disown
+            echo \$! > qemu.pid
+          "
+          for i in $(seq 1 60); do
+            if nc -z 127.0.0.1 2222; then
+              echo "SSH portu açık."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "SSH portu 5 dakika içinde açılmadı." >&2
+          cat qemu.log || true
+          exit 1
+
+      - name: SSH ile sistemin gerçekten ayağa kalktığını doğrula
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5"
+          STATE=""
+          for i in $(seq 1 24); do
+            STATE="$(ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 navtest@127.0.0.1 "systemctl is-system-running" 2>/dev/null || true)"
+            echo "systemctl is-system-running -> ${STATE:-<yanıt yok>}"
+            case "${STATE}" in
+              running|degraded) break ;;
+            esac
+            sleep 5
+          done
+          case "${STATE}" in
+            running|degraded) ;;
+            *)
+              echo "Sistem 2 dakika içinde ayağa kalkmadı (son durum: ${STATE:-yok})" >&2
+              exit 1
+              ;;
+          esac
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 navtest@127.0.0.1 \
+            "cat /etc/os-release && echo --- && systemctl --failed --no-legend"
+
+      - name: VM'i temizle
+        if: always()
+        run: |
+          if [ -f qemu.pid ]; then
+            PID="$(cat qemu.pid)"
+            kill "${PID}" 2>/dev/null || true
+            sleep 2
+            kill -9 "${PID}" 2>/dev/null || true
+          fi
+          cat qemu.log || true
