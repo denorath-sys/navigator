@@ -20,32 +20,40 @@ paylaşıyor:
 
 ## Araçlar
 
-Dört araç kayıtlı — ikisi zaten çalışan diğer ai-stack modüllerini
-sarmalıyor, ikisi (Faz 2'nin ikinci adımı) gerçek, salt-okunur dosya
-sistemi erişimi sağlıyor:
+Beş araç kayıtlı — ikisi zaten çalışan diğer ai-stack modüllerini
+sarmalıyor, üçü (Faz 2'nin ikinci adımı) gerçek, sandbox'lı dosya sistemi
+erişimi sağlıyor:
 
 | Araç | Açıklama |
 |---|---|
 | `hardware_tier` | `hardware-probe`'u sarmalar — donanım tier'ını ve CPU/RAM/GPU sinyallerini döner |
 | `route_request` | `router`'ı sarmalar — bir isteğin yerel mi bulut mu ile karşılanacağına karar verir (artık gerçek yerel üretim/bulut çağrısını da tetikliyor) |
-| `read_file` | Bir dosyanın içeriğini okur — **salt-okunur, sandbox'lı** |
-| `list_directory` | Bir dizinin içeriğini listeler — **salt-okunur, sandbox'lı** |
+| `read_file` | Bir dosyanın içeriğini okur — **sandbox'lı** |
+| `list_directory` | Bir dizinin içeriğini listeler — **sandbox'lı** |
+| `write_file` | Bir dosyaya metin içerik yazar — **sandbox'lı**, var olan dosyaya yazmak için `overwrite=true` şart |
 
 ### Dosya sistemi araçları — güvenlik modeli
 
-`read_file` ve `list_directory` (`filesystem.py`) bilinçli olarak en düşük
-riskli ilk adım olarak tasarlandı:
+`read_file`, `list_directory` ve `write_file` (`filesystem.py`) bilinçli
+olarak dar bir yetki yüzeyiyle tasarlandı:
 
-- **Sadece okuma** — yazma, silme, yeniden adlandırma YOK.
+- **Silme/yeniden adlandırma YOK** — sadece okuma ve (kontrollü) yazma.
 - **Sandbox'lı kök dizin** — tüm yollar bir kök dizine (varsayılan:
   kullanıcının ev dizini, `NAVIGATOR_MCP_FS_ROOT` ortam değişkeniyle
   geçersiz kılınabilir) göre çözümlenir; `os.path.realpath` ile kanonik
   forma indirgenip kökün dışına çıkmadığı doğrulanır. `../` ile path
   traversal ve kök dışına mutlak yol verme denemeleri engellenir
-  (gerçek MCP protokolü üzerinden test edildi — bkz. testler).
+  (gerçek MCP protokolü üzerinden test edildi — bkz. testler). Bu kontrol
+  `write_file` için de aynen geçerli.
+- **Yazma için ek korumalar** — `write_file` var olan bir dosyanın üzerine
+  ancak `overwrite=true` ile yazabilir (yanlışlıkla veri kaybını
+  önlemek için); üst dizin zaten var olmalı (araç kendiliğinden dizin
+  oluşturmaz, kapsamı dosya içeriğiyle sınırlı tutar); bir dizin path'ine
+  yazma denemesi hata verir.
 - **Boyut sınırı** — `read_file` en fazla ~1 MB okur (`MAX_READ_BYTES`),
-  `list_directory` en fazla 500 girdi döner (`MAX_LIST_ENTRIES`) — büyük
-  dosya/dizinlerin context'i boğmasını önlemek için.
+  `write_file` en fazla ~1 MB yazar (`MAX_WRITE_BYTES`), `list_directory`
+  en fazla 500 girdi döner (`MAX_LIST_ENTRIES`) — büyük dosya/dizinlerin
+  context'i boğmasını önlemek için.
 
 ## Kullanım
 
@@ -94,10 +102,12 @@ Bu makinede gerçek bir stdio oturumu çalıştırıldı (izole bir sandbox
 dizinine karşı, `NAVIGATOR_MCP_FS_ROOT` ile):
 
 ```
-tools/list -> ["hardware_tier", "route_request", "read_file", "list_directory"]
+tools/list -> ["hardware_tier", "route_request", "read_file", "list_directory", "write_file"]
 tools/call(read_file, {"path": "hello.txt"}) -> {"content": [{"type": "text", "text": "merhaba navigator"}], "isError": false}
 tools/call(list_directory, {}) -> {"content": [{"type": "text", "text": "[{\"name\": \"hello.txt\", ...}, {\"name\": \"subdir\", ...}]"}], "isError": false}
 tools/call(read_file, {"path": "../../../../etc/passwd"}) -> {"content": [{"type": "text", "text": "Araç hatası: '...' izin verilen kök dizinin (...) dışına çıkıyor"}], "isError": true}
+tools/call(write_file, {"path": "yeni.txt", "content": "navigator yazdı"}) -> {"content": [{"type": "text", "text": "16 bayt yazıldı: yeni.txt"}], "isError": false}
+tools/call(write_file, {"path": "yeni.txt", "content": "tekrar"}) -> {"content": [{"type": "text", "text": "Araç hatası: Dosya zaten var: yeni.txt (üzerine yazmak için overwrite=true gerekir)"}], "isError": true}
 ```
 
 `mcp-tools → router → local-runtime → hardware-probe` zinciri de gerçek
@@ -154,7 +164,8 @@ POST), token'sız/yanlış token ile her iki uç noktada da `401` (bkz.
 
 ## Kapsam dışı — henüz yapılmadı
 
-- Dosya **yazma**/silme/yeniden adlandırma yok — sadece okuma.
+- Dosya **silme**/yeniden adlandırma yok — sadece okuma ve (kontrollü)
+  yazma.
 - Uygulama kontrolü (Hyprland/Quickshell ile konuşan araçlar) yok — bu
   makinede Hyprland çalışmadığından zaten gerçek test edilemez.
 - TLS/HTTPS yok — Bearer token düz HTTP üzerinden taşınıyor; şu an sadece
@@ -165,12 +176,13 @@ POST), token'sız/yanlış token ile her iki uç noktada da `401` (bkz.
 ## Durum
 
 Faz 2 — MCP sunucusu (`protocol.py`, `server.py`, `tools.py`), dosya
-sistemi araçları (`filesystem.py`), HTTP+SSE transport
-(`http_transport.py`) VE Bearer token kimlik doğrulaması (`auth.py`)
-tamamlandı, `python3 -m mcp_tools [--http] [--token T]` CLI.
-58 test geçiyor (protokol round-trip, server dispatch, gerçek modüllere
-karşı araç testleri, path traversal engellemesi dahil dosya sistemi
-testleri, session registry unit testleri, auth yardımcı fonksiyon
-testleri, ve gerçek subprocess/TCP soketleriyle iki transport üzerinden
-uçtan uca MCP protokol testleri — kimlik doğrulamalı ve doğrulamasız
-istekler dahil).
+sistemi araçları (`filesystem.py` — okuma, listeleme VE kontrollü
+yazma), HTTP+SSE transport (`http_transport.py`) VE Bearer token kimlik
+doğrulaması (`auth.py`) tamamlandı, `python3 -m mcp_tools [--http]
+[--token T]` CLI.
+66 test geçiyor (protokol round-trip, server dispatch, gerçek modüllere
+karşı araç testleri, path traversal engellemesi ve overwrite koruması
+dahil dosya sistemi testleri, session registry unit testleri, auth
+yardımcı fonksiyon testleri, ve gerçek subprocess/TCP soketleriyle iki
+transport üzerinden uçtan uca MCP protokol testleri — kimlik doğrulamalı
+ve doğrulamasız istekler dahil).

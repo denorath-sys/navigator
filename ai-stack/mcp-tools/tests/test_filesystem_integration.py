@@ -44,6 +44,7 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                 tool_names = {t["name"] for t in self._recv(proc)["result"]["tools"]}
                 self.assertIn("read_file", tool_names)
                 self.assertIn("list_directory", tool_names)
+                self.assertIn("write_file", tool_names)
 
                 self._send(
                     proc,
@@ -80,6 +81,72 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                 traversal_response = self._recv(proc)
                 self.assertTrue(traversal_response["result"]["isError"])
                 self.assertIn("dışına çıkıyor", traversal_response["result"]["content"][0]["text"])
+
+                self._send(
+                    proc,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 6,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "write_file",
+                            "arguments": {"path": "yeni.txt", "content": "navigator yazdı"},
+                        },
+                    },
+                )
+                write_response = self._recv(proc)
+                self.assertFalse(write_response["result"]["isError"])
+                self.assertTrue(os.path.isfile(os.path.join(tmp, "yeni.txt")))
+                with open(os.path.join(tmp, "yeni.txt"), encoding="utf-8") as f:
+                    self.assertEqual(f.read(), "navigator yazdı")
+
+                self._send(
+                    proc,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 7,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "write_file",
+                            "arguments": {"path": "yeni.txt", "content": "tekrar"},
+                        },
+                    },
+                )
+                overwrite_denied_response = self._recv(proc)
+                self.assertTrue(overwrite_denied_response["result"]["isError"])
+
+                self._send(
+                    proc,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 8,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "write_file",
+                            "arguments": {"path": "yeni.txt", "content": "tekrar", "overwrite": True},
+                        },
+                    },
+                )
+                overwrite_allowed_response = self._recv(proc)
+                self.assertFalse(overwrite_allowed_response["result"]["isError"])
+                with open(os.path.join(tmp, "yeni.txt"), encoding="utf-8") as f:
+                    self.assertEqual(f.read(), "tekrar")
+
+                self._send(
+                    proc,
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 9,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "write_file",
+                            "arguments": {"path": "../../../../tmp/kotu.txt", "content": "x"},
+                        },
+                    },
+                )
+                write_traversal_response = self._recv(proc)
+                self.assertTrue(write_traversal_response["result"]["isError"])
+                self.assertIn("dışına çıkıyor", write_traversal_response["result"]["content"][0]["text"])
             finally:
                 proc.stdin.close()
                 proc.terminate()

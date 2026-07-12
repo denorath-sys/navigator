@@ -38,7 +38,8 @@ class TestMCPToolsIntegration(unittest.TestCase):
             list_response = self._recv(proc)
             tool_names = {t["name"] for t in list_response["result"]["tools"]}
             self.assertEqual(
-                tool_names, {"hardware_tier", "route_request", "read_file", "list_directory"}
+                tool_names,
+                {"hardware_tier", "route_request", "read_file", "list_directory", "write_file"},
             )
 
             self._send(

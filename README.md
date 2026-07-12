@@ -35,14 +35,15 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   orkestrasyon/istemci katmanı tamamlandı (Ollama REST istemcisi,
   tier→model önerisi, 16 test). `ai-stack/mcp-tools` ilk MCP sunucusunu
   aldı (resmi SDK'sız, stdlib-only stdio JSON-RPC 2.0) ve ardından
-  genişletildi: salt-okunur/sandbox'lı dosya sistemi araçları
-  (`read_file`/`list_directory`, path traversal engellemeli), klasik
-  HTTP+SSE transport (`GET /sse` + `POST /messages`, stdio'ya ek olarak)
-  ve HTTP+SSE için zorunlu Bearer token kimlik doğrulaması (otomatik
-  token üretimi, `hmac.compare_digest` ile zamanlama saldırısına
-  dayanıklı karşılaştırma — kimliksiz çalışma hiçbir zaman mümkün değil)
-  — toplam 58 test, gerçek subprocess/TCP soketleriyle uçtan uca
-  doğrulandı. `ai-stack/cloud-bridge` kimlik bilgisi/istemci katmanını
+  genişletildi: sandbox'lı dosya sistemi araçları (`read_file`/
+  `list_directory`/`write_file` — path traversal engellemeli, yazma için
+  ayrıca overwrite koruması ve boyut sınırı), klasik HTTP+SSE transport
+  (`GET /sse` + `POST /messages`, stdio'ya ek olarak) ve HTTP+SSE için
+  zorunlu Bearer token kimlik doğrulaması (otomatik token üretimi,
+  `hmac.compare_digest` ile zamanlama saldırısına dayanıklı karşılaştırma
+  — kimliksiz çalışma hiçbir zaman mümkün değil) — toplam 66 test, gerçek
+  subprocess/TCP soketleriyle uçtan uca doğrulandı. `ai-stack/cloud-bridge`
+  kimlik bilgisi/istemci katmanını
   aldı (Anthropic Claude API, stdlib-only ham HTTP, 15 test).
   `ai-stack/router` karar katmanını VE hem `local-runtime` hem
   `cloud-bridge` entegrasyonunu tamamladı (`route` kararına göre ilgili

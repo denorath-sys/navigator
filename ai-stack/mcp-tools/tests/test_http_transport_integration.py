@@ -142,7 +142,8 @@ class TestHTTPTransportIntegration(unittest.TestCase):
             self.assertIn(2, results)
             tool_names = {t["name"] for t in results[2]["result"]["tools"]}
             self.assertEqual(
-                tool_names, {"hardware_tier", "route_request", "read_file", "list_directory"}
+                tool_names,
+                {"hardware_tier", "route_request", "read_file", "list_directory", "write_file"},
             )
 
             self.assertIn(3, results)

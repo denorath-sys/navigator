@@ -8,6 +8,7 @@ from mcp_tools.filesystem import (
     _resolve_within_root,
     list_directory,
     read_file,
+    write_file,
 )
 
 
@@ -82,6 +83,60 @@ class TestReadFile(unittest.TestCase):
                 read_file("big.txt", root=self.root)
         finally:
             fs_module.MAX_READ_BYTES = original_limit
+
+
+class TestWriteFile(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        with open(os.path.join(self.root, "existing.txt"), "w") as f:
+            f.write("eski içerik")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_writes_new_file(self):
+        write_file("new.txt", "merhaba dünya", root=self.root)
+        with open(os.path.join(self.root, "new.txt"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), "merhaba dünya")
+
+    def test_returns_byte_count_message(self):
+        result = write_file("new.txt", "abc", root=self.root)
+        self.assertIn("3", result)
+        self.assertIn("new.txt", result)
+
+    def test_existing_file_without_overwrite_raises(self):
+        with self.assertRaises(FilesystemError):
+            write_file("existing.txt", "yeni içerik", root=self.root)
+        with open(os.path.join(self.root, "existing.txt"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), "eski içerik")
+
+    def test_existing_file_with_overwrite_succeeds(self):
+        write_file("existing.txt", "yeni içerik", overwrite=True, root=self.root)
+        with open(os.path.join(self.root, "existing.txt"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), "yeni içerik")
+
+    def test_path_traversal_raises(self):
+        with self.assertRaises(FilesystemError):
+            write_file("../../../tmp/kotu.txt", "x", root=self.root)
+
+    def test_directory_path_raises(self):
+        os.makedirs(os.path.join(self.root, "adir"))
+        with self.assertRaises(FilesystemError):
+            write_file("adir", "x", root=self.root)
+
+    def test_missing_parent_directory_raises(self):
+        with self.assertRaises(FilesystemError):
+            write_file("yok/new.txt", "x", root=self.root)
+
+    def test_too_large_content_raises(self):
+        original_limit = fs_module.MAX_WRITE_BYTES
+        fs_module.MAX_WRITE_BYTES = 5
+        try:
+            with self.assertRaises(FilesystemError):
+                write_file("new.txt", "x" * 10, root=self.root)
+        finally:
+            fs_module.MAX_WRITE_BYTES = original_limit
 
 
 class TestListDirectory(unittest.TestCase):
