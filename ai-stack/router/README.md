@@ -34,8 +34,9 @@ python3 -m unittest discover -v -s tests
 
 ## Çıktı örneği
 
-Bu makinede (Ollama kurulu değil → `model_ready: false` → her zaman `cloud`
-→ `cloud-bridge` çağrılır ama kimlik bilgisi de yok):
+Bu makinede (Ollama kurulu ve çalışıyor ama önerilen model henüz
+indirilmedi → `model_ready: false` → her zaman `cloud` → `cloud-bridge`
+çağrılır ama kimlik bilgisi de yok):
 
 ```json
 {
@@ -89,11 +90,12 @@ sonucu raporun `local_runtime` alanına ekler. Olası durumlar:
 - `{"status": "ok", "content": "..."}` — gerçek istek başarılı
 - `{"status": "error", "error": "..."}` — ağ/istek hatası
 
-Bu makinede Ollama kurulu olmadığından gerçek karar hep `cloud`'a düşüyor
-(`model_ready` her zaman `false`); `local` yolu, karar adımına sahte bir
-durum (`model_ready: true`) enjekte edilerek test edildi — gerçek
-`local-runtime` subprocess'i yine de gerçek Ollama durumunu doğru raporladı
-(bkz. `tests/test_integration.py`).
+Bu makinede Ollama kurulu ve çalışıyor ama önerilen model henüz
+indirilmediğinden gerçek karar hep `cloud`'a düşüyor (`model_ready` her
+zaman `false`, `reason: "model_not_installed"`); `local` yolu, karar
+adımına sahte bir durum (`model_ready: true`) enjekte edilerek test edildi
+— gerçek `local-runtime` subprocess'i yine de gerçek Ollama durumunu doğru
+raporladı (bkz. `tests/test_integration.py`).
 
 ## Cloud-bridge entegrasyonu
 
@@ -113,8 +115,10 @@ Her karar sadece kendi hedefini çağırır: `local` iken `cloud-bridge`
 - `mcp-tools/` üzerinden gelen araç çağrıları `route_request` aracını
   kullanıyor (bkz. `ai-stack/mcp-tools`) — bu artık hem `local` hem `cloud`
   entegrasyonunu otomatik olarak miras alıyor.
-- Gerçek bir Ollama/Claude API yanıtı bu ortamda hiç görülmedi — sadece
-  "kurulu değil / kimlik bilgisi yok" yollarının doğru çalıştığı doğrulandı.
+- Gerçek bir Ollama/Claude API yanıtı bu ortamda hiç görülmedi — Ollama
+  kurulu olsa da model henüz indirilmediğinden ve Claude API kimlik bilgisi
+  olmadığından, sadece "kullanılamıyor" yollarının doğru çalıştığı
+  doğrulandı.
 
 ## Durum
 

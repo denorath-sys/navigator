@@ -9,7 +9,8 @@ from router.status import route_request
 class TestRouterIntegration(unittest.TestCase):
     """router -> local-runtime -> hardware-probe VE router -> cloud-bridge
     zincirlerinin gerçek subprocess'lerle uçtan uca çalıştığını doğrular
-    (bu makinede Ollama kurulu değil ve Claude API kimlik bilgisi yok)."""
+    (bu makinede Ollama kurulu ve çalışıyor ama önerilen model henüz
+    indirilmedi; Claude API kimlik bilgisi yok)."""
 
     def test_route_cli_runs_end_to_end(self):
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -24,7 +25,7 @@ class TestRouterIntegration(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
         self.assertIn(report["hardware_tier"], ("minimal", "low", "mid", "high"))
-        # Ollama bu ortamda kurulu değil -> model_ready False -> her zaman cloud
+        # Ollama çalışıyor ama model henüz indirilmedi -> model_ready False -> her zaman cloud
         self.assertFalse(report["model_ready"])
         self.assertEqual(report["route"], "cloud")
 
@@ -36,7 +37,8 @@ class TestRouterIntegration(unittest.TestCase):
     def test_local_route_calls_real_local_runtime_subprocess(self):
         """Karar adımına sahte 'model hazır' durumu enjekte edip route="local"
         zorlanır; gerçek local_runtime subprocess'i yine de GERÇEK Ollama
-        durumunu (bu makinede kurulu değil) sorgular ve doğru raporlar."""
+        durumunu sorgular (bu makinede Ollama çalışıyor ama model kurulu
+        değil) ve doğru raporlar."""
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         fake_status = {"hardware_tier": "mid", "model_ready": True}
         report = route_request(
@@ -47,7 +49,8 @@ class TestRouterIntegration(unittest.TestCase):
         self.assertEqual(report["route"], "local")
         self.assertIn("local_runtime", report)
         self.assertEqual(report["local_runtime"]["status"], "unavailable")
-        self.assertEqual(report["local_runtime"]["reason"], "ollama_not_running")
+        self.assertEqual(report["local_runtime"]["reason"], "model_not_installed")
+        self.assertEqual(report["local_runtime"]["model"], "llama3.2:3b")
         self.assertNotIn("cloud_bridge", report)
 
 

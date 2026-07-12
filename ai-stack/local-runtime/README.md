@@ -34,20 +34,22 @@ python3 -m unittest discover -v -s tests
 
 ## Çıktı örneği
 
-Bu makinede (Ollama kurulu değil, hardware-probe tier="low" tespit etti):
+Bu makinede (Ollama **kurulu ve çalışıyor** — `curl -fsSL https://ollama.com/install.sh | sh`
+ile kuruldu, systemd servisi `active`; hardware-probe tier="low" tespit
+etti; önerilen model henüz indirilmedi):
 
 ```json
 {
   "schema_version": "0.1",
   "hardware_tier": "low",
   "recommended_model": {"model": "llama3.2:3b", "approx_size_gb": 2.0},
-  "ollama_available": false,
+  "ollama_available": true,
   "installed_models": [],
   "model_ready": false
 }
 ```
 
-`--prompt` verildiğinde (Ollama kapalıyken, gerçek makinede test edildi):
+`--prompt` verildiğinde (aynı durum — Ollama açık, model kurulu değil):
 
 ```json
 {
@@ -56,14 +58,14 @@ Bu makinede (Ollama kurulu değil, hardware-probe tier="low" tespit etti):
   "hardware_tier": "low",
   "prompt_preview": "merhaba",
   "status": "unavailable",
-  "reason": "ollama_not_running",
+  "reason": "model_not_installed",
   "model": "llama3.2:3b"
 }
 ```
 
 `reason` üç değerden biri olabilir: `no_local_model_recommended` (tier
 "minimal"), `ollama_not_running` (Ollama kapalı), `model_not_installed`
-(Ollama açık ama önerilen model çekilmemiş).
+(Ollama açık ama önerilen model çekilmemiş — şu anki durum).
 
 ## Tier → model eşlemesi (taslak, `local_runtime/models.py`)
 
@@ -77,26 +79,30 @@ Bu makinede (Ollama kurulu değil, hardware-probe tier="low" tespit etti):
 Bu eşleme taslaktır, gerçek kullanım/benchmark verisi biriktikçe Faz 3+'ta
 revize edilecek.
 
-## İndirme gerektiren kısım — henüz yapılmadı
+## İndirme gerektiren kısım — kısmen yapıldı
 
-Bu implementasyon **hiçbir model ağırlığı veya Ollama'nın kendisini
-indirmedi/kurmadı** — proje kısıtı gereği (200 MB üstü indirme onaysız
-başlatılmaz, model dosyaları birkaç GB). Şu an yazılan kod:
+**Ollama'nın kendisi kuruldu** (kullanıcı onayıyla, `curl -fsSL
+https://ollama.com/install.sh | sh` — ~1.37 GB, resmi kurulum betiği,
+sudo ile systemd servisi olarak). Bu makinede ayrık GPU olmadığından
+CPU-only modda kuruldu.
 
-- Tier→model önerisi üretiyor (saf mantık, indirme yok)
-- Ollama'nın REST API'sine konuşan bir istemci sağlıyor (Ollama kurulu
-  değilken de mock'lanmış testlerle doğrulanabiliyor)
-- Ollama kurulu değilken **çökmeden** `ollama_available: false` raporluyor
-  (gerçek makinede doğrulandı — bu ortamda Ollama yok)
+**Model ağırlığı henüz indirilmedi** — proje kısıtı gereği (birkaç GB'lık
+model dosyaları için ayrı, açık bir onay gerekiyor). Şu an:
 
-Ollama'nın kurulumu ve gerçek bir modelin (`ollama pull llama3.2:3b` ~2 GB)
-indirilmesi ayrı, açık bir onay gerektiren adım olacak.
+- Tier→model önerisi üretiyor (saf mantık)
+- Ollama'nın REST API'sine gerçekten konuşuyor (`ollama_available: true`,
+  gerçek makinede doğrulandı)
+- Model kurulu olmadığından **çökmeden** `model_ready: false` /
+  `reason: "model_not_installed"` raporluyor
+
+`ollama pull llama3.2:3b` (~2 GB) ayrı, açık bir onay gerektiren bir
+sonraki adım olacak.
 
 ## Durum
 
-Faz 2 — orkestrasyon/istemci katmanı VE `router` entegrasyonu tamamlandı
-(`models.py`, `client.py`, `status.py`, `python3 -m local_runtime [--prompt ...]`
-CLI). 15 test geçiyor (mock'lanmış Ollama HTTP + gerçek hardware-probe
-subprocess entegrasyonu, hem durum hem `--prompt` yolu). Ollama kurulumu ve
-model indirme Faz 3+'ta, ayrı onayla yapılacak — `router` bu modülü zaten
-`route: "local"` kararında gerçekten çağırıyor.
+Faz 2 — orkestrasyon/istemci katmanı, `router` entegrasyonu VE **gerçek
+Ollama kurulumu** tamamlandı (`models.py`, `client.py`, `status.py`,
+`python3 -m local_runtime [--prompt ...]` CLI). 16 test geçiyor (mock'lanmış
+Ollama HTTP + gerçek Ollama'ya karşı entegrasyon testleri — hem durum hem
+`--prompt` yolu, `ollama_available: true` durumuyla). Model indirme Faz 3+'ta,
+ayrı onayla yapılacak.
