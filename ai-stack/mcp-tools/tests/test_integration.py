@@ -37,7 +37,9 @@ class TestMCPToolsIntegration(unittest.TestCase):
             self._send(proc, {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
             list_response = self._recv(proc)
             tool_names = {t["name"] for t in list_response["result"]["tools"]}
-            self.assertEqual(tool_names, {"hardware_tier", "route_request"})
+            self.assertEqual(
+                tool_names, {"hardware_tier", "route_request", "read_file", "list_directory"}
+            )
 
             self._send(
                 proc,
