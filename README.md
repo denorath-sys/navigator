@@ -34,18 +34,26 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   test edilmedi, bkz. `shell/README.md`). `ai-stack/local-runtime`
   orkestrasyon/istemci katmanı tamamlandı (Ollama REST istemcisi,
   tier→model önerisi, 16 test). `ai-stack/mcp-tools` ilk MCP sunucusunu
-  aldı (resmi SDK'sız, stdlib-only stdio JSON-RPC 2.0, 16 test).
-  `ai-stack/cloud-bridge` kimlik bilgisi/istemci katmanını aldı (Anthropic
-  Claude API, stdlib-only ham HTTP, 15 test). `ai-stack/router` karar
-  katmanını VE hem `local-runtime` hem `cloud-bridge` entegrasyonunu
-  tamamladı (`route` kararına göre ilgili modülü subprocess ile gerçekten
-  çağırıyor, 26 test). Kullanıcı onayıyla **Ollama kuruldu**
-  (`curl -fsSL https://ollama.com/install.sh | sh`, ~1.37 GB) ve
-  **`llama3.2:3b` modeli indirildi** (`ollama pull`, ~2 GB) — `route:
-  "local"` artık bu makinede gerçekten uçtan uca çalışıyor, gerçek metin
-  üretiyor. `ai-stack`'in beş modülünün tamamı en az bir implementasyon
-  aşamasına ulaştı; yerel yol tamamen gerçek, bulut yolu (`cloud-bridge`)
-  Claude API kimlik bilgisi olmadığından hâlâ "unavailable". `hyprland/
+  aldı (resmi SDK'sız, stdlib-only stdio JSON-RPC 2.0) ve ardından
+  genişletildi: salt-okunur/sandbox'lı dosya sistemi araçları
+  (`read_file`/`list_directory`, path traversal engellemeli), klasik
+  HTTP+SSE transport (`GET /sse` + `POST /messages`, stdio'ya ek olarak)
+  ve HTTP+SSE için zorunlu Bearer token kimlik doğrulaması (otomatik
+  token üretimi, `hmac.compare_digest` ile zamanlama saldırısına
+  dayanıklı karşılaştırma — kimliksiz çalışma hiçbir zaman mümkün değil)
+  — toplam 58 test, gerçek subprocess/TCP soketleriyle uçtan uca
+  doğrulandı. `ai-stack/cloud-bridge` kimlik bilgisi/istemci katmanını
+  aldı (Anthropic Claude API, stdlib-only ham HTTP, 15 test).
+  `ai-stack/router` karar katmanını VE hem `local-runtime` hem
+  `cloud-bridge` entegrasyonunu tamamladı (`route` kararına göre ilgili
+  modülü subprocess ile gerçekten çağırıyor, 26 test). Kullanıcı onayıyla
+  **Ollama kuruldu** (`curl -fsSL https://ollama.com/install.sh | sh`,
+  ~1.37 GB) ve **`llama3.2:3b` modeli indirildi** (`ollama pull`, ~2 GB)
+  — `route: "local"` artık bu makinede gerçekten uçtan uca çalışıyor,
+  gerçek metin üretiyor. `ai-stack`'in beş modülünün tamamı en az bir
+  implementasyon aşamasına ulaştı; yerel yol tamamen gerçek, bulut yolu
+  (`cloud-bridge`) Claude API kimlik bilgisi olmadığından hâlâ
+  "unavailable". `hyprland/
   hyprland.conf` statik sözdizimi incelemesinden geçti (bu Debian
   geliştirme ortamında Hyprland paketli olmadığından gerçek compositor
   çalıştırılamadı — bkz. `hyprland/README.md`); sözdizimsel hata
