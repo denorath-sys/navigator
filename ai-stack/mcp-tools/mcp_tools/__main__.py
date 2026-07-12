@@ -1,6 +1,7 @@
 """CLI: `python3 -m mcp_tools` (stdio) veya
-`python3 -m mcp_tools --http [--host H] [--port N]` (HTTP+SSE)."""
+`python3 -m mcp_tools --http [--host H] [--port N] [--token T]` (HTTP+SSE)."""
 import argparse
+import os
 import sys
 
 from .filesystem import register_filesystem_tools
@@ -8,6 +9,8 @@ from .http_transport import run_http_server
 from .protocol import read_message, write_message
 from .server import MCPServer
 from .tools import register_default_tools
+
+TOKEN_ENV_VAR = "NAVIGATOR_MCP_HTTP_TOKEN"
 
 
 def build_server() -> MCPServer:
@@ -34,12 +37,21 @@ def main() -> int:
     parser.add_argument("--http", action="store_true", help="stdio yerine HTTP+SSE transport kullan")
     parser.add_argument("--host", default="127.0.0.1", help="HTTP modunda dinlenecek adres")
     parser.add_argument("--port", type=int, default=8765, help="HTTP modunda dinlenecek port")
+    parser.add_argument(
+        "--token",
+        default=None,
+        help=(
+            "HTTP+SSE için Bearer token (verilmezse "
+            f"{TOKEN_ENV_VAR} ortam değişkeni, o da yoksa otomatik üretilip stderr'e yazdırılır)"
+        ),
+    )
     args = parser.parse_args()
 
     server = build_server()
 
     if args.http:
-        run_http_server(server, host=args.host, port=args.port)
+        token = args.token or os.environ.get(TOKEN_ENV_VAR)
+        run_http_server(server, host=args.host, port=args.port, token=token)
     else:
         run_stdio(server)
 

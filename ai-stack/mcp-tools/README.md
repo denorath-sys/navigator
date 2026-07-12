@@ -59,11 +59,14 @@ cd ai-stack/mcp-tools
 python3 -m mcp_tools
 ```
 
-HTTP+SSE üzerinden başlatmak:
+HTTP+SSE üzerinden başlatmak (kimlik doğrulama zorunlu, bkz. aşağıdaki
+bölüm):
 
 ```sh
 cd ai-stack/mcp-tools
 python3 -m mcp_tools --http --port 8765   # --host ile adres de değiştirilebilir
+# token verilmezse otomatik üretilir ve stderr'e yazdırılır; sabit bir
+# token için: --token <TOKEN> veya NAVIGATOR_MCP_HTTP_TOKEN ortam değişkeni
 ```
 
 Dosya sistemi araçlarının kök dizinini değiştirmek için (varsayılan: ev
@@ -125,24 +128,49 @@ Bu makinede gerçek bir HTTP+SSE oturumu (gerçek TCP soketleri, subprocess)
 uçtan uca çalıştırıldı: endpoint keşfi → `initialize`/`tools/list`/
 `tools/call` POST'ları → SSE üzerinden doğru `id` eşleşmesiyle yanıtlar.
 
+## Kimlik doğrulama (HTTP+SSE)
+
+stdio transport zaten yerel bir süreç boru hattı olduğundan (işletim
+sistemi süreç izolasyonu yeterli) kimlik doğrulaması gerektirmiyor. Ama
+HTTP+SSE bir TCP soketi açtığı için (varsayılan `127.0.0.1` olsa bile)
+`auth.py`'de implemente edilen Bearer token doğrulaması zorunlu:
+
+- **Kimliksiz çalışma yok.** `--token` verilmezse veya
+  `NAVIGATOR_MCP_HTTP_TOKEN` ortam değişkeni set değilse, sunucu
+  `secrets.token_urlsafe(32)` ile otomatik bir token üretir ve
+  başlangıçta stderr'e yazdırır — sessizce açık kapı olarak asla
+  çalışmaz (Jupyter'ın notebook token modeliyle aynı ilke).
+- **Her iki uç nokta da korunuyor** — `GET /sse` ve `POST /messages`,
+  `Authorization: Bearer <token>` header'ı eksik veya yanlışsa `401`
+  döner (`WWW-Authenticate: Bearer` header'ıyla birlikte).
+- **Zamanlama saldırısına dayanıklı karşılaştırma** —
+  `hmac.compare_digest` kullanılıyor, düz `==` değil.
+- Token önceliği: `--token` CLI argümanı > `NAVIGATOR_MCP_HTTP_TOKEN` >
+  otomatik üretim.
+
+Gerçek TCP üzerinden doğrulandı: doğru token ile tam MCP oturumu (SSE +
+POST), token'sız/yanlış token ile her iki uç noktada da `401` (bkz.
+`tests/test_http_transport_integration.py`).
+
 ## Kapsam dışı — henüz yapılmadı
 
 - Dosya **yazma**/silme/yeniden adlandırma yok — sadece okuma.
 - Uygulama kontrolü (Hyprland/Quickshell ile konuşan araçlar) yok — bu
   makinede Hyprland çalışmadığından zaten gerçek test edilemez.
-- Kimlik doğrulama / yetkilendirme yok — HTTP+SSE transport şu an
-  kimliksiz/şifresiz (`127.0.0.1` varsayılan; dışa açık kullanım için
-  güvenlik sertleştirmesi gerekir, bu Faz 1 sınırlamalarıyla aynı ilke:
-  önce çalışan bir iskelet, güvenlik sertleştirmesi sonra).
+- TLS/HTTPS yok — Bearer token düz HTTP üzerinden taşınıyor; şu an sadece
+  `127.0.0.1` varsayımıyla güvenli, dışa açık kullanım için TLS şart.
 - MCP'nin daha yeni "Streamable HTTP" transport'u yok — sadece klasik
   HTTP+SSE (2024-11-05).
 
 ## Durum
 
 Faz 2 — MCP sunucusu (`protocol.py`, `server.py`, `tools.py`), dosya
-sistemi araçları (`filesystem.py`) VE HTTP+SSE transport
-(`http_transport.py`) tamamlandı, `python3 -m mcp_tools [--http]` CLI.
-41 test geçiyor (protokol round-trip, server dispatch, gerçek modüllere
+sistemi araçları (`filesystem.py`), HTTP+SSE transport
+(`http_transport.py`) VE Bearer token kimlik doğrulaması (`auth.py`)
+tamamlandı, `python3 -m mcp_tools [--http] [--token T]` CLI.
+58 test geçiyor (protokol round-trip, server dispatch, gerçek modüllere
 karşı araç testleri, path traversal engellemesi dahil dosya sistemi
-testleri, session registry unit testleri, ve gerçek subprocess/TCP
-soketleriyle iki transport üzerinden uçtan uca MCP protokol testleri).
+testleri, session registry unit testleri, auth yardımcı fonksiyon
+testleri, ve gerçek subprocess/TCP soketleriyle iki transport üzerinden
+uçtan uca MCP protokol testleri — kimlik doğrulamalı ve doğrulamasız
+istekler dahil).

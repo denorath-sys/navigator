@@ -9,16 +9,22 @@ Klasik iki uç noktalı model:
     kuyruğuna ekler; HTTP olarak sadece 202 Accepted döner — yanıtın
     kendisi SSE akışı üzerinden asenkron gelir.
 
+Her iki uç nokta da Bearer token kimlik doğrulaması gerektirir (bkz.
+auth.py) — `Authorization: Bearer <token>` eksik/yanlışsa 401.
+
 Not: Bu, MCP'nin daha yeni "Streamable HTTP" transport'u değil, orijinal
 2024-11-05 spesifikasyonundaki HTTP+SSE transport'u — server.py'daki
 protocolVersion ile tutarlı.
 """
 import json
 import queue
+import sys
 import threading
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
+
+from .auth import extract_bearer_token, generate_token, tokens_match
 
 SSE_PATH = "/sse"
 MESSAGES_PATH = "/messages"
@@ -48,18 +54,29 @@ class SSESessionRegistry:
             self._sessions.pop(session_id, None)
 
 
-def _make_handler(mcp_server, registry: SSESessionRegistry):
+def _make_handler(mcp_server, registry: SSESessionRegistry, token: str):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
         def log_message(self, format, *args):
             pass  # stdout/stderr'i kirletmemek için sessiz
 
+        def _authenticated(self) -> bool:
+            provided = extract_bearer_token(self.headers.get("Authorization"))
+            if not tokens_match(provided, token):
+                self._json_response(
+                    401, {"error": "unauthorized"}, extra_headers={"WWW-Authenticate": "Bearer"}
+                )
+                return False
+            return True
+
         def do_GET(self):
             parsed = urlparse(self.path)
             if parsed.path != SSE_PATH:
                 self.send_response(404)
                 self.end_headers()
+                return
+            if not self._authenticated():
                 return
 
             session_id, q = registry.create()
@@ -96,6 +113,8 @@ def _make_handler(mcp_server, registry: SSESessionRegistry):
             if parsed.path != MESSAGES_PATH:
                 self._json_response(404, {"error": "not found"})
                 return
+            if not self._authenticated():
+                return
 
             session_id = (parse_qs(parsed.query).get("session_id") or [None])[0]
             q = registry.get(session_id) if session_id else None
@@ -119,20 +138,36 @@ def _make_handler(mcp_server, registry: SSESessionRegistry):
             self.send_header("Content-Length", "0")
             self.end_headers()
 
-        def _json_response(self, status: int, payload: dict) -> None:
+        def _json_response(self, status: int, payload: dict, extra_headers: dict | None = None) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
+            for key, value in (extra_headers or {}).items():
+                self.send_header(key, value)
             self.end_headers()
             self.wfile.write(body)
 
     return Handler
 
 
-def run_http_server(mcp_server, host: str = "127.0.0.1", port: int = 8765) -> None:
+def run_http_server(
+    mcp_server, host: str = "127.0.0.1", port: int = 8765, token: str | None = None
+) -> None:
+    """HTTP+SSE sunucusunu başlatır (bloklar). `token` verilmezse otomatik
+    üretilir ve stderr'e yazdırılır — kimliksiz çalışma hiçbir zaman
+    mümkün değildir."""
+    if token is None:
+        token = generate_token()
+        print(f"[mcp-tools] Kimlik doğrulama token'ı otomatik üretildi: {token}", file=sys.stderr)
+        print(
+            "[mcp-tools] İstekler 'Authorization: Bearer <token>' header'ı içermeli "
+            "(sabit bir token için --token veya NAVIGATOR_MCP_HTTP_TOKEN kullanın).",
+            file=sys.stderr,
+        )
+
     registry = SSESessionRegistry()
-    handler_cls = _make_handler(mcp_server, registry)
+    handler_cls = _make_handler(mcp_server, registry, token)
     httpd = ThreadingHTTPServer((host, port), handler_cls)
     httpd.daemon_threads = True
     httpd.serve_forever()

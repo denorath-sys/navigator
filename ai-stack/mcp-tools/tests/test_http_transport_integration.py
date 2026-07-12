@@ -8,6 +8,8 @@ import unittest
 import urllib.error
 import urllib.request
 
+TEST_TOKEN = "test-token-sadece-testler-icin"
+
 
 def _find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -17,13 +19,15 @@ def _find_free_port() -> int:
 
 class TestHTTPTransportIntegration(unittest.TestCase):
     """Gerçek HTTP+SSE transport'una karşı uçtan uca çalışır — gerçek
-    subprocess, gerçek TCP soketleri (mock yok)."""
+    subprocess, gerçek TCP soketleri (mock yok). Deterministik test için
+    sabit bir --token ile başlatılıyor (otomatik üretim ayrı test edilir,
+    bkz. test_auth.py + manuel doğrulama)."""
 
     def setUp(self):
         self.port = _find_free_port()
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.proc = subprocess.Popen(
-            ["python3", "-m", "mcp_tools", "--http", "--port", str(self.port)],
+            ["python3", "-m", "mcp_tools", "--http", "--port", str(self.port), "--token", TEST_TOKEN],
             cwd=here,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -51,13 +55,21 @@ class TestHTTPTransportIntegration(unittest.TestCase):
                 time.sleep(0.05)
         raise RuntimeError("HTTP sunucusu zamanında ayağa kalkmadı")
 
-    def _post(self, url: str, payload: dict) -> int:
+    def _auth_headers(self, token: str | None = TEST_TOKEN) -> dict:
+        return {"Authorization": f"Bearer {token}"} if token else {}
+
+    def _post(self, url: str, payload: dict, token: str | None = TEST_TOKEN) -> int:
         data = json.dumps(payload).encode("utf-8")
-        request = urllib.request.Request(
-            url, data=data, headers={"Content-Type": "application/json"}, method="POST"
-        )
+        headers = {"Content-Type": "application/json", **self._auth_headers(token)}
+        request = urllib.request.Request(url, data=data, headers=headers, method="POST")
         with urllib.request.urlopen(request, timeout=10) as resp:
             return resp.status
+
+    def _open_sse(self, token: str | None = TEST_TOKEN):
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/sse", headers=self._auth_headers(token)
+        )
+        return urllib.request.urlopen(request, timeout=10)
 
     def _read_endpoint_event(self, response) -> str:
         event_name = None
@@ -86,7 +98,7 @@ class TestHTTPTransportIntegration(unittest.TestCase):
                     results[parsed["id"]] = parsed
 
     def test_sse_endpoint_discovery_and_message_roundtrip(self):
-        sse_response = urllib.request.urlopen(f"http://127.0.0.1:{self.port}/sse", timeout=10)
+        sse_response = self._open_sse()
         try:
             endpoint_uri = self._read_endpoint_event(sse_response)
             self.assertTrue(endpoint_uri.startswith("/messages?session_id="))
@@ -153,6 +165,35 @@ class TestHTTPTransportIntegration(unittest.TestCase):
                 {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
             )
         self.assertEqual(ctx.exception.code, 400)
+
+    def test_sse_without_token_returns_401(self):
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self._open_sse(token=None)
+        self.assertEqual(ctx.exception.code, 401)
+        self.assertEqual(ctx.exception.headers.get("WWW-Authenticate"), "Bearer")
+
+    def test_sse_with_wrong_token_returns_401(self):
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self._open_sse(token="yanlis-token")
+        self.assertEqual(ctx.exception.code, 401)
+
+    def test_post_without_token_returns_401(self):
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self._post(
+                f"http://127.0.0.1:{self.port}/messages?session_id=her-neyse",
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+                token=None,
+            )
+        self.assertEqual(ctx.exception.code, 401)
+
+    def test_post_with_wrong_token_returns_401(self):
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self._post(
+                f"http://127.0.0.1:{self.port}/messages?session_id=her-neyse",
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+                token="yanlis-token",
+            )
+        self.assertEqual(ctx.exception.code, 401)
 
 
 if __name__ == "__main__":
