@@ -68,7 +68,7 @@ jobs:
             echo '[[customizations.user]]'
             echo 'name = "navtest"'
             echo 'groups = ["wheel"]'
-            echo "ssh_authorized_keys = [\"$(cat boot-test-key.pub)\"]"
+            echo "key = \"$(cat boot-test-key.pub)\""
           } > disk_config/boot-test.toml
 
       - name: ghcr.io'ya giriş yap
