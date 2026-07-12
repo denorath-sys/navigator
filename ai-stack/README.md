@@ -9,7 +9,7 @@ Beş bileşenden oluşur, her biri kendi README'sinde detaylandırılmıştır:
 |---|---|
 | [`hardware-probe/`](hardware-probe/README.md) | Donanımı tespit eder, model tier'ını belirler — **Faz 2: ilk implementasyon hazır** |
 | [`local-runtime/`](local-runtime/README.md) | Yerel model çalıştırma (Ollama) — **Faz 2: uçtan uca çalışıyor** (Ollama + `llama3.2:3b` kurulu) |
-| [`mcp-tools/`](mcp-tools/README.md) | MCP tabanlı sistem/araç erişimi — **Faz 2: sunucu + salt-okunur dosya sistemi araçları hazır** |
+| [`mcp-tools/`](mcp-tools/README.md) | MCP tabanlı sistem/araç erişimi — **Faz 2: sunucu (stdio + HTTP+SSE) + salt-okunur dosya sistemi araçları hazır** |
 | [`router/`](router/README.md) | Yerel↔bulut hibrit istek yönlendirme — **Faz 2: her iki yol da uçtan uca gerçek** |
 | [`cloud-bridge/`](cloud-bridge/README.md) | Bulut model sağlayıcılarına bağlantı (Anthropic Claude API) — **Faz 2: kimlik bilgisi/istemci katmanı hazır, router'a bağlı** |
 
@@ -45,11 +45,12 @@ istekler gerçekten yerel LLM'de üretiliyor.
 - `router/` — karar katmanı + **local-runtime ve cloud-bridge entegrasyonu**
   tam çalışıyor (`route` kararına göre ilgili modülü gerçekten çağırıyor ve
   gerçek sonuç alıyor, 26 test)
-- `mcp-tools/` — MCP sunucusu (resmi SDK kurmadan, stdlib-only JSON-RPC 2.0
-  stdio transport) VE salt-okunur, sandbox'lı dosya sistemi araçları
-  (`read_file`, `list_directory` — path traversal engellemesi test
-  edildi) hazır; 32 test, `route_request` artık gerçek yerel üretimi de
-  miras alıyor
+- `mcp-tools/` — MCP sunucusu (resmi SDK kurmadan, stdlib-only; **iki
+  transport**: stdio ve HTTP+SSE — ikisi de gerçek subprocess/TCP
+  soketleriyle test edildi) VE salt-okunur, sandbox'lı dosya sistemi
+  araçları (`read_file`, `list_directory` — path traversal engellemesi
+  test edildi) hazır; 41 test, `route_request` artık gerçek yerel üretimi
+  de miras alıyor
 - `cloud-bridge/` — kimlik bilgisi/istemci katmanı hazır (Anthropic Claude
   API, ham HTTP; 15 test) — **`router`'a bağlı**; gerçek bir API çağrısı
   henüz yapılmadı/test edilmedi (kimlik bilgisi yok, `router` karmaşık

@@ -9,9 +9,14 @@ arayüzle erişmesini sağlar — `router/` hangi modeli seçtiğinden bağıms�
 olarak araç çağrıları bu modül üzerinden yürütülür.
 
 **Mimari karar (Faz 2):** MCP protokolü, resmi `mcp` Python SDK'sı
-kurulmadan, stdlib-only newline-delimited JSON-RPC 2.0 stdio transport'u
-doğrudan implemente edilerek yazıldı — diğer ai-stack modülleriyle aynı
-"harici bağımlılık yok" ilkesi korundu.
+kurulmadan, stdlib-only implemente edilerek yazıldı — diğer ai-stack
+modülleriyle aynı "harici bağımlılık yok" ilkesi korundu. İki transport
+destekleniyor, ikisi de aynı `MCPServer.handle_message()` mantığını
+paylaşıyor:
+
+- **stdio** (varsayılan) — newline-delimited JSON-RPC 2.0
+- **HTTP+SSE** (`--http`) — klasik iki uç noktalı model (`GET /sse` +
+  `POST /messages`), `http.server` ile (bkz. "HTTP+SSE transport" aşağıda)
 
 ## Araçlar
 
@@ -47,11 +52,18 @@ riskli ilk adım olarak tasarlandı:
 Harici bağımlılık yok, sadece Python 3.11+ (stdlib). `hardware-probe` ve
 `router`'ın yanında (kardeş dizinler olarak) bulunması gerekiyor.
 
-Sunucuyu stdio üzerinden başlatmak:
+Sunucuyu stdio üzerinden başlatmak (varsayılan):
 
 ```sh
 cd ai-stack/mcp-tools
 python3 -m mcp_tools
+```
+
+HTTP+SSE üzerinden başlatmak:
+
+```sh
+cd ai-stack/mcp-tools
+python3 -m mcp_tools --http --port 8765   # --host ile adres de değiştirilebilir
 ```
 
 Dosya sistemi araçlarının kök dizinini değiştirmek için (varsayılan: ev
@@ -61,7 +73,7 @@ dizini):
 NAVIGATOR_MCP_FS_ROOT=/istediğin/kök python3 -m mcp_tools
 ```
 
-Sonra stdin'e newline-delimited JSON-RPC mesajları yazılır, yanıtlar
+stdio'da: stdin'e newline-delimited JSON-RPC mesajları yazılır, yanıtlar
 stdout'tan aynı şekilde okunur (bkz. `tests/test_integration.py`'daki
 örnek oturum: `initialize` → `notifications/initialized` → `tools/list` →
 `tools/call`).
@@ -86,22 +98,51 @@ tools/call(read_file, {"path": "../../../../etc/passwd"}) -> {"content": [{"type
 ```
 
 `mcp-tools → router → local-runtime → hardware-probe` zinciri de gerçek
-MCP protokolü üzerinden uçtan uca çalışıyor (bkz. `route_request` aracı).
+MCP protokolü üzerinden uçtan uca çalışıyor (bkz. `route_request` aracı) —
+hem stdio hem HTTP+SSE transport'unda aynı şekilde.
+
+## HTTP+SSE transport
+
+`http_transport.py`, MCP'nin 2024-11-05 spesifikasyonundaki klasik HTTP+SSE
+modelini implemente eder (daha yeni "Streamable HTTP" değil — `server.py`
+zaten `protocolVersion: "2024-11-05"` bildiriyor, tutarlı):
+
+1. İstemci `GET /sse`'ye bağlanır — sunucu bir `session_id` üretir, ilk
+   `endpoint` event'i ile istemcinin POST edeceği URI'yi
+   (`/messages?session_id=<id>`) bildirir, sonra bağlantıyı açık tutar.
+2. İstemci JSON-RPC isteklerini o URI'ye `POST` eder — sunucu isteği aynı
+   `MCPServer.handle_message()` ile işler, **yanıtı HTTP body'sinde
+   dönmez** (sadece `202 Accepted`), bunun yerine session'ın kuyruğuna
+   ekler.
+3. Kuyruğa eklenen yanıt, adım 1'de açılan SSE bağlantısı üzerinden
+   `message` event'i olarak asenkron akar.
+
+`ThreadingHTTPServer` kullanıldığından her bağlantı (uzun ömürlü SSE
+GET'i dahil) kendi thread'inde çalışır — POST istekleri SSE bağlantısını
+bloklamaz. Bilinmeyen/eksik `session_id` ile POST → `400`.
+
+Bu makinede gerçek bir HTTP+SSE oturumu (gerçek TCP soketleri, subprocess)
+uçtan uca çalıştırıldı: endpoint keşfi → `initialize`/`tools/list`/
+`tools/call` POST'ları → SSE üzerinden doğru `id` eşleşmesiyle yanıtlar.
 
 ## Kapsam dışı — henüz yapılmadı
 
 - Dosya **yazma**/silme/yeniden adlandırma yok — sadece okuma.
 - Uygulama kontrolü (Hyprland/Quickshell ile konuşan araçlar) yok — bu
   makinede Hyprland çalışmadığından zaten gerçek test edilemez.
-- HTTP/SSE transport yok, sadece stdio.
-- Kimlik doğrulama / yetkilendirme yok (Faz 1 sınırlamalarıyla aynı ilke:
+- Kimlik doğrulama / yetkilendirme yok — HTTP+SSE transport şu an
+  kimliksiz/şifresiz (`127.0.0.1` varsayılan; dışa açık kullanım için
+  güvenlik sertleştirmesi gerekir, bu Faz 1 sınırlamalarıyla aynı ilke:
   önce çalışan bir iskelet, güvenlik sertleştirmesi sonra).
+- MCP'nin daha yeni "Streamable HTTP" transport'u yok — sadece klasik
+  HTTP+SSE (2024-11-05).
 
 ## Durum
 
-Faz 2 — MCP sunucusu (`protocol.py`, `server.py`, `tools.py`) VE dosya
-sistemi araçları (`filesystem.py`) tamamlandı, `python3 -m mcp_tools` CLI.
-32 test geçiyor (protokol round-trip, server dispatch, gerçek modüllere
+Faz 2 — MCP sunucusu (`protocol.py`, `server.py`, `tools.py`), dosya
+sistemi araçları (`filesystem.py`) VE HTTP+SSE transport
+(`http_transport.py`) tamamlandı, `python3 -m mcp_tools [--http]` CLI.
+41 test geçiyor (protokol round-trip, server dispatch, gerçek modüllere
 karşı araç testleri, path traversal engellemesi dahil dosya sistemi
-testleri, ve gerçek stdio subprocess'iyle iki ayrı uçtan uca MCP protokol
-testi).
+testleri, session registry unit testleri, ve gerçek subprocess/TCP
+soketleriyle iki transport üzerinden uçtan uca MCP protokol testleri).
