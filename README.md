@@ -45,8 +45,13 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   "local"` artık bu makinede gerçekten uçtan uca çalışıyor, gerçek metin
   üretiyor. `ai-stack`'in beş modülünün tamamı en az bir implementasyon
   aşamasına ulaştı; yerel yol tamamen gerçek, bulut yolu (`cloud-bridge`)
-  Claude API kimlik bilgisi olmadığından hâlâ "unavailable". Sırada: gerçek
-  Hyprland oturumunda config testi; Claude API kimlik bilgisi (isteğe bağlı).
+  Claude API kimlik bilgisi olmadığından hâlâ "unavailable". `hyprland/
+  hyprland.conf` statik sözdizimi incelemesinden geçti (bu Debian
+  geliştirme ortamında Hyprland paketli olmadığından gerçek compositor
+  çalıştırılamadı — bkz. `hyprland/README.md`); sözdizimsel hata
+  bulunmadı, bir açık nokta (`e+1`/`e-1` mouse-scroll workspace geçişi)
+  not edildi. Gerçek runtime doğrulaması Faz 3'e kaldı. Sırada: Claude API
+  kimlik bilgisi (isteğe bağlı).
 - **Faz 3 — İmaj build & test:** GitHub Actions üzerinde ilk gerçek
   `bootc`/`rpm-ostree` imaj build'i; sanal makinede boot testi.
 - **Faz 4 — AI stack tamamlama:** `router`, `mcp-tools`, `cloud-bridge`
