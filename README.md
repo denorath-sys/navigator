@@ -43,8 +43,12 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   `POST /messages`, stdio'ya ek olarak) ve HTTP+SSE için zorunlu Bearer
   token kimlik doğrulaması (otomatik token üretimi, `hmac.compare_digest`
   ile zamanlama saldırısına dayanıklı karşılaştırma — kimliksiz çalışma
-  hiçbir zaman mümkün değil) — toplam 79 test, gerçek subprocess/TCP
-  soketleriyle uçtan uca doğrulandı. `ai-stack/cloud-bridge`
+  hiçbir zaman mümkün değil), ve salt-okunur Hyprland sorgu araçları
+  (`list_windows`/`list_workspaces`/`active_window`, `hyprctl -j` sarmalar
+  — bu Debian makinesinde gerçek bir compositor olmadığından mock'lanmış
+  + graceful-hata testleriyle doğrulandı, gerçek pencere verisi Faz 3'e
+  kaldı) — toplam 88 test, gerçek subprocess/TCP soketleriyle uçtan uca
+  doğrulandı. `ai-stack/cloud-bridge`
   kimlik bilgisi/istemci katmanını aldı (Anthropic Claude API, stdlib-only
   ham HTTP, 16 test) ve kullanıcı onayıyla **gerçek bir API key bağlandı**
   (`.env.local`'a yazıldı, `.gitignore` ile hariç tutulmuş — asla commit

@@ -151,6 +151,9 @@ class TestHTTPTransportIntegration(unittest.TestCase):
                     "write_file",
                     "delete_file",
                     "rename_file",
+                    "list_windows",
+                    "list_workspaces",
+                    "active_window",
                 },
             )
 

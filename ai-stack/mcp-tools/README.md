@@ -20,8 +20,9 @@ paylaşıyor:
 
 ## Araçlar
 
-Yedi araç kayıtlı — ikisi zaten çalışan diğer ai-stack modüllerini
-sarmalıyor, beşi gerçek, sandbox'lı dosya sistemi erişimi sağlıyor:
+On araç kayıtlı — ikisi zaten çalışan diğer ai-stack modüllerini
+sarmalıyor, beşi sandbox'lı dosya sistemi erişimi, üçü de Hyprland
+compositor durumunu salt-okunur sorguluyor:
 
 | Araç | Açıklama |
 |---|---|
@@ -32,6 +33,9 @@ sarmalıyor, beşi gerçek, sandbox'lı dosya sistemi erişimi sağlıyor:
 | `write_file` | Bir dosyaya metin içerik yazar — **sandbox'lı**, var olan dosyaya yazmak için `overwrite=true` şart |
 | `delete_file` | Bir dosyayı siler — **sandbox'lı**, geri alınamaz, `confirm=true` şart |
 | `rename_file` | Bir dosyayı yeniden adlandırır/taşır — **sandbox'lı** (hem kaynak hem hedef), hedef zaten varsa `overwrite=true` şart |
+| `list_windows` | Açık Hyprland pencerelerini listeler — **salt-okunur** (`hyprctl -j clients`) |
+| `list_workspaces` | Hyprland workspace'lerini listeler — **salt-okunur** (`hyprctl -j workspaces`) |
+| `active_window` | Odaklanmış pencerenin bilgisini döner — **salt-okunur** (`hyprctl -j activewindow`) |
 
 ### Dosya sistemi araçları — güvenlik modeli
 
@@ -65,6 +69,29 @@ yetki yüzeyiyle tasarlandı:
   `write_file` en fazla ~1 MB yazar (`MAX_WRITE_BYTES`), `list_directory`
   en fazla 500 girdi döner (`MAX_LIST_ENTRIES`) — büyük dosya/dizinlerin
   context'i boğmasını önlemek için.
+
+### Hyprland araçları — kapsam ve sınırlama
+
+`list_windows`, `list_workspaces` ve `active_window` (`hyprland.py`)
+bilinçli olarak **salt-okunur** — workspace değiştirme, pencere
+kapatma/taşıma gibi dispatch komutları YOK. `hyprctl -j <komut>`'u
+subprocess ile çağırıp JSON çıktısını döndürür.
+
+**Bilinen ve önemli sınırlama:** Geliştirme ortamı Debian/Pardus
+olduğundan (Hyprland bu dağıtımda paketli değil) bu üç araç GERÇEK bir
+Hyprland compositor'a karşı test edilemedi — sadece:
+
+1. Mock'lanmış `subprocess.run`/`shutil.which` ile unit test edildi
+   (`tests/test_hyprland.py`).
+2. Gerçek bir stdio MCP oturumunda, Hyprland çalışmıyorken araçların
+   çökmeden net bir hatayla (`isError: true`, `HyprlandError` mesajı)
+   graceful başarısız olduğu doğrulandı (`tests/
+   test_hyprland_integration.py`) — cloud-bridge'in kimlik bilgisiz
+   yolunun doğrulanmasıyla aynı desen.
+
+Gerçek pencere/workspace verisiyle uçtan uca doğrulama Faz 3'te
+Navigator imajı üzerinde yapılacak (bkz. `hyprland/README.md`'deki aynı
+sınırlama, `hyprland.conf`'un statik incelemesi için).
 
 ## Kullanım
 
@@ -113,7 +140,7 @@ Bu makinede gerçek bir stdio oturumu çalıştırıldı (izole bir sandbox
 dizinine karşı, `NAVIGATOR_MCP_FS_ROOT` ile):
 
 ```
-tools/list -> ["hardware_tier", "route_request", "read_file", "list_directory", "write_file", "delete_file", "rename_file"]
+tools/list -> ["hardware_tier", "route_request", "read_file", "list_directory", "write_file", "delete_file", "rename_file", "list_windows", "list_workspaces", "active_window"]
 tools/call(read_file, {"path": "hello.txt"}) -> {"content": [{"type": "text", "text": "merhaba navigator"}], "isError": false}
 tools/call(list_directory, {}) -> {"content": [{"type": "text", "text": "[{\"name\": \"hello.txt\", ...}, {\"name\": \"subdir\", ...}]"}], "isError": false}
 tools/call(read_file, {"path": "../../../../etc/passwd"}) -> {"content": [{"type": "text", "text": "Araç hatası: '...' izin verilen kök dizinin (...) dışına çıkıyor"}], "isError": true}
@@ -122,7 +149,12 @@ tools/call(write_file, {"path": "yeni.txt", "content": "tekrar"}) -> {"content":
 tools/call(rename_file, {"path": "yeni.txt", "new_path": "yeniden-adli.txt"}) -> {"content": [{"type": "text", "text": "Yeniden adlandırıldı: yeni.txt -> yeniden-adli.txt"}], "isError": false}
 tools/call(delete_file, {"path": "yeniden-adli.txt"}) -> {"content": [{"type": "text", "text": "Araç hatası: Silme geri alınamaz — onaylamak için confirm=true gerekir: yeniden-adli.txt"}], "isError": true}
 tools/call(delete_file, {"path": "yeniden-adli.txt", "confirm": true}) -> {"content": [{"type": "text", "text": "Silindi: yeniden-adli.txt"}], "isError": false}
+tools/call(list_windows, {}) -> {"content": [{"type": "text", "text": "Araç hatası: Hyprland çalışmıyor (HYPRLAND_INSTANCE_SIGNATURE ayarlı değil)"}], "isError": true}
 ```
+
+(`list_windows` bu makinede beklendiği gibi hata veriyor — Hyprland
+burada çalışmıyor. Gerçek bir compositor'da `isError: false` ve gerçek
+pencere listesi dönmesi beklenir, Faz 3'te doğrulanacak.)
 
 `mcp-tools → router → local-runtime → hardware-probe` zinciri de gerçek
 MCP protokolü üzerinden uçtan uca çalışıyor (bkz. `route_request` aracı) —
@@ -180,8 +212,15 @@ POST), token'sız/yanlış token ile her iki uç noktada da `401` (bkz.
 
 - Dizin silme/yeniden adlandırma/oluşturma yok — sadece dosyalar
   (`write_file` de yeni dizin oluşturmaz, üst dizin zaten var olmalı).
-- Uygulama kontrolü (Hyprland/Quickshell ile konuşan araçlar) yok — bu
-  makinede Hyprland çalışmadığından zaten gerçek test edilemez.
+- Hyprland **kontrol** komutları yok — sadece sorgu (`list_windows`,
+  `list_workspaces`, `active_window`). Workspace değiştirme, pencere
+  odaklama/kapatma/taşıma gibi dispatch komutları bilinçli olarak
+  eklenmedi (daha geniş bir yetki yüzeyi, gerçek Hyprland olmadan test
+  edilemeyen bir alan daha).
+- Quickshell ile konuşan araçlar yok.
+- Hyprland araçları gerçek bir compositor'a karşı hiç test edilmedi (bu
+  makinede Hyprland çalışmıyor) — sadece mock'lanmış + graceful-hata
+  testleri var, bkz. "Hyprland araçları — kapsam ve sınırlama".
 - TLS/HTTPS yok — Bearer token düz HTTP üzerinden taşınıyor; şu an sadece
   `127.0.0.1` varsayımıyla güvenli, dışa açık kullanım için TLS şart.
 - MCP'nin daha yeni "Streamable HTTP" transport'u yok — sadece klasik
@@ -191,12 +230,15 @@ POST), token'sız/yanlış token ile her iki uç noktada da `401` (bkz.
 
 Faz 2 — MCP sunucusu (`protocol.py`, `server.py`, `tools.py`), dosya
 sistemi araçları (`filesystem.py` — okuma, listeleme, kontrollü yazma,
-silme VE yeniden adlandırma), HTTP+SSE transport (`http_transport.py`)
-VE Bearer token kimlik doğrulaması (`auth.py`) tamamlandı, `python3 -m
-mcp_tools [--http] [--token T]` CLI.
-79 test geçiyor (protokol round-trip, server dispatch, gerçek modüllere
+silme VE yeniden adlandırma), HTTP+SSE transport (`http_transport.py`),
+Bearer token kimlik doğrulaması (`auth.py`) VE Hyprland sorgu araçları
+(`hyprland.py` — salt-okunur, mock'lanmış + graceful-hata testleriyle
+doğrulandı) tamamlandı, `python3 -m mcp_tools [--http] [--token T]`
+CLI.
+88 test geçiyor (protokol round-trip, server dispatch, gerçek modüllere
 karşı araç testleri, path traversal engellemesi, overwrite koruması ve
 confirm zorunluluğu dahil dosya sistemi testleri, session registry unit
-testleri, auth yardımcı fonksiyon testleri, ve gerçek subprocess/TCP
-soketleriyle iki transport üzerinden uçtan uca MCP protokol testleri —
-kimlik doğrulamalı ve doğrulamasız istekler dahil).
+testleri, auth yardımcı fonksiyon testleri, mock'lanmış Hyprland
+testleri, ve gerçek subprocess/TCP soketleriyle iki transport üzerinden
+uçtan uca MCP protokol testleri — kimlik doğrulamalı/doğrulamasız
+istekler ve Hyprland'ın graceful hata yolu dahil).

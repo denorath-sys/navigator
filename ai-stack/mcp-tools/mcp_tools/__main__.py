@@ -6,6 +6,7 @@ import sys
 
 from .filesystem import register_filesystem_tools
 from .http_transport import run_http_server
+from .hyprland import register_hyprland_tools
 from .protocol import read_message, write_message
 from .server import MCPServer
 from .tools import register_default_tools
@@ -17,6 +18,7 @@ def build_server() -> MCPServer:
     server = MCPServer()
     register_default_tools(server)
     register_filesystem_tools(server)
+    register_hyprland_tools(server)
     return server
 
 
