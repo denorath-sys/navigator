@@ -88,9 +88,16 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   `build-image.yml`'nin aksine her push'ta otomatik çalışmaz. Bu,
   `hyprland.conf`'un statik incelemesinin ve `mcp-tools`'un Hyprland sorgu
   araçlarının ilk kez gerçek bir Fedora Atomic ortamında (kısmen —
-  GUI/compositor değil, temel sistem boot'u) doğrulandığı adım.
+  GUI/compositor değil, temel sistem boot'u) doğrulandığı adım. **Gerçek
+  bir Hyprland compositor oturumunu bu VM'de çalıştırıp `mcp-tools`'un
+  Hyprland araçlarını gerçek pencere verisiyle test etmek** araştırıldı
+  (QEMU `virtio-gpu-pci` ile teknik olarak mümkün görünüyor, bkz.
+  `ai-stack/mcp-tools/README.md` "Hyprland araçları") ama zincir uzun ve
+  her CI denemesi ~20 dakika sürdüğünden kullanıcı kararıyla bilinçli
+  olarak Faz 4/5'e ertelendi.
 - **Faz 4 — AI stack tamamlama:** `router`, `mcp-tools`, `cloud-bridge`
-  implementasyonu; uçtan uca asistan paneli deneyimi.
+  implementasyonu; uçtan uca asistan paneli deneyimi; ertelenen gerçek
+  Hyprland compositor testi (bkz. Faz 3 notu).
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 

@@ -89,8 +89,21 @@ Hyprland compositor'a karşı test edilemedi — sadece:
    test_hyprland_integration.py`) — cloud-bridge'in kimlik bilgisiz
    yolunun doğrulanmasıyla aynı desen.
 
-Gerçek pencere/workspace verisiyle uçtan uca doğrulama Faz 3'te
-Navigator imajı üzerinde yapılacak (bkz. `hyprland/README.md`'deki aynı
+**Faz 3'te bilinçli olarak ertelendi:** Gerçek pencere/workspace
+verisiyle uçtan uca doğrulama için Navigator VM'inde gerçek bir
+Hyprland oturumu çalıştırmak araştırıldı. Teknik olarak mümkün
+görünüyor (QEMU `virtio-gpu-pci` sanal GPU'su Hyprland'a gerçek bir
+ekran çıkışı sağlar — Hyprland Wiki'nin "Virtual-GPU" sayfasına göre bu,
+render-only vGPU passthrough'undan farklı ve `AQ_NO_KMS_REQUIREMENT`
+gerektirmeden çalışabilir) ama zincir uzun: sanal GPU eklemek, Mesa/
+llvmpipe'nin imajda kurulu olduğunu doğrulamak, Hyprland'ı SSH
+oturumundan (seat/logind olmadan, muhtemelen root olarak) DRM izin
+sorunu yaşamadan başlatmak, VE `ai-stack/mcp-tools` kodunu (imajın
+kendisinde yok) SSH ile VM'e taşımak gerekiyor. Her CI denemesi ~20
+dakika sürdüğünden (bkz. kök `README.md` Faz 3 notları) ve ilk denemede
+çalışma olasılığı düşük olduğundan, bu iş bilinçli olarak Faz 4/5'e
+ertelendi — mevcut mock'lanmış + graceful-hata testleri (yukarıda)
+şimdilik yeterli kabul edildi (bkz. `hyprland/README.md`'deki aynı
 sınırlama, `hyprland.conf`'un statik incelemesi için).
 
 ## Kullanım
