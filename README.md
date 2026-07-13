@@ -68,17 +68,27 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   çalıştırılamadı — bkz. `hyprland/README.md`); sözdizimsel hata
   bulunmadı, bir açık nokta (`e+1`/`e-1` mouse-scroll workspace geçişi)
   not edildi. Gerçek runtime doğrulaması Faz 3'e kaldı.
-- **Faz 3 — İmaj build & test (başladı):** [`build-disk-and-boot-test.yml`](.github/workflows/build-disk-and-boot-test.yml)
+- **Faz 3 — İmaj build & test (ilk gerçek boot testi başarılı):**
+  [`build-disk-and-boot-test.yml`](.github/workflows/build-disk-and-boot-test.yml)
   eklendi — `ghcr.io`'ya push edilmiş Navigator imajını `bootc-image-builder`
   ile gerçek bir qcow2 disk imajına çevirir, sonra GitHub Actions
   runner'ının KVM'i (ücretsiz `ubuntu-24.04` runner'larda 2024'ten beri
   `/dev/kvm` var) ile bu disk imajını GERÇEKTEN boot edip SSH üzerinden
-  sistemin ayağa kalktığını doğrular (`systemctl is-system-running`).
-  Manuel tetiklemeyle (`workflow_dispatch`) çalışır — `build-image.yml`'nin
-  aksine her push'ta otomatik çalışmaz. Bu, `hyprland.conf`'un statik
-  incelemesinin ve `mcp-tools`'un Hyprland sorgu araçlarının ilk kez
-  gerçek bir Fedora Atomic ortamında (kısmen — GUI/compositor değil, temel
-  sistem boot'u) doğrulanacağı adım.
+  doğrular. Üç gerçek CI hatası bulunup düzeltildi (`customizations.user`
+  şemasında yanlış alan adı; ublue tabanlı imajların konteyner içinde
+  varsayılan kök dosya sistemini bildirmemesi, `--rootfs btrfs` ile
+  çözüldü; Ubuntu 24.04'ün `ovmf` paketinin dosya adlarını değiştirmesi).
+  Dördüncü çalıştırmada **gerçek bir VM gerçekten boot etti**: disk build
+  19 dakika sürdü, VM SSH üzerinden erişilebilir hale geldi, `/etc/os-release`
+  gerçek imajı doğruladı (`Fedora Linux 43.20260710.0`,
+  `OSTREE_VERSION='43.20260710.0'`), `systemctl is-system-running` →
+  `degraded` döndü (tek başarısız unit: sanal ortamda beklenen
+  `mcelog.service` — gerçek donanım MCE register'ları gerektirir, VM'de
+  yok, zararsız). Manuel tetiklemeyle (`workflow_dispatch`) çalışır —
+  `build-image.yml`'nin aksine her push'ta otomatik çalışmaz. Bu,
+  `hyprland.conf`'un statik incelemesinin ve `mcp-tools`'un Hyprland sorgu
+  araçlarının ilk kez gerçek bir Fedora Atomic ortamında (kısmen —
+  GUI/compositor değil, temel sistem boot'u) doğrulandığı adım.
 - **Faz 4 — AI stack tamamlama:** `router`, `mcp-tools`, `cloud-bridge`
   implementasyonu; uçtan uca asistan paneli deneyimi.
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
