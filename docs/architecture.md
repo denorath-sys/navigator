@@ -47,14 +47,71 @@ altın `#e8d9a8`, lacivert taban `#0b0f1a`. Bkz.
 
 ## Tasarım ilkeleri
 
-- **AI, eklenti değil çekirdek:** Asistan paneli, masaüstünün ayrılmaz bir
-  parçası olarak tasarlanır (üçüncü parti bir uygulama gibi değil).
-- **Donanıma duyarlı:** Sistem, kullanıcının donanımına göre otomatik olarak
-  uygun model tier'ını seçer; kullanıcıdan manuel yapılandırma beklenmez.
-- **Gizlilik/maliyet tercihine saygı:** Router, kullanıcının yerel/bulut
-  tercihini önceliklendirir; bulut her zaman varsayılan değildir.
-- **Immutable & geri alınabilir:** OSTree tabanlı imaj modeli sayesinde
-  sistem güncellemeleri atomik ve geri alınabilir.
+Navigator'daki her özellik, eklenmeden önce şu soruları geçmeli. Her ilkenin
+yanında, Faz 1-3'teki gerçek ilerlemeye göre güncel durumu belirtilmiştir.
+
+- **Bu özellik kullanıcının hayatını gerçekten kolaylaştırıyor mu?**
+  Cevap "hayır" ise, teknik olarak ne kadar etkileyici olursa olsun
+  Navigator'a ait değildir.
+  *Durum:* Henüz test edilemiyor — kullanıcıya görünen bir yüz (asistan
+  paneli) yok. Faz 4'te gerçek sınav başlayacak.
+
+- **Sıfır manuel yapılandırma.**
+  Kullanıcı Bluetooth kulaklık, ikinci monitör, dock, RGB, touchpad gibi
+  şeyleri elle ayarlamak zorunda kalmamalı — sistem donanımı tanıyıp kendi
+  hazırlamalı.
+  *Durum:* Gerçekleşti — `ai-stack/hardware-probe`, kullanıcıdan girdi
+  almadan donanım tier'ını kendi tespit ediyor.
+
+- **Çıkmaz sokak yok (No Dead Ends).**
+  Bir hata oluştuğunda ekranda çıplak bir hata kodu değil, "şu sorun
+  oluştu, şöyle çözebiliriz, birlikte yapalım mı?" akışı olmalı.
+  *Durum:* Henüz test edilmedi (UI'a bağlı). Faz 4'te asistan paneli
+  tasarlanırken sona eklenecek bir özellik değil, en baştan mimariye
+  girmesi gereken bir gereksinim olarak ele alınmalı.
+
+- **Her şey keşfedilebilir olmalı.**
+  Kullanıcı "linux'ta çift monitör nasıl kurulur" diye web'de aramak
+  yerine, doğrudan Navigator Asistan'a sorabilmeli ve orada çözüm
+  bulmalı.
+  *Durum:* Temeli atıldı — `list_windows`, `active_window`,
+  `list_workspaces` gibi Hyprland sorgu araçları hazır. Gerçek kanıt,
+  asistan panelinde bir soru sorulup doğru cevap alındığında oluşacak.
+
+- **AI, gerekmediği yerde kullanılmaz.**
+  Bir özellik AI olmadan da aynı kalitede çözülebiliyorsa, AI kullanılmaz.
+  *Durum:* Kısmen gerçekleşti — dosya sistemi araçları (`read_file`,
+  `write_file` vb.) doğrudan araç çağrıları, AI karar vermiyor;
+  `router`'ın yerel/bulut seçimi de gereksiz yere pahalı model kullanmama
+  mantığıyla örtüşüyor.
+
+- **Linux altyapıdır, Navigator deneyimdir.**
+  Fedora Atomic taban, teknik bir seçim olarak kalır; kullanıcının
+  gördüğü ve hissettiği şey Navigator'ın kendi kimliğidir.
+  *Durum:* Net şekilde gerçekleşti — taban Fedora Atomic, kullanıcı yüzü
+  Hyprland + Quickshell + AI stack olarak ayrışmış durumda.
+
+- **Gerçek olmayan hiçbir şey "başarılı" gösterilmez.**
+  Sistem, yapamadığı bir şeyi yapabiliyormuş gibi göstermez — "bunu
+  deneyemedim çünkü X" der. Bu, "çıkmaz sokak yok" ilkesinin dürüstlük
+  boyutudur.
+  *Durum:* Gerçekleşti — Faz 1-3 boyunca mock yerine gerçek test tercih
+  edildi (gerçek Ollama, gerçek Claude API, gerçek KVM boot), ertelenen
+  Hyprland/Quickshell compositor testi açıkça "bilinen sınırlama" olarak
+  belgelendi, başarılı gibi gösterilmedi.
+
+- **Sistemi değiştiren her eylem, açık onay ister.**
+  Yapılandırma otomatik olur (bkz. ilke 2), ama tahribat riski olan
+  eylemler otomatik olmaz — AI, kullanıcının rızası varsayılmadan
+  sistemi değiştirmez.
+  *Durum:* Gerçekleşti — MCP dosya araçlarında path traversal koruması
+  ve overwrite/confirm mekanizması, 200MB+ indirmelerde proje sahibi
+  onayı, riskli CI tetiklemelerinin varsayılmaması.
+
+Bu ilkeler, Faz 1-5 boyunca her teknik/tasarım kararında referans noktası
+olarak kullanılır. Yeni bir özellik önerisi bu listeyle çelişiyorsa, önce
+burada tartışılmalı. Durum notları her faz sonunda gözden geçirilip
+güncellenmelidir.
 
 ## Faz durumu
 
