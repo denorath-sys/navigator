@@ -107,8 +107,13 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   RAM, ayrık GPU yok) doğru cevap verdi. **Dürüstçe belgelenen gerçek bir
   sınırlama:** yerel yolda (Ollama) henüz araç kullanımı yok — kısa/basit
   istekler yerele düşüp gerçek veri yerine genel/hatalı cevap üretebiliyor,
-  bu gizlenmedi (bkz. `ai-stack/assistant/README.md`). Kalan: gerçek
-  Hyprland/Quickshell compositor testi (Faz 3'ten ertelendi), UI entegrasyonu.
+  bu gizlenmedi (bkz. `ai-stack/assistant/README.md`). **Konuşma
+  geçmişi/hafıza eklendi**: REPL'de bellekte (`/reset` ile temizlenir),
+  `--history-file` ile ayrı süreçler arasında bile kalıcı — gerçek testte
+  doğrulandı (iki bağımsız `python3 -m assistant` çalıştırması arasında
+  "en sevdiğim renk mor" hatırlandı, yerel model bile tool-use olmadan).
+  Kalan: gerçek Hyprland/Quickshell compositor testi (Faz 3'ten
+  ertelendi), UI entegrasyonu.
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 

@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import tempfile
 import unittest
 
 from assistant.mcp_client import MCPClient
@@ -38,6 +39,33 @@ class TestAssistantIntegration(unittest.TestCase):
         self.assertEqual(report["tool_calls"], [])
         self.assertIsInstance(report["content"], str)
         self.assertGreater(len(report["content"]), 0)
+
+    def test_history_persists_across_separate_processes_via_history_file(self):
+        """--history-file ile konuşma geçmişi AYRI süreçler arasında
+        kalıcı — REPL veya --prompt bağımsız her çalıştırma önceki
+        turları hatırlar. Yerel yol (kimlik bilgisi gerekmez) ile gerçek
+        Ollama üretimiyle doğrulanır."""
+        fd, history_path = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        os.remove(history_path)  # assistant kendisi oluştursun
+        try:
+            first = self._run_cli(
+                "Benim adım Ahmet, bunu unutma.", ["--history-file", history_path]
+            )
+            self.assertEqual(first["route"], "local")
+            self.assertTrue(os.path.exists(history_path))
+            with open(history_path, encoding="utf-8") as f:
+                saved_history = json.load(f)
+            self.assertEqual(saved_history[0], {"role": "user", "content": "Benim adım Ahmet, bunu unutma."})
+
+            second = self._run_cli(
+                "Benim adım neydi? Sadece ismi söyle.", ["--history-file", history_path]
+            )
+            self.assertIn("Ahmet", second["content"])
+            self.assertEqual(len(second["history"]), 4)
+        finally:
+            if os.path.exists(history_path):
+                os.remove(history_path)
 
     @unittest.skipUnless(
         HAS_CLOUD_CREDENTIALS, "ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN ayarlı değil"

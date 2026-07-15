@@ -57,7 +57,13 @@ class TestRunLocalTurn(unittest.TestCase):
     def test_returns_content_on_ok_status(self, mock_run):
         mock_run.return_value = _fake_run(json.dumps({"status": "ok", "content": "merhaba!"}))
         result = run_local_turn("selam")
-        self.assertEqual(result, {"content": "merhaba!", "tool_calls": [], "route": "local"})
+        self.assertEqual(result["content"], "merhaba!")
+        self.assertEqual(result["tool_calls"], [])
+        self.assertEqual(result["route"], "local")
+        self.assertEqual(
+            result["history"],
+            [{"role": "user", "content": "selam"}, {"role": "assistant", "content": "merhaba!"}],
+        )
 
     @patch("assistant.conversation.subprocess.run")
     def test_raises_when_not_ok(self, mock_run):
@@ -66,6 +72,41 @@ class TestRunLocalTurn(unittest.TestCase):
         )
         with self.assertRaises(AssistantError):
             run_local_turn("selam")
+
+    @patch("assistant.conversation.subprocess.run")
+    def test_prefixes_prompt_with_history_as_plain_text(self, mock_run):
+        mock_run.return_value = _fake_run(json.dumps({"status": "ok", "content": "Ahmet"}))
+        history = [
+            {"role": "user", "content": "Benim adım Ahmet."},
+            {"role": "assistant", "content": "Merhaba Ahmet!"},
+        ]
+        run_local_turn("Benim adım neydi?", history=history)
+        sent_prompt = mock_run.call_args[0][0][-1]
+        self.assertIn("Benim adım Ahmet.", sent_prompt)
+        self.assertIn("Merhaba Ahmet!", sent_prompt)
+        self.assertIn("Benim adım neydi?", sent_prompt)
+
+    @patch("assistant.conversation.subprocess.run")
+    def test_returned_history_appends_to_given_history(self, mock_run):
+        mock_run.return_value = _fake_run(json.dumps({"status": "ok", "content": "cevap2"}))
+        history = [{"role": "user", "content": "soru1"}, {"role": "assistant", "content": "cevap1"}]
+        result = run_local_turn("soru2", history=history)
+        self.assertEqual(
+            result["history"],
+            [
+                {"role": "user", "content": "soru1"},
+                {"role": "assistant", "content": "cevap1"},
+                {"role": "user", "content": "soru2"},
+                {"role": "assistant", "content": "cevap2"},
+            ],
+        )
+
+    @patch("assistant.conversation.subprocess.run")
+    def test_no_history_prefix_when_history_is_empty(self, mock_run):
+        mock_run.return_value = _fake_run(json.dumps({"status": "ok", "content": "x"}))
+        run_local_turn("selam")
+        sent_prompt = mock_run.call_args[0][0][-1]
+        self.assertEqual(sent_prompt, "selam")
 
 
 class TestRunCloudTurn(unittest.TestCase):
@@ -91,7 +132,58 @@ class TestRunCloudTurn(unittest.TestCase):
         self.assertEqual(result["content"], "merhaba")
         self.assertEqual(result["tool_calls"], [])
         self.assertEqual(result["route"], "cloud")
+        self.assertEqual(
+            result["history"],
+            [{"role": "user", "content": "selam"}, {"role": "assistant", "content": "merhaba"}],
+        )
         client.call_tool.assert_not_called()
+
+    @patch("assistant.conversation._call_cloud_bridge_converse")
+    def test_history_is_prepended_to_claude_messages(self, mock_converse):
+        captured_payloads = []
+
+        def fake_converse(payload, cwd="../cloud-bridge"):
+            captured_payloads.append(json.loads(json.dumps(payload)))
+            return {"content": [{"type": "text", "text": "Ahmet"}], "stop_reason": "end_turn"}
+
+        mock_converse.side_effect = fake_converse
+        history = [
+            {"role": "user", "content": "Benim adım Ahmet."},
+            {"role": "assistant", "content": "Merhaba Ahmet!"},
+        ]
+        run_cloud_turn("Benim adım neydi?", self._fake_mcp_client(), history=history)
+        sent_payload = captured_payloads[0]
+        self.assertEqual(
+            sent_payload["messages"],
+            [
+                {"role": "user", "content": "Benim adım Ahmet."},
+                {"role": "assistant", "content": "Merhaba Ahmet!"},
+                {"role": "user", "content": "Benim adım neydi?"},
+            ],
+        )
+
+    @patch("assistant.conversation._call_cloud_bridge_converse")
+    def test_returned_history_excludes_tool_blocks(self, mock_converse):
+        """Döndürülen history düz metin olmalı — Claude'un tool_use/
+        tool_result blokları sonraki turlara sızmamalı (route değişse
+        bile taşınabilir kalması için, bkz. modül docstring'i)."""
+        mock_converse.side_effect = [
+            {
+                "content": [
+                    {"type": "tool_use", "id": "toolu_1", "name": "hardware_tier", "input": {}}
+                ],
+                "stop_reason": "tool_use",
+            },
+            {"content": [{"type": "text", "text": "tier düşük"}], "stop_reason": "end_turn"},
+        ]
+        result = run_cloud_turn("donanımım nedir?", self._fake_mcp_client())
+        self.assertEqual(
+            result["history"],
+            [
+                {"role": "user", "content": "donanımım nedir?"},
+                {"role": "assistant", "content": "tier düşük"},
+            ],
+        )
 
     @patch("assistant.conversation._call_cloud_bridge_converse")
     def test_executes_tool_call_and_feeds_result_back(self, mock_converse):
@@ -220,6 +312,32 @@ class TestRunTurn(unittest.TestCase):
         mock_cloud.assert_called_once()
         mock_local.assert_not_called()
         self.assertEqual(result["route"], "cloud")
+
+    @patch("assistant.conversation.run_local_turn")
+    @patch("assistant.conversation.decide_route")
+    def test_passes_history_through_to_route_handler(self, mock_decide, mock_local):
+        mock_decide.return_value = {"route": "local", "hardware_tier": "low", "reasoning": "x"}
+        mock_local.return_value = {"content": "ok", "tool_calls": [], "route": "local"}
+        history = [{"role": "user", "content": "önceki soru"}]
+
+        run_turn("yeni soru", MagicMock(), history=history)
+
+        self.assertEqual(mock_local.call_args.kwargs["history"], history)
+
+    @patch("assistant.conversation.run_local_turn")
+    @patch("assistant.conversation.decide_route")
+    def test_trims_history_to_max_messages(self, mock_decide, mock_local):
+        from assistant.conversation import MAX_HISTORY_MESSAGES
+
+        mock_decide.return_value = {"route": "local", "hardware_tier": "low", "reasoning": "x"}
+        mock_local.return_value = {"content": "ok", "tool_calls": [], "route": "local"}
+        long_history = [{"role": "user", "content": str(i)} for i in range(MAX_HISTORY_MESSAGES + 10)]
+
+        run_turn("yeni soru", MagicMock(), history=long_history)
+
+        passed_history = mock_local.call_args.kwargs["history"]
+        self.assertEqual(len(passed_history), MAX_HISTORY_MESSAGES)
+        self.assertEqual(passed_history, long_history[-MAX_HISTORY_MESSAGES:])
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ Altı bileşenden oluşur, her biri kendi README'sinde detaylandırılmıştır:
 | [`mcp-tools/`](mcp-tools/README.md) | MCP tabanlı sistem/araç erişimi — **10 araç, iki transport (stdio + HTTP+SSE), gerçek test edildi** |
 | [`router/`](router/README.md) | Yerel↔bulut hibrit istek yönlendirme — **her iki yol da uçtan uca gerçek** |
 | [`cloud-bridge/`](cloud-bridge/README.md) | Bulut model sağlayıcısı (Anthropic Claude API) — **gerçek kimlik bilgisi bağlı, tool-use destekli** |
-| [`assistant/`](assistant/README.md) | Faz 4: yukarıdaki beşini tek bir gerçek konuşma döngüsünde birleştiren CLI/REPL — **gerçek tool-use döngüsüyle çalışıyor** |
+| [`assistant/`](assistant/README.md) | Faz 4: yukarıdaki beşini tek bir gerçek konuşma döngüsünde birleştiren CLI/REPL — **gerçek tool-use döngüsü + kalıcı konuşma geçmişi** |
 
 ## Veri akışı (gerçek kod — sadece niyet değil)
 
@@ -58,9 +58,12 @@ Altı modülün tamamı gerçek ve bu makinede gerçek verilerle test edildi
   araçlarını çağırıyor (örn. "bu makinede kaç çekirdek var?" sorusuna
   `hardware_tier` aracını gerçekten çalıştırıp doğru cevabı veriyor).
   Yerel yolda araç kullanımı YOK — bu açıkça belgelendi, gizlenmedi
-  (bkz. `assistant/README.md` "Bilinen ve önemli sınırlama"). 23 test.
+  (bkz. `assistant/README.md` "Bilinen ve önemli sınırlama"). Konuşma
+  geçmişi/hafıza eklendi — REPL'de bellekte, `--history-file` ile ayrı
+  süreçler arasında bile kalıcı (gerçek testte doğrulandı: iki bağımsız
+  süreç arasında "en sevdiğim renk mor" hatırlandı). 31 test.
 
-Toplam ~197 test, ai-stack genelinde. Gerçek entegrasyon testlerinin
+Toplam ~205 test, ai-stack genelinde. Gerçek entegrasyon testlerinin
 büyük kısmı gerçek subprocess/TCP/dosya sistemi/Ollama/Claude API
 üzerinden çalışıyor; kimlik bilgisi gerektirenler `.env.local` yoksa
 (CI dahil) otomatik `skip` olacak şekilde tasarlandı.

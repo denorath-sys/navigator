@@ -52,6 +52,41 @@ router --decide-only  ──►  hardware-probe (tier kararı)
 - **`conversation.py`**: `run_turn()` — router kararına göre `run_cloud_turn()`
   (Claude tool-use döngüsü) veya `run_local_turn()`'e (düz üretim) dağıtır.
 
+## Konuşma geçmişi / hafıza
+
+Her iki yol da aynı düz `history: [{"role", "content"}, ...]` biçimini
+kullanır — sadece kullanıcı/asistan METİN turları (cloud tarafının
+tool_use/tool_result blokları geçmişe dahil edilmez, sadece o turun
+içinde kalır). Bu, bir konuşma içinde route değişse bile (önce local,
+sonra cloud) geçmişin taşınabilir kalmasını sağlar:
+
+- **cloud**: `history`, Claude'un mesaj listesinin başına eklenir —
+  Claude önceki turları native olarak görür.
+- **local**: `history` düz metin olarak promptun önüne eklenir
+  ("Önceki konuşma: ... Şimdiki soru: ..."). Ollama'nın `/api/generate`'i
+  tek promptluk olduğundan gerçek bir chat API'si DEĞİL — bilinçli bir
+  basitleştirme, ama gerçek testte çalıştığı doğrulandı.
+- Geçmiş `MAX_HISTORY_MESSAGES` (20 mesaj, ~10 tur) ile kırpılır —
+  sınırsız büyümeyi ve gereksiz yere büyüyen prompt/API maliyetini önler.
+
+**Nerede tutulur:**
+- REPL'de otomatik olarak bellekte (oturum boyunca), `/reset` ile temizlenir.
+- `--history-file <yol>` verilirse bir JSON dosyasında KALICI tutulur —
+  hem `--prompt` hem REPL modunda, her turdan sonra dosyaya yazılır (bir
+  çökme geçmişi kaybetmesin diye) — **ayrı süreçler arasında bile hafıza**.
+
+Gerçek bir örnek (bu makinede, iki AYRI `python3 -m assistant` çalıştırması,
+aralarında hiçbir ortak süreç yok — sadece `--history-file`):
+
+```
+$ python3 -m assistant --prompt "Benim en sevdiğim renk mordur, bunu unutma." --history-file /tmp/h.json
+$ python3 -m assistant --prompt "En sevdiğim renk neydi? Sadece rengi söyle." --history-file /tmp/h.json
+{"content": "Mor", "route": "local", ...}
+```
+
+İkinci, tamamen bağımsız süreç doğru cevabı verdi — yerel model bile
+(3B, tool-use'suz) basit metin-önek yaklaşımıyla gerçek hafıza gösterdi.
+
 ## `run_cloud_turn()` — gerçek tool-use döngüsü
 
 1. `mcp_client.list_tools()` ile mcp-tools'un 10 aracının şeması alınır,
@@ -116,14 +151,21 @@ cd ai-stack/assistant
 python3 -m assistant --prompt "..." [--prefer balanced|privacy|cost|speed] [--pretty]
 ```
 
-İnteraktif REPL (varsayılan, insan diliyle çıktı):
+İnteraktif REPL (varsayılan, insan diliyle çıktı, geçmiş otomatik bellekte):
 
 ```sh
 cd ai-stack/assistant
 python3 -m assistant
 > Bu makinede kaç çekirdek var?
 ...
+> /reset   # konuşma geçmişini sıfırlar
 > çıkış
+```
+
+Kalıcı geçmiş (ayrı çalıştırmalar/süreçler arasında da hatırlar):
+
+```sh
+python3 -m assistant --prompt "..." --history-file ~/.navigator-assistant-history.json
 ```
 
 Bulut yolu ve tool-use için gerçek bir Claude API key gerekir — bkz.
@@ -139,8 +181,8 @@ python3 -m unittest discover -v -s tests
 ## Kapsam dışı — henüz yapılmadı
 
 - Yerel yolda tool-use yok (yukarıya bkz.).
-- Konuşma geçmişi/hafızası yok — her `run_turn()` çağrısı bağımsız, çok
-  turlu bir kullanıcı konuşması (önceki turları hatırlama) henüz yok.
+- Yerel yolda hafıza gerçek bir chat API'si değil, metin-önek
+  basitleştirmesi (yukarıya bkz. "Konuşma geçmişi / hafıza").
 - Gerçek bir Quickshell/Hyprland UI'a bağlı değil — bu, ertelenen gerçek
   compositor testine bağlı (bkz. `ai-stack/mcp-tools/README.md`).
 - Router'ın karmaşıklık sezgisi "araç gerekebilir mi" sinyalini
@@ -151,10 +193,14 @@ python3 -m unittest discover -v -s tests
 
 Faz 4'ün ilk adımı — `router` (`--decide-only`), `cloud-bridge`
 (`--converse`, `send_messages()`) ve yeni `assistant` modülü
-(`mcp_client.py`, `conversation.py`, CLI/REPL) tamamlandı. Gerçek uçtan
-uca doğrulandı: gerçek Claude API + gerçek mcp-tools + gerçek Ollama ile,
-hem tool-use'lu bulut yolu hem araçsız yerel yolu (ikisi de gerçek, ikisi
-de dürüstçe belgelendi). 23 test geçiyor (13 mock'lanmış conversation
-testi, 7 mock'lanmış MCP istemci testi, 3 gerçek entegrasyon testi —
-biri her zaman çalışır [yerel], ikisi kimlik bilgisi varsa gerçek Claude
-API'ye karşı çalışır, yoksa otomatik `skip`).
+(`mcp_client.py`, `conversation.py`, CLI/REPL) tamamlandı. Konuşma
+geçmişi/hafıza eklendi — REPL'de bellekte, `--history-file` ile ayrı
+süreçler arasında bile kalıcı, `MAX_HISTORY_MESSAGES` ile kırpmalı.
+Gerçek uçtan uca doğrulandı: gerçek Claude API + gerçek mcp-tools +
+gerçek Ollama ile, hem tool-use'lu bulut yolu hem araçsız yerel yolu
+(ikisi de gerçek, ikisi de dürüstçe belgelendi), hem de gerçek çok turlu
+hafıza (iki ayrı süreç arasında "en sevdiğim renk mor" hatırlandı).
+31 test geçiyor (20 mock'lanmış conversation testi, 7 mock'lanmış MCP
+istemci testi, 4 gerçek entegrasyon testi — ikisi her zaman çalışır
+[yerel + hafıza], ikisi kimlik bilgisi varsa gerçek Claude API'ye karşı
+çalışır, yoksa otomatik `skip`).

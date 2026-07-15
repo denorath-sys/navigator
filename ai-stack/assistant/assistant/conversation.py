@@ -11,6 +11,15 @@ BOŞ YERE çalıştırmadan — bkz. router/status.py "decide_only"), sonra:
 - **local** rotası: düz üretim, ARAÇ KULLANIMI YOK. Ollama'nın
   function-calling desteği bu istemcide implemente edilmedi — bu bilinçli
   bir sınırlama (bkz. README "Kapsam dışı"), gerçekmiş gibi gösterilmiyor.
+
+**Konuşma geçmişi:** İkisi de aynı düz `history: [{"role", "content"}, ...]`
+biçimini kullanır (sadece kullanıcı/asistan METİN turları — cloud tarafının
+tool_use/tool_result blokları geçmişe DAHİL EDİLMEZ, sadece o turun içinde
+kalır). Bu, route bir konuşma içinde değişse bile (örn. önce local, sonra
+cloud) geçmişin taşınabilir kalmasını sağlar. cloud tarafında bu, Claude'un
+mesaj formatına doğrudan uyar; local tarafında düz metin olarak promptun
+önüne eklenir (Ollama `/api/generate` tek promptluk olduğundan gerçek bir
+chat API'si değil — bilinçli bir basitleştirme, bkz. `run_local_turn`).
 """
 import json
 import subprocess
@@ -27,6 +36,7 @@ SYSTEM_PROMPT = (
     "verilerle cevapla — asla tahmin etme veya uydurma. Türkçe cevap ver."
 )
 MAX_TOOL_ITERATIONS = 8
+MAX_HISTORY_MESSAGES = 20  # ~10 kullanıcı/asistan turu — sınırsız büyümeyi engeller
 
 
 class AssistantError(Exception):
@@ -72,15 +82,20 @@ def _call_cloud_bridge_converse(payload: dict, cwd: str = "../cloud-bridge") -> 
 def run_cloud_turn(
     prompt: str,
     mcp_client: MCPClient,
+    history: list[dict] | None = None,
     cloud_bridge_cwd: str = "../cloud-bridge",
     max_tokens: int = 1024,
     max_iterations: int = MAX_TOOL_ITERATIONS,
 ) -> dict:
     """Claude ile gerçek bir tool-use döngüsü çalıştırır. Dönen sözlük:
-    `{"content": str, "tool_calls": [{"name", "input"}, ...], "route": "cloud"}`.
+    `{"content": str, "tool_calls": [...], "route": "cloud", "history": [...]}`.
+
+    `history` (varsa) Claude'un mesaj listesinin başına eklenir — Claude
+    önceki turları görür. Döndürülen `history`, bu turun düz metin
+    özetini (tool_use/tool_result OLMADAN) önceki geçmişe ekler.
     """
     tools = _mcp_tools_to_claude_tools(mcp_client.list_tools())
-    messages: list[dict] = [{"role": "user", "content": prompt}]
+    messages: list[dict] = list(history or []) + [{"role": "user", "content": prompt}]
     tool_calls: list[dict] = []
 
     for _ in range(max_iterations):
@@ -102,10 +117,16 @@ def run_cloud_turn(
         messages.append({"role": "assistant", "content": response["content"]})
 
         if response.get("stop_reason") != "tool_use":
+            final_text = _extract_text(response["content"])
             return {
-                "content": _extract_text(response["content"]),
+                "content": final_text,
                 "tool_calls": tool_calls,
                 "route": "cloud",
+                "history": (history or [])
+                + [
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": final_text},
+                ],
             }
 
         tool_results = []
@@ -136,11 +157,28 @@ def run_cloud_turn(
     )
 
 
-def run_local_turn(prompt: str, local_runtime_cwd: str = "../local-runtime") -> dict:
+def _format_prompt_with_history(prompt: str, history: list[dict] | None) -> str:
+    if not history:
+        return prompt
+    lines = ["Önceki konuşma:"]
+    for turn in history:
+        speaker = "Kullanıcı" if turn["role"] == "user" else "Asistan"
+        lines.append(f"{speaker}: {turn['content']}")
+    lines.append("")
+    lines.append(f"Şimdiki soru: {prompt}")
+    return "\n".join(lines)
+
+
+def run_local_turn(
+    prompt: str, history: list[dict] | None = None, local_runtime_cwd: str = "../local-runtime"
+) -> dict:
     """Yerel model ile düz üretim. ARAÇ KULLANIMI YOK — bilinçli bir
-    sınırlama, bkz. modül docstring'i."""
+    sınırlama, bkz. modül docstring'i. `history` varsa düz metin olarak
+    promptun önüne eklenir (Ollama'nın gerçek bir chat API'si burada
+    kullanılmıyor — bkz. modül docstring'i)."""
+    full_prompt = _format_prompt_with_history(prompt, history)
     result = subprocess.run(
-        LOCAL_RUNTIME_CMD + ["--prompt", prompt],
+        LOCAL_RUNTIME_CMD + ["--prompt", full_prompt],
         cwd=local_runtime_cwd,
         capture_output=True,
         text=True,
@@ -149,12 +187,22 @@ def run_local_turn(prompt: str, local_runtime_cwd: str = "../local-runtime") -> 
     report = json.loads(result.stdout)
     if report.get("status") != "ok":
         raise AssistantError(f"local-runtime kullanılamıyor: {report}")
-    return {"content": report["content"], "tool_calls": [], "route": "local"}
+    return {
+        "content": report["content"],
+        "tool_calls": [],
+        "route": "local",
+        "history": (history or [])
+        + [
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": report["content"]},
+        ],
+    }
 
 
 def run_turn(
     prompt: str,
     mcp_client: MCPClient,
+    history: list[dict] | None = None,
     preference: str = "balanced",
     router_cwd: str = "../router",
     local_runtime_cwd: str = "../local-runtime",
@@ -162,15 +210,23 @@ def run_turn(
     max_tokens: int = 1024,
 ) -> dict:
     """Tek bir kullanıcı isteğini uçtan uca işler: router kararı ->
-    (cloud ise tool-use döngüsü, local ise düz üretim)."""
+    (cloud ise tool-use döngüsü, local ise düz üretim). `history` verilirse
+    (ve `MAX_HISTORY_MESSAGES`'a kırpılırsa) her iki yolda da bağlam olarak
+    kullanılır; dönen sözlükteki `history` bir sonraki `run_turn()`
+    çağrısına aynen geçirilebilir."""
     decision = decide_route(prompt, preference=preference, router_cwd=router_cwd)
+    trimmed_history = (history or [])[-MAX_HISTORY_MESSAGES:]
 
     if decision["route"] == "cloud":
         result = run_cloud_turn(
-            prompt, mcp_client, cloud_bridge_cwd=cloud_bridge_cwd, max_tokens=max_tokens
+            prompt,
+            mcp_client,
+            history=trimmed_history,
+            cloud_bridge_cwd=cloud_bridge_cwd,
+            max_tokens=max_tokens,
         )
     else:
-        result = run_local_turn(prompt, local_runtime_cwd=local_runtime_cwd)
+        result = run_local_turn(prompt, history=trimmed_history, local_runtime_cwd=local_runtime_cwd)
 
     result["hardware_tier"] = decision["hardware_tier"]
     result["reasoning"] = decision["reasoning"]
