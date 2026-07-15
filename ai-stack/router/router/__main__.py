@@ -15,6 +15,15 @@ def main() -> int:
     parser.add_argument("--prefer", choices=PREFERENCES, default="balanced")
     parser.add_argument("--pretty", action="store_true", help="JSON çıktısını girintili yazdır")
     parser.add_argument(
+        "--decide-only",
+        action="store_true",
+        help=(
+            "Sadece route kararını (complexity/hardware_tier/model_ready/route/"
+            "reasoning) döner, local-runtime veya cloud-bridge'i ÇALIŞTIRMAZ "
+            "(örn. ai-stack/assistant kendi üretim akışını kuracaksa)"
+        ),
+    )
+    parser.add_argument(
         "--local-runtime-path",
         default="../local-runtime",
         help="ai-stack/local-runtime dizininin yolu (varsayılan: ../local-runtime)",
@@ -32,6 +41,7 @@ def main() -> int:
             preference=args.prefer,
             local_runtime_cwd=args.local_runtime_path,
             cloud_bridge_cwd=args.cloud_bridge_path,
+            decide_only=args.decide_only,
         )
     except Exception as e:
         print(json.dumps({"error": str(e)}, ensure_ascii=False), file=sys.stderr)

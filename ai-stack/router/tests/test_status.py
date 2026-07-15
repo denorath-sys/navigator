@@ -103,6 +103,36 @@ class TestRouteRequest(unittest.TestCase):
         self.assertNotIn("local_runtime", report)
         self.assertEqual(local_called, [])
 
+    def test_decide_only_returns_report_without_calling_either_caller(self):
+        status = {"hardware_tier": "high", "model_ready": True}
+        local_called = []
+        cloud_called = []
+        report = route_request(
+            "selam navigator",
+            status=status,
+            decide_only=True,
+            local_runtime_caller=lambda prompt, cwd=None: local_called.append(prompt),
+            cloud_bridge_caller=lambda prompt, cwd=None: cloud_called.append(prompt),
+        )
+        self.assertEqual(report["route"], "local")
+        self.assertNotIn("local_runtime", report)
+        self.assertNotIn("cloud_bridge", report)
+        self.assertEqual(local_called, [])
+        self.assertEqual(cloud_called, [])
+
+    def test_decide_only_with_cloud_route_still_skips_execution(self):
+        status = {"hardware_tier": "minimal", "model_ready": False}
+        cloud_called = []
+        report = route_request(
+            "selam navigator",
+            status=status,
+            decide_only=True,
+            cloud_bridge_caller=lambda prompt, cwd=None: cloud_called.append(prompt),
+        )
+        self.assertEqual(report["route"], "cloud")
+        self.assertNotIn("cloud_bridge", report)
+        self.assertEqual(cloud_called, [])
+
     def test_local_route_calls_local_runtime_with_prompt(self):
         status = {"hardware_tier": "high", "model_ready": True}
         captured = {}

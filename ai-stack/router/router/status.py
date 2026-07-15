@@ -32,6 +32,7 @@ def route_request(
     status: dict | None = None,
     cloud_bridge_caller=None,
     local_runtime_caller=None,
+    decide_only: bool = False,
 ) -> dict:
     status = status or get_local_runtime_status(cwd=local_runtime_cwd)
     complexity = estimate_complexity(prompt)
@@ -52,6 +53,13 @@ def route_request(
         "route": decision["target"],
         "reasoning": decision["reasoning"],
     }
+
+    if decide_only:
+        # Sadece karar üretir, local-runtime/cloud-bridge'i ÇALIŞTIRMAZ —
+        # ai-stack/assistant gibi çağıranların kendi üretim akışını (örn.
+        # tool-use döngüsü) kurabilmesi, gereksiz/israf bir bulut çağrısı
+        # yapılmadan.
+        return report
 
     if decision["target"] == "cloud":
         caller = cloud_bridge_caller or call_cloud_bridge

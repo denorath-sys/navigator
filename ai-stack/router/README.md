@@ -27,7 +27,15 @@ Harici bağımlılık yok, sadece Python 3.11+ (stdlib). `local-runtime` ve
 cd ai-stack/router
 python3 -m router --prompt "Merhaba, sen kimsin?" --pretty
 python3 -m router --prompt "..." --prefer privacy   # balanced|privacy|cost|speed
+python3 -m router --prompt "..." --decide-only      # sadece karar, ÇALIŞTIRMAZ (bkz. aşağıda)
 ```
+
+**`--decide-only`** (Faz 4'te `ai-stack/assistant` için eklendi): sadece
+route kararını (`complexity`/`hardware_tier`/`model_ready`/`route`/
+`reasoning`) döner, `local-runtime` veya `cloud-bridge`'i ÇALIŞTIRMAZ.
+`assistant` gibi kendi üretim akışını (örn. tool-use döngüsü) kurmak
+isteyen çağıranlar için — router'ın kendi tool'suz `generate()` çağrısını
+yapıp sonucu atmak hem israf hem gereksiz bir gerçek API çağrısı olurdu.
 
 Testler:
 
@@ -145,12 +153,14 @@ Her karar sadece kendi hedefini çağırır: `local` iken `cloud-bridge`
 
 Faz 2 — karar/orkestrasyon katmanı, **local-runtime entegrasyonu** ve
 **cloud-bridge entegrasyonu** tamamlandı (`decision.py`, `status.py`,
-`local.py`, `cloud.py`, `python3 -m router` CLI). 27 test geçiyor —
-biri gerçek bir yerel Ollama üretimi (`route: "local"` uçtan uca, gerçek
-metin üretiyor), biri kimlik bilgisiz bulut yönlendirmesi (`route:
-"cloud"`, graceful "unavailable" — her zaman çalışır, CI dahil), biri de
-kimlik bilgili gerçek bulut üretimi (`.env.local` source edildiğinde
-gerçek bir Claude API yanıtı — kimlik bilgisi yoksa otomatik `skip`).
+`local.py`, `cloud.py`, `python3 -m router` CLI). Faz 4'te `--decide-only`
+bayrağı eklendi (bkz. yukarıda) — `ai-stack/assistant`'ın kendi üretim
+akışını kurabilmesi için. 30 test geçiyor — biri gerçek bir yerel Ollama
+üretimi (`route: "local"` uçtan uca, gerçek metin üretiyor), biri kimlik
+bilgisiz bulut yönlendirmesi (`route: "cloud"`, graceful "unavailable" —
+her zaman çalışır, CI dahil), biri de kimlik bilgili gerçek bulut üretimi
+(`.env.local` source edildiğinde gerçek bir Claude API yanıtı — kimlik
+bilgisi yoksa otomatik `skip`), üçü `--decide-only`'yi doğrular.
 **`router` artık bu makinede tamamen gerçek çalışan bir sistem** —
 hiçbir yol mock/placeholder değil, hem yerel hem bulut ucu gerçekten
 üretim yapıyor.

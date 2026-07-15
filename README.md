@@ -95,9 +95,20 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   `ai-stack/mcp-tools/README.md` "Hyprland araçları") ama zincir uzun ve
   her CI denemesi ~20 dakika sürdüğünden kullanıcı kararıyla bilinçli
   olarak Faz 4/5'e ertelendi.
-- **Faz 4 — AI stack tamamlama:** `router`, `mcp-tools`, `cloud-bridge`
-  implementasyonu; uçtan uca asistan paneli deneyimi; ertelenen gerçek
-  Hyprland compositor testi (bkz. Faz 3 notu).
+- **Faz 4 — AI stack tamamlama (başladı):** `ai-stack/assistant` eklendi
+  — `router`, `mcp-tools` ve `cloud-bridge`'i tek bir gerçek konuşma
+  döngüsünde birleştiren bir CLI/REPL (Quickshell UI'ı beklemeden, bu
+  makinede gerçekten test edilebilecek bir ilk adım olarak). `router`'a
+  `--decide-only` (sadece karar, çalıştırmaz), `cloud-bridge`'e
+  `--converse`/`send_messages()` (çok turlu mesaj + tool-use) eklendi.
+  **Gerçek bir tool-use döngüsü uçtan uca doğrulandı:** karmaşık bir
+  donanım sorusuna Claude gerçekten `mcp-tools`'un `hardware_tier`
+  aracını çağırıp bu makinenin gerçek verileriyle (6 çekirdek, 15.4 GB
+  RAM, ayrık GPU yok) doğru cevap verdi. **Dürüstçe belgelenen gerçek bir
+  sınırlama:** yerel yolda (Ollama) henüz araç kullanımı yok — kısa/basit
+  istekler yerele düşüp gerçek veri yerine genel/hatalı cevap üretebiliyor,
+  bu gizlenmedi (bkz. `ai-stack/assistant/README.md`). Kalan: gerçek
+  Hyprland/Quickshell compositor testi (Faz 3'ten ertelendi), UI entegrasyonu.
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 

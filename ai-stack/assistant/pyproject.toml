@@ -1,0 +1,13 @@
+[project]
+name = "navigator-assistant"
+version = "0.1.0"
+description = "Navigator OS assistant — router/mcp-tools/cloud-bridge'i tek bir konuşma döngüsünde birleştirir"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+navigator-assistant = "assistant.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

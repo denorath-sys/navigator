@@ -70,9 +70,26 @@ class AnthropicClient:
     ) -> dict:
         """POST /v1/messages ile tek turluk bir tamamlama isteği gönderir.
 
-        Bu metod bu ortamda GERÇEK bir çağrı ile test edilmedi — kimlik
-        bilgisi yok ve gerçek bir Claude API çağrısı maliyetli olduğundan
-        onaysız yapılmadı (bkz. README "Kapsam dışı").
+        `send_messages()`'ın tek kullanıcı mesajlı, tool'suz özel hali.
+        """
+        return self.send_messages(
+            [{"role": "user", "content": prompt}], model=model, max_tokens=max_tokens, system=system
+        )
+
+    def send_messages(
+        self,
+        messages: list[dict],
+        model: str = DEFAULT_MODEL,
+        max_tokens: int = 1024,
+        system: str | None = None,
+        tools: list[dict] | None = None,
+    ) -> dict:
+        """POST /v1/messages ile çok turlu bir mesaj listesi gönderir.
+
+        `assistant/` modülünün tool-use döngüsü için: `tools` verilirse
+        Claude yanıtında `tool_use` içerik blokları dönebilir
+        (`stop_reason: "tool_use"`); çağıran taraf bunları çalıştırıp
+        `tool_result` mesajıyla `messages`'a ekleyip tekrar çağırmalı.
         """
         headers = {
             "Content-Type": "application/json",
@@ -82,10 +99,12 @@ class AnthropicClient:
         payload = {
             "model": model,
             "max_tokens": max_tokens,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
         }
         if system:
             payload["system"] = system
+        if tools:
+            payload["tools"] = tools
 
         data = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(

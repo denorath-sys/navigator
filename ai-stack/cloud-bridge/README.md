@@ -45,6 +45,18 @@ python3 -m cloud_bridge --pretty                     # sadece kimlik bilgisi dur
 python3 -m cloud_bridge --prompt "merhaba" --pretty   # gerçek istek (kimlik bilgisi varsa)
 ```
 
+**`--converse`** (Faz 4'te `ai-stack/assistant` için eklendi): stdin'den
+tam bir mesaj listesi + isteğe bağlı `tools` şeması okur, Claude API'nin
+HAM yanıtını (`tool_use` blokları, `stop_reason` dahil — `--prompt`'un
+basitleştirilmiş raporunun aksine) stdout'a basar. Çok turlu tool-use
+döngüsü kuran çağıranlar için (`--prompt` tek turlu ve tool'suz kalmaya
+devam ediyor):
+
+```sh
+echo '{"messages": [{"role": "user", "content": "merhaba"}], "tools": [...]}' \
+  | python3 -m cloud_bridge --converse
+```
+
 Testler:
 
 ```sh
@@ -122,8 +134,7 @@ ortam değişkeni varlığını kontrol ediyor, gerçek bir istek göndermiyor.
 ## Kapsam dışı — henüz yapılmadı
 
 - Gizlilik filtrelemesi (isteğe gönderilmeden önce hassas veri maskeleme) yok.
-- `mcp-tools/` entegrasyonu yok (sadece `router` bu modülü çağırıyor).
-- Tool use / streaming yok — sadece tek turluk `generate()`.
+- Streaming yok — her yanıt tek seferde, tam olarak döner.
 - Kimlik bilgisi sadece bu geliştirme makinesinde (`.env.local`) —
   GitHub Actions'ta secret olarak tanımlı değil, dolayısıyla CI'da bulut
   yolu hâlâ "unavailable" (bu bilinçli bir sınır: `.env.local` hiçbir
@@ -133,12 +144,14 @@ ortam değişkeni varlığını kontrol ediyor, gerçek bir istek göndermiyor.
 
 Faz 2 — kimlik bilgisi/istemci katmanı, `router` entegrasyonu VE gerçek
 bir Claude API kimlik bilgisi bağlantısı tamamlandı (`client.py`,
-`status.py`, `python3 -m cloud_bridge [--prompt ...]` CLI). Gerçek bir
-API key `.env.local`'a yazıldı (gitignore'lı) ve gerçek bir istekle
-uçtan uca doğrulandı (`content: "Ankara"`) — hem doğrudan `cloud_bridge`
-CLI'ı hem de `router → cloud_bridge` zinciri üzerinden. 16 test geçiyor
-(mock'lanmış HTTP + gerçek CLI entegrasyon testleri; kimlik bilgisiz yol
-her zaman çalışır, kimlik bilgili gerçek-API testi `.env.local`
-source edilmediğinde otomatik `skip` olur). `ai-stack`'in beş modülünün
-tamamı artık gerçek: yerel yol (`local-runtime`) VE bulut yolu
-(`cloud-bridge`) bu makinede uçtan uca çalışıyor.
+`status.py`, `python3 -m cloud_bridge [--prompt ...]` CLI). Faz 4'te
+çok turlu mesaj + tool-use desteği eklendi (`send_messages()`,
+`--converse`) — `ai-stack/assistant`'ın gerçek bir tool-use döngüsü
+kurabilmesi için. Gerçek bir API key `.env.local`'a yazıldı (gitignore'lı)
+ve gerçek isteklerle uçtan uca doğrulandı — hem doğrudan `cloud_bridge`
+CLI'ı hem `router → cloud_bridge` zinciri hem de `assistant`'ın gerçek
+tool-use döngüsü üzerinden (mcp-tools'un `hardware_tier` aracını gerçekten
+çağırıp doğru donanım verisiyle cevap üretti). 20 test geçiyor (mock'lanmış
+HTTP + gerçek CLI entegrasyon testleri; kimlik bilgisiz yol her zaman
+çalışır, kimlik bilgili gerçek-API testleri `.env.local` source
+edilmediğinde otomatik `skip` olur).

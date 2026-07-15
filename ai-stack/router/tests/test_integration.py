@@ -15,11 +15,11 @@ class TestRouterIntegration(unittest.TestCase):
     olmadığından o yol "unavailable" raporluyor.
     """
 
-    def _run_router(self, prompt: str) -> dict:
+    def _run_router(self, prompt: str, extra_args: list[str] | None = None) -> dict:
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         env = {k: v for k, v in os.environ.items() if not k.startswith("ANTHROPIC_")}
         result = subprocess.run(
-            ["python3", "-m", "router", "--prompt", prompt],
+            ["python3", "-m", "router", "--prompt", prompt, *(extra_args or [])],
             cwd=here,
             capture_output=True,
             text=True,
@@ -28,6 +28,13 @@ class TestRouterIntegration(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
+
+    def test_decide_only_returns_decision_without_generating(self):
+        report = self._run_router("Sadece 'merhaba' kelimesiyle cevap ver.", ["--decide-only"])
+        self.assertIn(report["hardware_tier"], ("minimal", "low", "mid", "high"))
+        self.assertEqual(report["route"], "local")
+        self.assertNotIn("local_runtime", report)
+        self.assertNotIn("cloud_bridge", report)
 
     def test_simple_prompt_routes_local_with_real_generation(self):
         report = self._run_router("Sadece 'merhaba' kelimesiyle cevap ver.")

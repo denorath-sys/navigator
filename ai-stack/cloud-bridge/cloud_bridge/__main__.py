@@ -1,5 +1,9 @@
-"""CLI: `python3 -m cloud_bridge [--pretty]` (durum) veya
-`python3 -m cloud_bridge --prompt "..." [--system ...] [--max-tokens N]` (gerçek istek).
+"""CLI: `python3 -m cloud_bridge [--pretty]` (durum),
+`python3 -m cloud_bridge --prompt "..." [--system ...] [--max-tokens N]` (tek turlu
+basitleştirilmiş rapor) veya
+`echo '{"messages": [...], "tools": [...]}' | python3 -m cloud_bridge --converse`
+(çok turlu, HAM API yanıtı — tool-use döngüsü kuran çağıranlar için, bkz.
+ai-stack/assistant).
 """
 import argparse
 import json
@@ -29,8 +33,43 @@ def main() -> int:
     )
     parser.add_argument("--system", default=None, help="Sistem promptu (isteğe bağlı)")
     parser.add_argument("--max-tokens", type=int, default=1024)
+    parser.add_argument(
+        "--converse",
+        action="store_true",
+        help=(
+            'stdin\'den {"messages": [...], "system": ..., "tools": [...], '
+            '"model": ..., "max_tokens": ...} JSON\'u okur, Claude API\'ye '
+            "gönderir, HAM yanıtı (tool_use blokları/stop_reason dahil) stdout'a "
+            "JSON basar."
+        ),
+    )
     args = parser.parse_args()
     indent = 2 if args.pretty else None
+
+    if args.converse:
+        payload = json.load(sys.stdin)
+        client = AnthropicClient()
+        if not client.is_available():
+            print(
+                json.dumps(
+                    {"status": "unavailable", "reason": "credentials_not_configured"},
+                    ensure_ascii=False,
+                )
+            )
+            return 0
+        try:
+            response = client.send_messages(
+                payload["messages"],
+                model=payload.get("model", DEFAULT_MODEL),
+                max_tokens=payload.get("max_tokens", 1024),
+                system=payload.get("system"),
+                tools=payload.get("tools"),
+            )
+        except AnthropicError as e:
+            print(json.dumps({"status": "error", "error": str(e)}, ensure_ascii=False), file=sys.stderr)
+            return 1
+        print(json.dumps(response, ensure_ascii=False))
+        return 0
 
     if args.prompt is None:
         report = build_status_report()

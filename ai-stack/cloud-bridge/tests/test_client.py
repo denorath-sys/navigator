@@ -105,5 +105,47 @@ class TestGenerate(unittest.TestCase):
             AnthropicClient().generate("selam")
 
 
+class TestSendMessages(unittest.TestCase):
+    @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=True)
+    @patch("cloud_bridge.client.urllib.request.urlopen")
+    def test_sends_full_message_list(self, mock_urlopen):
+        mock_urlopen.return_value = _fake_response({"content": []})
+        messages = [
+            {"role": "user", "content": "merhaba"},
+            {"role": "assistant", "content": "selam"},
+            {"role": "user", "content": "nasılsın"},
+        ]
+        AnthropicClient().send_messages(messages)
+        sent_payload = json.loads(mock_urlopen.call_args[0][0].data)
+        self.assertEqual(sent_payload["messages"], messages)
+
+    @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=True)
+    @patch("cloud_bridge.client.urllib.request.urlopen")
+    def test_includes_tools_when_given(self, mock_urlopen):
+        mock_urlopen.return_value = _fake_response({"content": []})
+        tools = [{"name": "hardware_tier", "description": "...", "input_schema": {}}]
+        AnthropicClient().send_messages([{"role": "user", "content": "x"}], tools=tools)
+        sent_payload = json.loads(mock_urlopen.call_args[0][0].data)
+        self.assertEqual(sent_payload["tools"], tools)
+
+    @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=True)
+    @patch("cloud_bridge.client.urllib.request.urlopen")
+    def test_omits_tools_when_not_given(self, mock_urlopen):
+        mock_urlopen.return_value = _fake_response({"content": []})
+        AnthropicClient().send_messages([{"role": "user", "content": "x"}])
+        sent_payload = json.loads(mock_urlopen.call_args[0][0].data)
+        self.assertNotIn("tools", sent_payload)
+
+    @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=True)
+    @patch("cloud_bridge.client.urllib.request.urlopen")
+    def test_generate_delegates_to_send_messages(self, mock_urlopen):
+        mock_urlopen.return_value = _fake_response({"content": [{"type": "text", "text": "ok"}]})
+        result = AnthropicClient().generate("selam")
+        self.assertEqual(result["content"][0]["text"], "ok")
+        sent_payload = json.loads(mock_urlopen.call_args[0][0].data)
+        self.assertEqual(sent_payload["messages"], [{"role": "user", "content": "selam"}])
+        self.assertNotIn("tools", sent_payload)
+
+
 if __name__ == "__main__":
     unittest.main()
