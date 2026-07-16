@@ -4,9 +4,11 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from assistant.conversation import (
+    SYSTEM_PROMPT,
     AssistantError,
     _extract_text,
     _mcp_tools_to_claude_tools,
+    _mcp_tools_to_ollama_tools,
     decide_route,
     run_cloud_turn,
     run_local_turn,
@@ -52,11 +54,51 @@ class TestDecideRoute(unittest.TestCase):
         self.assertEqual(mock_run.call_args[1]["cwd"], "../router")
 
 
+class TestMcpToolsToOllamaTools(unittest.TestCase):
+    def test_translates_to_openai_style_function_schema(self):
+        mcp_tools = [
+            {
+                "name": "hardware_tier",
+                "description": "...",
+                "inputSchema": {"type": "object", "properties": {}, "required": []},
+            }
+        ]
+        ollama_tools = _mcp_tools_to_ollama_tools(mcp_tools)
+        self.assertEqual(
+            ollama_tools,
+            [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "hardware_tier",
+                        "description": "...",
+                        "parameters": {"type": "object", "properties": {}, "required": []},
+                    },
+                }
+            ],
+        )
+
+
 class TestRunLocalTurn(unittest.TestCase):
-    @patch("assistant.conversation.subprocess.run")
-    def test_returns_content_on_ok_status(self, mock_run):
-        mock_run.return_value = _fake_run(json.dumps({"status": "ok", "content": "merhaba!"}))
-        result = run_local_turn("selam")
+    def _fake_mcp_client(self, tool_result_text="42", schema=None):
+        client = MagicMock()
+        client.list_tools.return_value = [
+            {
+                "name": "hardware_tier",
+                "description": "...",
+                "inputSchema": schema or {"type": "object", "properties": {}, "required": []},
+            }
+        ]
+        client.call_tool.return_value = {
+            "content": [{"type": "text", "text": tool_result_text}],
+            "isError": False,
+        }
+        return client
+
+    @patch("assistant.conversation._call_local_runtime_converse")
+    def test_returns_content_immediately_when_no_tool_calls(self, mock_converse):
+        mock_converse.return_value = {"message": {"role": "assistant", "content": "merhaba!"}}
+        result = run_local_turn("selam", self._fake_mcp_client())
         self.assertEqual(result["content"], "merhaba!")
         self.assertEqual(result["tool_calls"], [])
         self.assertEqual(result["route"], "local")
@@ -64,49 +106,244 @@ class TestRunLocalTurn(unittest.TestCase):
             result["history"],
             [{"role": "user", "content": "selam"}, {"role": "assistant", "content": "merhaba!"}],
         )
+        self._fake_mcp_client().call_tool.assert_not_called()
 
-    @patch("assistant.conversation.subprocess.run")
-    def test_raises_when_not_ok(self, mock_run):
-        mock_run.return_value = _fake_run(
-            json.dumps({"status": "unavailable", "reason": "ollama_not_running"})
-        )
+    @patch("assistant.conversation._call_local_runtime_converse")
+    def test_raises_on_unavailable(self, mock_converse):
+        mock_converse.return_value = {"status": "unavailable", "reason": "ollama_not_running"}
         with self.assertRaises(AssistantError):
-            run_local_turn("selam")
+            run_local_turn("selam", self._fake_mcp_client())
 
-    @patch("assistant.conversation.subprocess.run")
-    def test_prefixes_prompt_with_history_as_plain_text(self, mock_run):
-        mock_run.return_value = _fake_run(json.dumps({"status": "ok", "content": "Ahmet"}))
+    @patch("assistant.conversation._call_local_runtime_converse")
+    def test_raises_on_error_status(self, mock_converse):
+        mock_converse.return_value = {"status": "error", "error": "boom"}
+        with self.assertRaises(AssistantError):
+            run_local_turn("selam", self._fake_mcp_client())
+
+    @patch("assistant.conversation._call_local_runtime_converse")
+    def test_history_is_prepended_to_ollama_messages(self, mock_converse):
+        captured_payloads = []
+
+        def fake_converse(payload, cwd="../local-runtime"):
+            captured_payloads.append(json.loads(json.dumps(payload)))
+            return {"message": {"role": "assistant", "content": "Ahmet"}}
+
+        mock_converse.side_effect = fake_converse
         history = [
             {"role": "user", "content": "Benim adım Ahmet."},
             {"role": "assistant", "content": "Merhaba Ahmet!"},
         ]
-        run_local_turn("Benim adım neydi?", history=history)
-        sent_prompt = mock_run.call_args[0][0][-1]
-        self.assertIn("Benim adım Ahmet.", sent_prompt)
-        self.assertIn("Merhaba Ahmet!", sent_prompt)
-        self.assertIn("Benim adım neydi?", sent_prompt)
-
-    @patch("assistant.conversation.subprocess.run")
-    def test_returned_history_appends_to_given_history(self, mock_run):
-        mock_run.return_value = _fake_run(json.dumps({"status": "ok", "content": "cevap2"}))
-        history = [{"role": "user", "content": "soru1"}, {"role": "assistant", "content": "cevap1"}]
-        result = run_local_turn("soru2", history=history)
+        run_local_turn("Benim adım neydi?", self._fake_mcp_client(), history=history)
+        sent_messages = captured_payloads[0]["messages"]
         self.assertEqual(
-            result["history"],
+            sent_messages,
             [
-                {"role": "user", "content": "soru1"},
-                {"role": "assistant", "content": "cevap1"},
-                {"role": "user", "content": "soru2"},
-                {"role": "assistant", "content": "cevap2"},
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": "Benim adım Ahmet."},
+                {"role": "assistant", "content": "Merhaba Ahmet!"},
+                {"role": "user", "content": "Benim adım neydi?"},
             ],
         )
 
-    @patch("assistant.conversation.subprocess.run")
-    def test_no_history_prefix_when_history_is_empty(self, mock_run):
-        mock_run.return_value = _fake_run(json.dumps({"status": "ok", "content": "x"}))
-        run_local_turn("selam")
-        sent_prompt = mock_run.call_args[0][0][-1]
-        self.assertEqual(sent_prompt, "selam")
+    @patch("assistant.conversation._call_local_runtime_converse")
+    def test_returned_history_excludes_tool_calls(self, mock_converse):
+        mock_converse.side_effect = [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{"function": {"name": "hardware_tier", "arguments": {}}}],
+                }
+            },
+            {"message": {"role": "assistant", "content": "tier düşük"}},
+        ]
+        result = run_local_turn("donanımım nedir?", self._fake_mcp_client())
+        self.assertEqual(
+            result["history"],
+            [
+                {"role": "user", "content": "donanımım nedir?"},
+                {"role": "assistant", "content": "tier düşük"},
+            ],
+        )
+
+    @patch("assistant.conversation._call_local_runtime_converse")
+    def test_executes_tool_call_and_feeds_result_back(self, mock_converse):
+        responses = [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{"function": {"name": "hardware_tier", "arguments": {}}}],
+                }
+            },
+            {"message": {"role": "assistant", "content": "tier düşük"}},
+        ]
+        captured_payloads = []
+
+        def fake_converse(payload, cwd="../local-runtime"):
+            captured_payloads.append(json.loads(json.dumps(payload)))
+            return responses.pop(0)
+
+        mock_converse.side_effect = fake_converse
+        client = self._fake_mcp_client(tool_result_text='{"tier": "low"}')
+        result = run_local_turn("donanımım nedir?", client)
+
+        self.assertEqual(result["content"], "tier düşük")
+        self.assertEqual(result["tool_calls"], [{"name": "hardware_tier", "input": {}}])
+        client.call_tool.assert_called_once_with("hardware_tier", {})
+
+        second_call_messages = captured_payloads[1]["messages"]
+        tool_result_message = second_call_messages[-1]
+        self.assertEqual(tool_result_message["role"], "tool")
+        self.assertEqual(tool_result_message["content"], '{"tier": "low"}')
+
+    @patch("assistant.conversation._call_local_runtime_converse")
+    def test_hallucinated_arguments_outside_schema_are_filtered(self, mock_converse):
+        """Gerçek testte llama3.2:3b sıfır-parametreli araçlara bile
+        halüsinasyon argümanlar uydurdu (örn. {"path": "..."}) — aracın
+        inputSchema'sında olmayan anahtarlar elenmeli."""
+        responses = [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "hardware_tier",
+                                "arguments": {"path": "/home/chief", "": "null"},
+                            }
+                        }
+                    ],
+                }
+            },
+            {"message": {"role": "assistant", "content": "tamam"}},
+        ]
+        mock_converse.side_effect = responses
+        client = self._fake_mcp_client(schema={"type": "object", "properties": {}, "required": []})
+
+        result = run_local_turn("x", client)
+
+        self.assertEqual(result["tool_calls"], [{"name": "hardware_tier", "input": {}}])
+        client.call_tool.assert_called_once_with("hardware_tier", {})
+
+    @patch("assistant.conversation._call_local_runtime_converse")
+    def test_unsafe_tool_not_shown_to_model_and_rejected_if_hallucinated(self, mock_converse):
+        """Gerçek testte 3B model, zararsız bir 'sadece merhaba de'
+        isteğinde bile kendiliğinden write_file'ı overwrite=true ile
+        çağırmaya kalkıştı. write_file/delete_file/rename_file yerel
+        modele hiç gösterilmiyor (tools listesinde yok) VE model yine de
+        halüsinasyonla çağırırsa savunma katmanı reddediyor —
+        mcp_client.call_tool()'a hiç ulaşmıyor."""
+        responses = [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "write_file",
+                                "arguments": {"path": "/home/chief", "content": "x", "overwrite": True},
+                            }
+                        }
+                    ],
+                }
+            },
+            {"message": {"role": "assistant", "content": "tamam"}},
+        ]
+        mock_converse.side_effect = responses
+        client = MagicMock()
+        client.list_tools.return_value = [
+            {"name": "hardware_tier", "description": "...", "inputSchema": {"type": "object", "properties": {}}},
+            {
+                "name": "write_file",
+                "description": "...",
+                "inputSchema": {"type": "object", "properties": {"path": {}, "content": {}}},
+            },
+        ]
+
+        run_local_turn("selam", client)
+
+        # tools/list mock'unda write_file olsa da, Ollama'ya gönderilen
+        # tools listesinde OLMAMALI:
+        sent_tools = mock_converse.call_args_list[0][0][0]["tools"]
+        tool_names_sent = {t["function"]["name"] for t in sent_tools}
+        self.assertNotIn("write_file", tool_names_sent)
+        self.assertIn("hardware_tier", tool_names_sent)
+        # Model yine de halüsinasyonla çağırdıysa, gerçek dosya aracı
+        # ASLA çalıştırılmamalı:
+        client.call_tool.assert_not_called()
+
+    @patch("assistant.conversation._call_local_runtime_converse")
+    def test_allowed_arguments_within_schema_are_kept(self, mock_converse):
+        responses = [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {"function": {"name": "read_file", "arguments": {"path": "x.txt", "junk": 1}}}
+                    ],
+                }
+            },
+            {"message": {"role": "assistant", "content": "tamam"}},
+        ]
+        mock_converse.side_effect = responses
+        schema = {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}
+        client = MagicMock()
+        client.list_tools.return_value = [
+            {"name": "read_file", "description": "...", "inputSchema": schema}
+        ]
+        client.call_tool.return_value = {
+            "content": [{"type": "text", "text": "ok"}],
+            "isError": False,
+        }
+
+        run_local_turn("x", client)
+
+        client.call_tool.assert_called_once_with("read_file", {"path": "x.txt"})
+
+    @patch("assistant.conversation._call_local_runtime_converse")
+    def test_tool_call_exception_is_reported_as_error_result(self, mock_converse):
+        responses = [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{"function": {"name": "hardware_tier", "arguments": {}}}],
+                }
+            },
+            {"message": {"role": "assistant", "content": "tamam"}},
+        ]
+        captured_payloads = []
+
+        def fake_converse(payload, cwd="../local-runtime"):
+            captured_payloads.append(json.loads(json.dumps(payload)))
+            return responses.pop(0)
+
+        mock_converse.side_effect = fake_converse
+        client = self._fake_mcp_client()
+        client.call_tool.side_effect = RuntimeError("mcp-tools çöktü")
+
+        run_local_turn("x", client)
+
+        second_call_messages = captured_payloads[1]["messages"]
+        self.assertIn("mcp-tools çöktü", second_call_messages[-1]["content"])
+
+    @patch("assistant.conversation._call_local_runtime_converse")
+    def test_raises_after_max_iterations_infinite_tool_use(self, mock_converse):
+        mock_converse.return_value = {
+            "message": {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"function": {"name": "hardware_tier", "arguments": {}}}],
+            }
+        }
+        client = self._fake_mcp_client()
+        with self.assertRaises(AssistantError):
+            run_local_turn("x", client, max_iterations=3)
+        self.assertEqual(mock_converse.call_count, 3)
 
 
 class TestRunCloudTurn(unittest.TestCase):

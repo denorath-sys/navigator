@@ -42,6 +42,42 @@ class TestLocalRuntimeIntegration(unittest.TestCase):
         self.assertIsInstance(report["content"], str)
         self.assertGreater(len(report["content"]), 0)
 
+    def test_converse_cli_gets_real_tool_call(self):
+        """Gerçek bir Ollama /api/chat çağrısı, tool-calling ile —
+        llama3.2:3b'nin gerçekten bir tool_use isteği ürettiği doğrulanır."""
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        payload = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Bu makinenin donanım tier bilgisini öğrenmek için hardware_tier aracını çağır.",
+                }
+            ],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "hardware_tier",
+                        "description": "Donanım tier bilgisini döner.",
+                        "parameters": {"type": "object", "properties": {}, "required": []},
+                    },
+                }
+            ],
+        }
+        result = subprocess.run(
+            ["python3", "-m", "local_runtime", "--converse"],
+            cwd=here,
+            input=json.dumps(payload, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        response = json.loads(result.stdout)
+        tool_calls = response["message"].get("tool_calls", [])
+        self.assertEqual(len(tool_calls), 1)
+        self.assertEqual(tool_calls[0]["function"]["name"], "hardware_tier")
+
 
 if __name__ == "__main__":
     unittest.main()

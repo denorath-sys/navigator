@@ -1,25 +1,32 @@
 """assistant'ın konuşma orkestrasyonu.
 
 `router --decide-only` ile route kararı alınır (local-runtime/cloud-bridge'i
-BOŞ YERE çalıştırmadan — bkz. router/status.py "decide_only"), sonra:
+BOŞ YERE çalıştırmadan — bkz. router/status.py "decide_only"), sonra hem
+**cloud** hem **local** rotası GERÇEK bir tool-use döngüsü kurar:
+mcp-tools'un `tools/list` çıktısı ilgili sağlayıcının tool formatına
+çevrilir; model bir tool çağrısı döndürdükçe ilgili mcp-tools aracı
+GERÇEKTEN çalıştırılır (bkz. mcp_client.py), sonuç geri beslenir — model
+son bir metin yanıtı verene kadar tekrarlanır.
 
-- **cloud** rotası: Claude ile gerçek bir tool-use döngüsü kurulur.
-  mcp-tools'un `tools/list` çıktısı Claude'un `tools` formatına çevrilir;
-  Claude bir `tool_use` bloğu döndürdükçe ilgili mcp-tools aracı GERÇEKTEN
-  çağrılır (bkz. mcp_client.py), sonuç `tool_result` olarak Claude'a geri
-  beslenir — Claude son bir metin yanıtı verene kadar tekrarlanır.
-- **local** rotası: düz üretim, ARAÇ KULLANIMI YOK. Ollama'nın
-  function-calling desteği bu istemcide implemente edilmedi — bu bilinçli
-  bir sınırlama (bkz. README "Kapsam dışı"), gerçekmiş gibi gösterilmiyor.
+- **cloud**: Claude Messages API (`tool_use`/`tool_result` blokları). Tam
+  araç setine erişir.
+- **local**: Ollama `/api/chat` (OpenAI-benzeri `tool_calls` — gerçek
+  makinede `llama3.2:3b` ile doğrulandı, bkz. local-runtime/README.md).
+  Sadece SALT-OKUNUR araçlara erişir (`LOCAL_SAFE_TOOL_NAMES`) — gerçek
+  testte 3B model, "sadece 'merhaba' de" gibi zararsız bir istekte bile
+  kendiliğinden `write_file`'ı `overwrite=true` ile çağırmaya kalkıştı
+  (sadece hedef bir dizin olduğu için mcp-tools katmanında hata verdi,
+  başka bir yolda gerçekten dosya değiştirebilirdi). Bu, "sistemi
+  değiştiren her eylem açık onay ister" ilkesinin gerçek bir ihlal riski
+  olduğundan, yazma/silme/yeniden adlandırma araçları yerel modele HİÇ
+  gösterilmiyor — cloud (Claude) çok daha güvenilir olduğundan tam erişimi
+  koruyor.
 
 **Konuşma geçmişi:** İkisi de aynı düz `history: [{"role", "content"}, ...]`
-biçimini kullanır (sadece kullanıcı/asistan METİN turları — cloud tarafının
-tool_use/tool_result blokları geçmişe DAHİL EDİLMEZ, sadece o turun içinde
-kalır). Bu, route bir konuşma içinde değişse bile (örn. önce local, sonra
-cloud) geçmişin taşınabilir kalmasını sağlar. cloud tarafında bu, Claude'un
-mesaj formatına doğrudan uyar; local tarafında düz metin olarak promptun
-önüne eklenir (Ollama `/api/generate` tek promptluk olduğundan gerçek bir
-chat API'si değil — bilinçli bir basitleştirme, bkz. `run_local_turn`).
+biçimini kullanır (sadece kullanıcı/asistan METİN turları — ne Claude'un
+tool_use/tool_result blokları ne Ollama'nın tool_calls'ı geçmişe DAHİL
+EDİLİR, sadece o turun içinde kalır). Bu, route bir konuşma içinde değişse
+bile (örn. önce local, sonra cloud) geçmişin taşınabilir kalmasını sağlar.
 """
 import json
 import subprocess
@@ -32,11 +39,29 @@ CLOUD_BRIDGE_CMD = ["python3", "-m", "cloud_bridge"]
 
 SYSTEM_PROMPT = (
     "Sen Navigator OS'un işletim sistemine gömülü asistanısın. Kullanıcının "
-    "sistemi hakkındaki sorularını, sana verilen araçları kullanarak gerçek "
-    "verilerle cevapla — asla tahmin etme veya uydurma. Türkçe cevap ver."
+    "SİSTEM/DONANIM hakkındaki sorularını sana verilen araçları kullanarak "
+    "gerçek verilerle cevapla — asla tahmin etme veya uydurma. Ama kullanıcı "
+    "önceki konuşmada söylediği bir şeyi (isim, tercih vb.) soruyorsa ARAÇ "
+    "KULLANMA — doğrudan konuşma geçmişinden cevapla. Türkçe cevap ver, "
+    "kısa ve net ol."
 )
 MAX_TOOL_ITERATIONS = 8
 MAX_HISTORY_MESSAGES = 20  # ~10 kullanıcı/asistan turu — sınırsız büyümeyi engeller
+
+# Yerel (güvenilirliği düşük, küçük) modele sadece salt-okunur araçlar
+# gösterilir — bkz. run_local_turn() docstring'i, gerçek testte yakalanan
+# halüsinasyon write_file çağrısı.
+LOCAL_SAFE_TOOL_NAMES = frozenset(
+    {
+        "hardware_tier",
+        "route_request",
+        "read_file",
+        "list_directory",
+        "list_windows",
+        "list_workspaces",
+        "active_window",
+    }
+)
 
 
 class AssistantError(Exception):
@@ -63,6 +88,20 @@ def _mcp_tools_to_claude_tools(mcp_tools: list[dict]) -> list[dict]:
     ]
 
 
+def _mcp_tools_to_ollama_tools(mcp_tools: list[dict]) -> list[dict]:
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": t["name"],
+                "description": t["description"],
+                "parameters": t["inputSchema"],
+            },
+        }
+        for t in mcp_tools
+    ]
+
+
 def _extract_text(content_blocks: list[dict]) -> str:
     return "".join(b.get("text", "") for b in content_blocks if b.get("type") == "text")
 
@@ -70,6 +109,18 @@ def _extract_text(content_blocks: list[dict]) -> str:
 def _call_cloud_bridge_converse(payload: dict, cwd: str = "../cloud-bridge") -> dict:
     result = subprocess.run(
         CLOUD_BRIDGE_CMD + ["--converse"],
+        cwd=cwd,
+        input=json.dumps(payload, ensure_ascii=False),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(result.stdout)
+
+
+def _call_local_runtime_converse(payload: dict, cwd: str = "../local-runtime") -> dict:
+    result = subprocess.run(
+        LOCAL_RUNTIME_CMD + ["--converse"],
         cwd=cwd,
         input=json.dumps(payload, ensure_ascii=False),
         capture_output=True,
@@ -157,46 +208,94 @@ def run_cloud_turn(
     )
 
 
-def _format_prompt_with_history(prompt: str, history: list[dict] | None) -> str:
-    if not history:
-        return prompt
-    lines = ["Önceki konuşma:"]
-    for turn in history:
-        speaker = "Kullanıcı" if turn["role"] == "user" else "Asistan"
-        lines.append(f"{speaker}: {turn['content']}")
-    lines.append("")
-    lines.append(f"Şimdiki soru: {prompt}")
-    return "\n".join(lines)
-
-
 def run_local_turn(
-    prompt: str, history: list[dict] | None = None, local_runtime_cwd: str = "../local-runtime"
+    prompt: str,
+    mcp_client: MCPClient,
+    history: list[dict] | None = None,
+    local_runtime_cwd: str = "../local-runtime",
+    max_iterations: int = MAX_TOOL_ITERATIONS,
 ) -> dict:
-    """Yerel model ile düz üretim. ARAÇ KULLANIMI YOK — bilinçli bir
-    sınırlama, bkz. modül docstring'i. `history` varsa düz metin olarak
-    promptun önüne eklenir (Ollama'nın gerçek bir chat API'si burada
-    kullanılmıyor — bkz. modül docstring'i)."""
-    full_prompt = _format_prompt_with_history(prompt, history)
-    result = subprocess.run(
-        LOCAL_RUNTIME_CMD + ["--prompt", full_prompt],
-        cwd=local_runtime_cwd,
-        capture_output=True,
-        text=True,
-        check=True,
+    """Ollama (`/api/chat`) ile gerçek bir tool-use döngüsü çalıştırır —
+    `run_cloud_turn()` ile aynı desen, sadece tool format farklı (Ollama
+    OpenAI-benzeri `tool_calls` kullanır, Claude'un `tool_use` bloklarından
+    farklı). Dönen sözlük: `{"content": str, "tool_calls": [...],
+    "route": "local", "history": [...]}`.
+    """
+    safe_tools_list = [t for t in mcp_client.list_tools() if t["name"] in LOCAL_SAFE_TOOL_NAMES]
+    tools = _mcp_tools_to_ollama_tools(safe_tools_list)
+    schemas_by_name = {t["name"]: t["inputSchema"] for t in safe_tools_list}
+    # Sistem promptu olmadan (gerçek testte gözlendi) 3B model basit
+    # hafıza/sohbet sorularında bile gereksiz araç çağırmaya kalkışıyor —
+    # cloud yoluyla tutarlılık için aynı SYSTEM_PROMPT burada da veriliyor.
+    messages: list[dict] = (
+        [{"role": "system", "content": SYSTEM_PROMPT}]
+        + list(history or [])
+        + [{"role": "user", "content": prompt}]
     )
-    report = json.loads(result.stdout)
-    if report.get("status") != "ok":
-        raise AssistantError(f"local-runtime kullanılamıyor: {report}")
-    return {
-        "content": report["content"],
-        "tool_calls": [],
-        "route": "local",
-        "history": (history or [])
-        + [
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": report["content"]},
-        ],
-    }
+    tool_calls: list[dict] = []
+
+    for _ in range(max_iterations):
+        response = _call_local_runtime_converse(
+            {"messages": messages, "tools": tools}, cwd=local_runtime_cwd
+        )
+
+        if response.get("status") == "unavailable":
+            raise AssistantError(f"local-runtime kullanılamıyor: {response.get('reason')}")
+        if response.get("status") == "error":
+            raise AssistantError(f"Ollama hata döndü: {response.get('error')}")
+
+        message = response["message"]
+        messages.append(message)
+
+        ollama_tool_calls = message.get("tool_calls") or []
+        if not ollama_tool_calls:
+            final_text = message.get("content", "")
+            return {
+                "content": final_text,
+                "tool_calls": tool_calls,
+                "route": "local",
+                "history": (history or [])
+                + [
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": final_text},
+                ],
+            }
+
+        for call in ollama_tool_calls:
+            fn = call["function"]
+            if fn["name"] not in schemas_by_name:
+                # Model, kendisine gösterilmeyen bir aracı (örn.
+                # write_file) halüsinasyonla çağırmaya kalkıştı — savunma
+                # katmanı, mcp_client.call_tool()'a hiç ulaşmadan reddeder.
+                tool_calls.append({"name": fn["name"], "input": fn.get("arguments") or {}})
+                messages.append(
+                    {
+                        "role": "tool",
+                        "content": f"Araç çağrısı reddedildi: '{fn['name']}' yerel modele açık değil.",
+                    }
+                )
+                continue
+            # llama3.2:3b gerçek testte sıfır-parametreli araçlara bile
+            # halüsinasyon argümanlar uydurdu (örn. {"path": "..."},
+            # {"": "null"}) — aracın inputSchema'sında olmayan anahtarları
+            # eleyerek bu sınıf hatayı gerçekten önlüyoruz.
+            schema = schemas_by_name[fn["name"]]
+            allowed = set(schema.get("properties", {}).keys())
+            args = {k: v for k, v in (fn.get("arguments") or {}).items() if k in allowed}
+            tool_calls.append({"name": fn["name"], "input": args})
+            try:
+                result = mcp_client.call_tool(fn["name"], args)
+                result_text = _extract_text(result["content"])
+            except Exception as e:
+                result_text = f"Araç çağrısı başarısız: {e}"
+            # Ollama/llama3.2 tool_call_id eşleşmesi gerektirmiyor (gerçek
+            # makinede doğrulandı) — sadece role:"tool" + content yeterli.
+            messages.append({"role": "tool", "content": result_text})
+
+    raise AssistantError(
+        f"{max_iterations} tur sonunda model hâlâ araç çağırmaya devam ediyor "
+        "(sonsuz döngü koruması)"
+    )
 
 
 def run_turn(
@@ -210,10 +309,10 @@ def run_turn(
     max_tokens: int = 1024,
 ) -> dict:
     """Tek bir kullanıcı isteğini uçtan uca işler: router kararı ->
-    (cloud ise tool-use döngüsü, local ise düz üretim). `history` verilirse
-    (ve `MAX_HISTORY_MESSAGES`'a kırpılırsa) her iki yolda da bağlam olarak
-    kullanılır; dönen sözlükteki `history` bir sonraki `run_turn()`
-    çağrısına aynen geçirilebilir."""
+    (cloud veya local, ikisi de gerçek tool-use döngüsü). `history`
+    verilirse (ve `MAX_HISTORY_MESSAGES`'a kırpılırsa) her iki yolda da
+    bağlam olarak kullanılır; dönen sözlükteki `history` bir sonraki
+    `run_turn()` çağrısına aynen geçirilebilir."""
     decision = decide_route(prompt, preference=preference, router_cwd=router_cwd)
     trimmed_history = (history or [])[-MAX_HISTORY_MESSAGES:]
 
@@ -226,7 +325,9 @@ def run_turn(
             max_tokens=max_tokens,
         )
     else:
-        result = run_local_turn(prompt, history=trimmed_history, local_runtime_cwd=local_runtime_cwd)
+        result = run_local_turn(
+            prompt, mcp_client, history=trimmed_history, local_runtime_cwd=local_runtime_cwd
+        )
 
     result["hardware_tier"] = decision["hardware_tier"]
     result["reasoning"] = decision["reasoning"]

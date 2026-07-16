@@ -17,6 +17,12 @@ indirilmiş → `model_ready: true` → gerçek yerel üretim yapılabiliyor.
 `router/local.py` bu modülü subprocess ile `--prompt` bayrağıyla çağırır —
 bkz. `ai-stack/router/README.md` "local-runtime entegrasyonu".
 
+**`assistant` entegrasyonu (Faz 4):** `chat()`/`--converse` eklendi —
+Ollama'nın `/api/chat` uç noktası (OpenAI-benzeri `tool_calls`) üzerinden
+çok turlu, tool-calling destekli istekler gönderir. `ai-stack/assistant`
+bunu gerçek bir tool-use döngüsü kurmak için kullanıyor — bkz.
+`ai-stack/assistant/README.md` "Yerel tool-use".
+
 ## Kullanım
 
 Harici bağımlılık yok, sadece Python 3.11+ (stdlib). `hardware-probe`'un
@@ -26,6 +32,16 @@ yanında (kardeş dizin olarak) bulunması gerekiyor.
 cd ai-stack/local-runtime
 python3 -m local_runtime --pretty                     # sadece durum
 python3 -m local_runtime --prompt "merhaba" --pretty   # gerçek istek (önerilen modelle)
+```
+
+**`--converse`** (Faz 4'te `ai-stack/assistant` için eklendi): stdin'den
+tam bir mesaj listesi + isteğe bağlı `tools` şeması okur (OpenAI-benzeri
+`{"type": "function", "function": {...}}` formatında), Ollama `/api/chat`'in
+HAM yanıtını (`tool_calls` dahil) stdout'a basar:
+
+```sh
+echo '{"messages": [{"role": "user", "content": "merhaba"}], "tools": [...]}' \
+  | python3 -m local_runtime --converse
 ```
 
 Testler:
@@ -107,6 +123,12 @@ denemede varsayılan 5 saniyelik timeout'la `"error": "timed out"` alınmıştı
 Faz 2 — orkestrasyon/istemci katmanı, `router` entegrasyonu, **gerçek
 Ollama kurulumu VE gerçek model indirme** tamamlandı (`models.py`,
 `client.py`, `status.py`, `python3 -m local_runtime [--prompt ...]` CLI).
-16 test geçiyor — biri gerçek bir Ollama `generate()` çağrısı (model
-belleğe yüklenip gerçek metin üretiyor). `route: "local"` artık bu
-makinede gerçekten uçtan uca çalışıyor.
+Faz 4'te `chat()`/`--converse` eklendi — gerçek testte `llama3.2:3b`'nin
+tool-calling'i (Ollama `/api/chat` üzerinden) doğrulandı: model gerçekten
+yapılandırılmış bir `tool_calls` bloğu üretti (`{"name": "hardware_tier",
+"arguments": {}}`). 20 test geçiyor — ikisi gerçek çağrılar (`generate()`
+ve `chat()` ile tool-calling, model belleğe yüklenip gerçek çalışıyor).
+`route: "local"` artık bu makinede hem düz üretimde hem tool-use'da
+gerçekten uçtan uca çalışıyor (tool-use kalitesi/güvenilirliği için bkz.
+`ai-stack/assistant/README.md` "Yerel tool-use — bilinen güvenilirlik
+sınırlaması").

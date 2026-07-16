@@ -96,24 +96,29 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   her CI denemesi ~20 dakika sürdüğünden kullanıcı kararıyla bilinçli
   olarak Faz 4/5'e ertelendi.
 - **Faz 4 — AI stack tamamlama (başladı):** `ai-stack/assistant` eklendi
-  — `router`, `mcp-tools` ve `cloud-bridge`'i tek bir gerçek konuşma
-  döngüsünde birleştiren bir CLI/REPL (Quickshell UI'ı beklemeden, bu
-  makinede gerçekten test edilebilecek bir ilk adım olarak). `router`'a
-  `--decide-only` (sadece karar, çalıştırmaz), `cloud-bridge`'e
-  `--converse`/`send_messages()` (çok turlu mesaj + tool-use) eklendi.
-  **Gerçek bir tool-use döngüsü uçtan uca doğrulandı:** karmaşık bir
-  donanım sorusuna Claude gerçekten `mcp-tools`'un `hardware_tier`
+  — `router`, `mcp-tools`, `local-runtime` ve `cloud-bridge`'i tek bir
+  gerçek konuşma döngüsünde birleştiren bir CLI/REPL (Quickshell UI'ı
+  beklemeden, bu makinede gerçekten test edilebilecek bir ilk adım
+  olarak). `router`'a `--decide-only` (sadece karar, çalıştırmaz),
+  `cloud-bridge`'e VE `local-runtime`'a `--converse` (çok turlu mesaj +
+  tool-use) eklendi. **Hem cloud hem local'de gerçek bir tool-use
+  döngüsü uçtan uca doğrulandı:** karmaşık bir donanım sorusuna hem
+  Claude hem yerel `llama3.2:3b` gerçekten `mcp-tools`'un `hardware_tier`
   aracını çağırıp bu makinenin gerçek verileriyle (6 çekirdek, 15.4 GB
-  RAM, ayrık GPU yok) doğru cevap verdi. **Dürüstçe belgelenen gerçek bir
-  sınırlama:** yerel yolda (Ollama) henüz araç kullanımı yok — kısa/basit
-  istekler yerele düşüp gerçek veri yerine genel/hatalı cevap üretebiliyor,
-  bu gizlenmedi (bkz. `ai-stack/assistant/README.md`). **Konuşma
-  geçmişi/hafıza eklendi**: REPL'de bellekte (`/reset` ile temizlenir),
-  `--history-file` ile ayrı süreçler arasında bile kalıcı — gerçek testte
-  doğrulandı (iki bağımsız `python3 -m assistant` çalıştırması arasında
-  "en sevdiğim renk mor" hatırlandı, yerel model bile tool-use olmadan).
-  Kalan: gerçek Hyprland/Quickshell compositor testi (Faz 3'ten
-  ertelendi), UI entegrasyonu.
+  RAM, ayrık GPU yok) doğru cevap verdi. **Gerçek testte yakalanan ve
+  düzeltilen bir güvenlik riski:** yerel (3B) model, zararsız bir "sadece
+  merhaba de" isteğinde bile kendiliğinden `write_file`'ı
+  `overwrite=true` ile çağırmaya kalkıştı — bu, "sistemi değiştiren her
+  eylem açık onay ister" ilkesinin gerçek bir ihlal riskiydi. Düzeltme:
+  yazma/silme/yeniden adlandırma araçları yerel modele artık hiç
+  gösterilmiyor, sadece salt-okunur erişimi var; gösterilmese de
+  halüsinasyonla çağrılırsa ayrı bir savunma katmanı reddediyor. Yerel
+  modelin kalan gerçek güvenilirlik sınırlaması (ara sıra gereksiz araç
+  çağırma/ham JSON metni üretme) gizlenmeden belgelendi (bkz.
+  `ai-stack/assistant/README.md`). **Konuşma geçmişi/hafıza eklendi**:
+  REPL'de bellekte (`/reset` ile temizlenir), `--history-file` ile ayrı
+  süreçler arasında bile kalıcı. Kalan: gerçek Hyprland/Quickshell
+  compositor testi (Faz 3'ten ertelendi), UI entegrasyonu.
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 

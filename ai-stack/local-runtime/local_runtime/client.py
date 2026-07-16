@@ -58,3 +58,24 @@ class OllamaClient:
             )
         except (urllib.error.URLError, OSError, ValueError) as e:
             raise OllamaError(f"Ollama generate isteği başarısız: {e}") from e
+
+    def chat(
+        self,
+        model: str,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        stream: bool = False,
+        timeout: float = 300.0,
+    ) -> dict:
+        """`/api/chat` ile çok turlu, tool-calling destekli bir istek
+        gönderir (gerçek makinede `llama3.2:3b` ile doğrulandı — model
+        `message.tool_calls` içinde `{"function": {"name", "arguments"}}`
+        döner; sonucu geri beslemek için `{"role": "tool", "content": ...}`
+        mesajı eklemek yeterli, `tool_call_id` eşleşmesi gerekmiyor)."""
+        payload = {"model": model, "messages": messages, "stream": stream}
+        if tools:
+            payload["tools"] = tools
+        try:
+            return self._post("/api/chat", payload, timeout=timeout)
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            raise OllamaError(f"Ollama chat isteği başarısız: {e}") from e

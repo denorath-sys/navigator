@@ -58,6 +58,34 @@ class TestOllamaClient(unittest.TestCase):
         with self.assertRaises(OllamaError):
             self.client.generate("llama3.2:3b", "selam")
 
+    @patch("local_runtime.client.urllib.request.urlopen")
+    def test_chat_sends_messages_and_returns_response(self, mock_urlopen):
+        mock_urlopen.return_value = _fake_response(
+            {"message": {"role": "assistant", "content": "merhaba"}}
+        )
+        messages = [{"role": "user", "content": "selam"}]
+        result = self.client.chat("llama3.2:3b", messages)
+        self.assertEqual(result["message"]["content"], "merhaba")
+
+        sent_payload = json.loads(mock_urlopen.call_args[0][0].data)
+        self.assertEqual(sent_payload["model"], "llama3.2:3b")
+        self.assertEqual(sent_payload["messages"], messages)
+        self.assertNotIn("tools", sent_payload)
+
+    @patch("local_runtime.client.urllib.request.urlopen")
+    def test_chat_includes_tools_when_given(self, mock_urlopen):
+        mock_urlopen.return_value = _fake_response({"message": {"role": "assistant", "content": ""}})
+        tools = [{"type": "function", "function": {"name": "hardware_tier"}}]
+        self.client.chat("llama3.2:3b", [{"role": "user", "content": "x"}], tools=tools)
+        sent_payload = json.loads(mock_urlopen.call_args[0][0].data)
+        self.assertEqual(sent_payload["tools"], tools)
+
+    @patch("local_runtime.client.urllib.request.urlopen")
+    def test_chat_raises_ollama_error_on_failure(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.URLError("connection refused")
+        with self.assertRaises(OllamaError):
+            self.client.chat("llama3.2:3b", [{"role": "user", "content": "x"}])
+
 
 if __name__ == "__main__":
     unittest.main()

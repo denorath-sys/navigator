@@ -1,5 +1,9 @@
-"""CLI: `python3 -m local_runtime [--pretty] [--hardware-probe-path PATH]` (durum) veya
-`python3 -m local_runtime --prompt "..." [--hardware-probe-path PATH]` (gerçek istek).
+"""CLI: `python3 -m local_runtime [--pretty] [--hardware-probe-path PATH]` (durum),
+`python3 -m local_runtime --prompt "..." [--hardware-probe-path PATH]` (tek turlu
+basitleştirilmiş rapor) veya
+`echo '{"messages": [...], "tools": [...]}' | python3 -m local_runtime --converse`
+(çok turlu, HAM Ollama /api/chat yanıtı — tool-use döngüsü kuran çağıranlar
+için, bkz. ai-stack/assistant).
 """
 import argparse
 import json
@@ -24,6 +28,15 @@ def main() -> int:
         default=None,
         help="Verilirse önerilen model ile gerçek bir Ollama isteği gönderir (yoksa sadece durum raporlanır)",
     )
+    parser.add_argument(
+        "--converse",
+        action="store_true",
+        help=(
+            'stdin\'den {"messages": [...], "tools": [...], "model": ...} JSON\'u '
+            "okur, Ollama /api/chat'e gönderir, HAM yanıtı (tool_calls dahil) "
+            "stdout'a JSON basar."
+        ),
+    )
     args = parser.parse_args()
     indent = 2 if args.pretty else None
 
@@ -32,6 +45,27 @@ def main() -> int:
     except Exception as e:
         print(json.dumps({"error": str(e)}, ensure_ascii=False), file=sys.stderr)
         return 1
+
+    if args.converse:
+        payload = json.load(sys.stdin)
+        recommendation = status["recommended_model"]
+        model = payload.get("model") or (recommendation["model"] if recommendation else None)
+        if model is None:
+            print(json.dumps({"status": "unavailable", "reason": "no_local_model_recommended"}, ensure_ascii=False))
+            return 0
+        if not status["ollama_available"]:
+            print(json.dumps({"status": "unavailable", "reason": "ollama_not_running"}, ensure_ascii=False))
+            return 0
+        if not status["model_ready"]:
+            print(json.dumps({"status": "unavailable", "reason": "model_not_installed"}, ensure_ascii=False))
+            return 0
+        try:
+            response = OllamaClient().chat(model, payload["messages"], tools=payload.get("tools"))
+        except OllamaError as e:
+            print(json.dumps({"status": "error", "error": str(e)}, ensure_ascii=False), file=sys.stderr)
+            return 1
+        print(json.dumps(response, ensure_ascii=False))
+        return 0
 
     if args.prompt is None:
         print(json.dumps(status, indent=indent, ensure_ascii=False))
