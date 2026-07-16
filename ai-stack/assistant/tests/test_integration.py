@@ -80,13 +80,23 @@ class TestAssistantIntegration(unittest.TestCase):
 
     def test_local_prompt_that_needs_tool_gets_real_correct_answer(self):
         """Faz 4'te gerçek testte önce başarısız olan tam senaryo: kısa
-        bir donanım sorusu yerele düşer ve (şema filtresi düzeltmesi
-        sayesinde) doğru cevap üretir — bkz. assistant/README.md. Küçük
-        modelin bilinen değişkenliği nedeniyle sınırlı tekrar denenir
-        (bkz. _run_cli_until)."""
+        bir donanım sorusu (şema filtresi düzeltmesi sayesinde) doğru
+        cevap üretir — bkz. assistant/README.md. Küçük modelin bilinen
+        değişkenliği nedeniyle sınırlı tekrar denenir (bkz.
+        _run_cli_until).
+
+        Router'a eklenen 'araç gerekebilir mi' sinyali sayesinde bu
+        prompt artık `balanced` tercihinde varsayılan olarak buluta
+        düşüyor (bkz. router/tests/test_integration.py
+        test_short_tool_prompt_decide_only_routes_cloud_on_this_low_tier_machine)
+        — burada yerel tool-use'ın (gizlilik/maliyet tercih edildiğinde
+        hâlâ kullanılacak yol olduğundan) doğru çalıştığını doğrulamak
+        için --prefer cost ile yerel zorlanıyor."""
         prompt = "Bu makinede kaç CPU çekirdeği var? Aracı kullanarak öğren, kısa cevap ver."
         report = self._run_cli_until(
-            prompt, predicate=lambda r: r.get("status") == "ok" and "6" in r.get("content", "")
+            prompt,
+            predicate=lambda r: r.get("status") == "ok" and "6" in r.get("content", ""),
+            extra_args=["--prefer", "cost"],
         )
         self.assertEqual(report["status"], "ok")
         self.assertEqual(report["route"], "local")

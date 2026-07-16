@@ -103,9 +103,19 @@ cloud-bridge/README.md`) gerçek bir yanıt döner, source edilmediğinde
 4. `balanced` (varsayılan): karmaşık istek + düşük tier → `cloud`; aksi
    halde `local`.
 
-Karmaşıklık tahmini (`estimate_complexity`) şimdilik çok kaba bir sezgisel
-(kelime sayısı > 40 veya çok satırlı → "complex"); gerçek bir sınıflandırma
-Faz 3+'ta ele alınacak. Tüm eşikler taslaktır.
+Karmaşıklık tahmini (`estimate_complexity`) şimdilik çok kaba bir sezgisel:
+kelime sayısı > 40, çok satırlı, VEYA `mentions_tool_keywords()` (Faz 4'te
+eklendi) donanım/dosya sistemi/pencere ile ilgili anahtar kelimeler
+tespit ederse → "complex". Bu son kısım, `ai-stack/assistant`'ta gerçek
+testte doğrulanan bir sorunu çözüyor: kısa ama araç gerektiren istekler
+("kaç CPU çekirdeği var?") eskiden sadece kelime sayısına bakıldığından
+yerele düşüyordu, ve düşük tier'daki küçük yerel modelin tool-use
+güvenilirliği düşük olduğundan (bkz. `ai-stack/assistant/README.md`
+"Yerel tool-use") bazen hatalı cevap üretiyordu. Artık bu tür istekler de
+"complex" sayılıp (düşük tier'da) buluta yönlendiriliyor — gerçek testte
+doğrulandı (bu makinede tier="low", "Bu makinede kaç CPU çekirdeği var?"
+artık otomatik `route: "cloud"` alıyor). Gerçek bir niyet sınıflandırması
+değil, kaba bir anahtar kelime taraması; tüm eşikler hâlâ taslaktır.
 
 ## local-runtime entegrasyonu
 
@@ -154,13 +164,15 @@ Her karar sadece kendi hedefini çağırır: `local` iken `cloud-bridge`
 Faz 2 — karar/orkestrasyon katmanı, **local-runtime entegrasyonu** ve
 **cloud-bridge entegrasyonu** tamamlandı (`decision.py`, `status.py`,
 `local.py`, `cloud.py`, `python3 -m router` CLI). Faz 4'te `--decide-only`
-bayrağı eklendi (bkz. yukarıda) — `ai-stack/assistant`'ın kendi üretim
-akışını kurabilmesi için. 30 test geçiyor — biri gerçek bir yerel Ollama
-üretimi (`route: "local"` uçtan uca, gerçek metin üretiyor), biri kimlik
-bilgisiz bulut yönlendirmesi (`route: "cloud"`, graceful "unavailable" —
-her zaman çalışır, CI dahil), biri de kimlik bilgili gerçek bulut üretimi
-(`.env.local` source edildiğinde gerçek bir Claude API yanıtı — kimlik
-bilgisi yoksa otomatik `skip`), üçü `--decide-only`'yi doğrular.
-**`router` artık bu makinede tamamen gerçek çalışan bir sistem** —
-hiçbir yol mock/placeholder değil, hem yerel hem bulut ucu gerçekten
-üretim yapıyor.
+bayrağı VE `mentions_tool_keywords()` (karmaşıklık sezgisine "araç
+gerekebilir mi" sinyali) eklendi (bkz. yukarıda). 37 test geçiyor — biri
+gerçek bir yerel Ollama üretimi (`route: "local"` uçtan uca, gerçek metin
+üretiyor), biri kimlik bilgisiz bulut yönlendirmesi (`route: "cloud"`,
+graceful "unavailable" — her zaman çalışır, CI dahil), biri de kimlik
+bilgili gerçek bulut üretimi (`.env.local` source edildiğinde gerçek bir
+Claude API yanıtı — kimlik bilgisi yoksa otomatik `skip`), biri kısa ama
+araç gerektiren bir isteğin bu makinede (tier="low") artık gerçekten
+otomatik `route: "cloud"` aldığını doğrular, üçü `--decide-only`'yi
+doğrular. **`router` artık bu makinede tamamen gerçek çalışan bir
+sistem** — hiçbir yol mock/placeholder değil, hem yerel hem bulut ucu
+gerçekten üretim yapıyor.

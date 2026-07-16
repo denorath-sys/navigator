@@ -117,7 +117,12 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   çağırma/ham JSON metni üretme) gizlenmeden belgelendi (bkz.
   `ai-stack/assistant/README.md`). **Konuşma geçmişi/hafıza eklendi**:
   REPL'de bellekte (`/reset` ile temizlenir), `--history-file` ile ayrı
-  süreçler arasında bile kalıcı. Kalan: gerçek Hyprland/Quickshell
+  süreçler arasında bile kalıcı. **Router'a "araç gerekebilir mi" sinyali
+  eklendi**: karmaşıklık sezgisi artık sadece kelime sayısına değil,
+  donanım/dosya/pencere ile ilgili anahtar kelimelere de bakıyor — kısa
+  ama araç gerektiren istekler (ör. "kaç CPU çekirdeği var?") bu makinede
+  (tier="low") artık otomatik olarak daha güvenilir bulut yoluna
+  düşüyor, gerçek testte doğrulandı. Kalan: gerçek Hyprland/Quickshell
   compositor testi (Faz 3'ten ertelendi), UI entegrasyonu.
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.

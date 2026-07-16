@@ -47,7 +47,12 @@ Altı modülün tamamı gerçek ve bu makinede gerçek verilerle test edildi
   20 test.
 - **`router/`** — karar katmanı + local-runtime/cloud-bridge entegrasyonu;
   Faz 4'te eklenen `--decide-only` sadece karar üretir, çalıştırmaz
-  (assistant'ın kendi üretim akışını kurabilmesi için), 30 test.
+  (assistant'ın kendi üretim akışını kurabilmesi için). Karmaşıklık
+  sezgisine "araç gerekebilir mi" sinyali eklendi
+  (`mentions_tool_keywords()`) — kısa ama donanım/dosya/pencere ile ilgili
+  istekler artık düşük tier'da otomatik buluta düşüyor (gerçek testte
+  doğrulandı: bu makinede "kaç CPU çekirdeği var?" artık `route: "cloud"`
+  alıyor). 37 test.
 - **`mcp-tools/`** — MCP sunucusu (resmi SDK kurmadan, stdlib-only; iki
   transport, Bearer token kimlik doğrulamalı HTTP+SSE) VE 10 araç
   (sandbox'lı dosya sistemi araçları + salt-okunur Hyprland sorgu
@@ -68,7 +73,7 @@ Altı modülün tamamı gerçek ve bu makinede gerçek verilerle test edildi
   geçmişi/hafıza eklendi — REPL'de bellekte, `--history-file` ile ayrı
   süreçler arasında bile kalıcı. 40 test.
 
-Toplam ~218 test, ai-stack genelinde. Gerçek entegrasyon testlerinin
+Toplam ~225 test, ai-stack genelinde. Gerçek entegrasyon testlerinin
 büyük kısmı gerçek subprocess/TCP/dosya sistemi/Ollama/Claude API
 üzerinden çalışıyor; kimlik bilgisi gerektirenler `.env.local` yoksa
 (CI dahil) otomatik `skip` olacak şekilde tasarlandı.

@@ -221,9 +221,13 @@ python3 -m unittest discover -v -s tests
   mühendisliğinin ötesinde bir çözüm gerektirebilir.
 - Gerçek bir Quickshell/Hyprland UI'a bağlı değil — bu, ertelenen gerçek
   compositor testine bağlı (bkz. `ai-stack/mcp-tools/README.md`).
-- Router'ın karmaşıklık sezgisi "araç gerekebilir mi" sinyalini
-  kullanmıyor — kısa istekler yerele düşüyor, karmaşık olanlar buluta.
 - Streaming yok — her yanıt tek seferde, tam olarak döner.
+
+**Faz 4'te tamamlandı (önceden burada kapsam dışıydı):** Router'ın
+karmaşıklık sezgisi artık "araç gerekebilir mi" sinyalini de kullanıyor
+(`mentions_tool_keywords()`, bkz. `ai-stack/router/README.md`) — kısa ama
+donanım/dosya/pencere ile ilgili istekler düşük tier'da artık otomatik
+buluta düşüyor, sadece kelime sayısına bakmıyor.
 
 ## Durum
 

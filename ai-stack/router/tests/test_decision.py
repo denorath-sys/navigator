@@ -1,6 +1,6 @@
 import unittest
 
-from router.decision import decide_route, estimate_complexity
+from router.decision import decide_route, estimate_complexity, mentions_tool_keywords
 
 
 class TestEstimateComplexity(unittest.TestCase):
@@ -13,6 +13,26 @@ class TestEstimateComplexity(unittest.TestCase):
 
     def test_multiline_prompt_is_complex(self):
         self.assertEqual(estimate_complexity("satır1\nsatır2"), "complex")
+
+    def test_short_tool_prompt_is_complex(self):
+        self.assertEqual(estimate_complexity("Bu makinede kaç CPU çekirdeği var?"), "complex")
+
+
+class TestMentionsToolKeywords(unittest.TestCase):
+    def test_hardware_keyword_detected(self):
+        self.assertTrue(mentions_tool_keywords("Bu makinede kaç CPU çekirdeği var?"))
+
+    def test_filesystem_keyword_detected(self):
+        self.assertTrue(mentions_tool_keywords("şu dosyayı okur musun"))
+
+    def test_window_keyword_detected(self):
+        self.assertTrue(mentions_tool_keywords("aktif pencere hangisi"))
+
+    def test_case_insensitive(self):
+        self.assertTrue(mentions_tool_keywords("RAM ne kadar"))
+
+    def test_plain_conversation_not_detected(self):
+        self.assertFalse(mentions_tool_keywords("merhaba nasılsın, bugün havalar güzel"))
 
 
 class TestDecideRoute(unittest.TestCase):

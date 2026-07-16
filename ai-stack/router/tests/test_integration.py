@@ -36,6 +36,19 @@ class TestRouterIntegration(unittest.TestCase):
         self.assertNotIn("local_runtime", report)
         self.assertNotIn("cloud_bridge", report)
 
+    def test_short_tool_prompt_decide_only_routes_cloud_on_this_low_tier_machine(self):
+        """Bu makinede tier="low" — kısa ama araç gerektiren bir istek
+        (ör. donanım sorusu) artık sadece kelime sayısına değil,
+        mentions_tool_keywords()'e göre de 'complex' sayılıp buluta
+        yönlendiriliyor (bkz. ai-stack/assistant/README.md 'Yerel
+        tool-use' — küçük yerel modelin tool-use güvenilirlik sorunu)."""
+        report = self._run_router(
+            "Bu makinede kaç CPU çekirdeği var?", ["--decide-only"]
+        )
+        self.assertEqual(report["hardware_tier"], "low")
+        self.assertEqual(report["complexity"], "complex")
+        self.assertEqual(report["route"], "cloud")
+
     def test_simple_prompt_routes_local_with_real_generation(self):
         report = self._run_router("Sadece 'merhaba' kelimesiyle cevap ver.")
         self.assertIn(report["hardware_tier"], ("minimal", "low", "mid", "high"))
