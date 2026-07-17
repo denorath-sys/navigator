@@ -271,7 +271,11 @@ jobs:
           chmod 700 "$XDG_RUNTIME_DIR"
 
           echo "=== Hyprland başlatılıyor ==="
-          setsid nohup Hyprland > /root/hyprland.log 2>&1 < /dev/null &
+          # Hyprland gerçek testte kasıtlı olarak root'u reddetti:
+          # "[ ERROR ] Hyprland was launched with superuser privileges,
+          # but the privileges check is not omitted." — kaynak kodda
+          # (src/main.cpp) doğrulanan tam bayrak: --i-am-really-stupid.
+          setsid nohup Hyprland --i-am-really-stupid > /root/hyprland.log 2>&1 < /dev/null &
           disown
           sleep 10
 
