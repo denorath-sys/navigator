@@ -270,6 +270,28 @@ jobs:
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
 
+          # Üçüncü gerçek denemede (--i-am-really-stupid eklendikten sonra)
+          # Hyprland "CBackend::create() failed!" ile çöktü. aquamarine
+          # kaynağında (Session.cpp) doğrulandı: DRM backend, libseat
+          # üzerinden bir "seat" açmaya çalışıyor (CSession::attempt).
+          # SSH ile bağlanılan bir kabuğun systemd-logind'de gerçek bir
+          # seat'i olmuyor, bu yüzden libseat'in logind backend'i
+          # başarısız oluyor → DRM backend hiç başlamıyor → GBM allocator
+          # kurulamıyor → start() false dönüyor. Çözüm: seatd'yi kendimiz
+          # arka planda başlatıp LIBSEAT_BACKEND=seatd ile libseat'i
+          # logind yerine doğrudan seatd'ye yönlendirmek (seatd, VT/seat
+          # kavramı olmadan root için cihaz erişimini kendi yönetir).
+          if command -v seatd >/dev/null 2>&1; then
+            echo "=== seatd başlatılıyor ==="
+            setsid nohup seatd > /root/seatd.log 2>&1 < /dev/null &
+            disown
+            sleep 2
+            cat /root/seatd.log || true
+            export LIBSEAT_BACKEND=seatd
+          else
+            echo "UYARI: seatd bulunamadı — imajda paket eksik olabilir, DRM backend muhtemelen yine başarısız olacak."
+          fi
+
           echo "=== Hyprland başlatılıyor ==="
           # Hyprland gerçek testte kasıtlı olarak root'u reddetti:
           # "[ ERROR ] Hyprland was launched with superuser privileges,
@@ -388,7 +410,7 @@ jobs:
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
-            "ls -la /dev/dri/ 2>&1; echo ---; lspci | grep -i vga; echo ---; which Hyprland python3"
+            "ls -la /dev/dri/ 2>&1; echo ---; lspci | grep -i vga; echo ---; which Hyprland python3; echo ---; rpm -q seatd libseat 2>&1; which seatd 2>&1; echo ---; echo XDG_SESSION_ID=\$XDG_SESSION_ID; loginctl 2>&1 || true"
 
       - name: Hyprland'ı gerçekten başlat ve mcp-tools ile test et
         run: |
