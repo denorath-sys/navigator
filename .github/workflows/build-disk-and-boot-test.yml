@@ -261,6 +261,22 @@ jobs:
           chmod 600 "${KEY}"
           echo "SSH_KEY=${KEY}" >> "${GITHUB_ENV}"
 
+      - name: vgem ile sahte bir DRM render node oluştur (host'ta gerçek GPU yok)
+        run: |
+          # İlk denemede gerçek hatayla yakalandı: "qemu-system-x86_64:
+          # egl: no drm render node available" / "render node init failed"
+          # — GitHub Actions runner'ının host tarafında hiç GPU/DRM
+          # cihazı yok, -display egl-headless bunsuz başlayamıyor. vgem
+          # (Virtual GEM) kernel modülü, Mesa'nın llvmpipe (yazılım
+          # render) motoru için sahte bir /dev/dri/renderD* node'u
+          # oluşturuyor — bilinen bir CI/GPU'suz-ortam çözümü.
+          sudo modprobe vgem
+          ls -la /dev/dri/
+          RENDER_NODE="$(find /dev/dri -name 'renderD*' | sort | head -n1)"
+          echo "RENDER_NODE=${RENDER_NODE}"
+          echo "RENDER_NODE=${RENDER_NODE}" >> "${GITHUB_ENV}"
+          sudo chmod 666 "${RENDER_NODE}"
+
       - name: Hyprland test betiğini oluştur
         run: |
           cat > hyprland-test.sh <<'SCRIPT'
@@ -325,7 +341,7 @@ jobs:
               -m 4096 \
               -vga none \
               -device virtio-vga-gl \
-              -display egl-headless \
+              -display egl-headless,rendernode=${RENDER_NODE} \
               -drive if=pflash,format=raw,readonly=on,file=${OVMF_CODE} \
               -drive if=pflash,format=raw,file=$(pwd)/OVMF_VARS.fd \
               -drive file=${QCOW2},format=qcow2,if=virtio \
