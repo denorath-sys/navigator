@@ -69,6 +69,10 @@ jobs:
             echo 'name = "navtest"'
             echo 'groups = ["wheel"]'
             echo "key = \"$(cat boot-test-key.pub)\""
+            echo ''
+            echo '[[customizations.user]]'
+            echo 'name = "root"'
+            echo "key = \"$(cat boot-test-key.pub)\""
           } > disk_config/boot-test.toml
 
       - name: ghcr.io'ya giriş yap
@@ -204,6 +208,182 @@ jobs:
           esac
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 navtest@127.0.0.1 \
             "cat /etc/os-release && echo --- && systemctl --failed --no-legend"
+
+      - name: VM'i temizle
+        if: always()
+        run: |
+          if [ -f qemu.pid ]; then
+            PID="$(cat qemu.pid)"
+            kill "${PID}" 2>/dev/null || true
+            sleep 2
+            kill -9 "${PID}" 2>/dev/null || true
+          fi
+          cat qemu.log || true
+
+  hyprland-test:
+    name: Hyprland'ı VM'de gerçekten başlat, mcp-tools'u test et
+    needs: build-disk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Deneysel — boot-test'in aksine başarısızlığı workflow'u kırmasın,
+    # sonucu logdan okuyup değerlendireceğiz (bkz. commit mesajı).
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Disk imajı artifact'ını indir
+        uses: actions/download-artifact@v4
+        with:
+          name: navigator-disk-image
+          path: ./disk-output
+
+      - name: SSH anahtarı artifact'ını indir
+        uses: actions/download-artifact@v4
+        with:
+          name: navigator-boot-test-ssh-key
+          path: ./disk-output
+
+      - name: QEMU + OVMF kur
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd
+
+      - name: KVM erişimini doğrula
+        run: |
+          ls -l /dev/kvm
+          sudo usermod -aG kvm "$USER"
+
+      - name: SSH anahtar iznini düzelt
+        run: |
+          KEY="$(find ./disk-output -name boot-test-key)"
+          chmod 600 "${KEY}"
+          echo "SSH_KEY=${KEY}" >> "${GITHUB_ENV}"
+
+      - name: Hyprland test betiğini oluştur
+        run: |
+          cat > hyprland-test.sh <<'SCRIPT'
+          #!/bin/bash
+          set -uo pipefail
+          export XDG_RUNTIME_DIR=/run/user/0
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+
+          echo "=== Hyprland başlatılıyor ==="
+          setsid nohup Hyprland > /root/hyprland.log 2>&1 < /dev/null &
+          disown
+          sleep 10
+
+          echo "=== Hyprland log ==="
+          cat /root/hyprland.log || true
+
+          echo "=== hypr instance dizini ==="
+          ls -la "$XDG_RUNTIME_DIR/hypr/" 2>&1 || echo "(hypr dizini yok)"
+
+          HYPR_SIG="$(ls "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)"
+          if [ -z "$HYPR_SIG" ]; then
+            echo "HATA: Hyprland instance signature bulunamadı — Hyprland başlamamış."
+            exit 1
+          fi
+          export HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG"
+          echo "HYPRLAND_INSTANCE_SIGNATURE=$HYPR_SIG"
+
+          echo "=== hyprctl monitors ==="
+          hyprctl monitors || { echo "HATA: hyprctl monitors başarısız"; exit 1; }
+
+          echo "=== mcp-tools ile gerçek araç çağrısı ==="
+          cd /root/mcp-tools
+          python3 -c "
+          from mcp_tools.hyprland import list_windows, list_workspaces, active_window
+          import json
+          print('list_windows:', json.dumps(list_windows()))
+          print('list_workspaces:', json.dumps(list_workspaces()))
+          "
+          SCRIPT
+          chmod +x hyprland-test.sh
+
+      - name: VM'i GL-etkin (virtio-vga-gl + egl-headless) KVM ile arka planda boot et
+        run: |
+          set -euo pipefail
+          QCOW2="$(find ./disk-output -name '*.qcow2' | head -n1)"
+          OVMF_CODE="$(find /usr/share/OVMF -iname 'OVMF_CODE*.fd' | grep -vi secboot | sort | head -n1)"
+          OVMF_VARS_SRC="$(find /usr/share/OVMF -iname 'OVMF_VARS*.fd' | grep -vi secboot | sort | head -n1)"
+          echo "OVMF_CODE=${OVMF_CODE}"
+          cp "${OVMF_VARS_SRC}" ./OVMF_VARS.fd
+          # hyprwm/aquamarine#109'da (Kasım-Aralık 2024) tam olarak bu
+          # senaryo (Hyprland + virtio-gpu QEMU) kırıktı ("No renderer
+          # attached to backend") — PR #121 ile düzeltildi. Çalışan
+          # örnek komut satırı virtio-vga-gl + GL-etkin bir display
+          # backend kullanıyordu (-display none DEĞİL) — burada headless
+          # eşdeğeri egl-headless kullanılıyor.
+          sg kvm -c "
+            nohup qemu-system-x86_64 \
+              -machine accel=kvm,type=q35 \
+              -cpu host \
+              -smp 2 \
+              -m 4096 \
+              -vga none \
+              -device virtio-vga-gl \
+              -display egl-headless \
+              -drive if=pflash,format=raw,readonly=on,file=${OVMF_CODE} \
+              -drive if=pflash,format=raw,file=$(pwd)/OVMF_VARS.fd \
+              -drive file=${QCOW2},format=qcow2,if=virtio \
+              -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+              -device virtio-net-pci,netdev=net0 \
+              > qemu.log 2>&1 &
+            disown
+            echo \$! > qemu.pid
+          "
+          for i in $(seq 1 60); do
+            if nc -z 127.0.0.1 2222; then
+              echo "SSH portu açık."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "SSH portu 5 dakika içinde açılmadı." >&2
+          cat qemu.log || true
+          exit 1
+
+      - name: Sistemin ayağa kalktığını doğrula (root ile)
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5"
+          STATE=""
+          for i in $(seq 1 24); do
+            STATE="$(ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "systemctl is-system-running" 2>/dev/null || true)"
+            echo "systemctl is-system-running -> ${STATE:-<yanıt yok>}"
+            case "${STATE}" in
+              running|degraded) break ;;
+            esac
+            sleep 5
+          done
+          case "${STATE}" in
+            running|degraded) ;;
+            *)
+              echo "Sistem 2 dakika içinde ayağa kalkmadı (son durum: ${STATE:-yok})" >&2
+              cat qemu.log || true
+              exit 1
+              ;;
+          esac
+
+      - name: mcp-tools kodunu ve test betiğini VM'e kopyala
+        run: |
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/mcp-tools root@127.0.0.1:/root/mcp-tools
+          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 hyprland-test.sh root@127.0.0.1:/root/hyprland-test.sh
+
+      - name: DRM/GPU cihazlarını VM içinde listele (teşhis için)
+        run: |
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
+            "ls -la /dev/dri/ 2>&1; echo ---; lspci | grep -i vga; echo ---; which Hyprland python3"
+
+      - name: Hyprland'ı gerçekten başlat ve mcp-tools ile test et
+        run: |
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "bash /root/hyprland-test.sh"
 
       - name: VM'i temizle
         if: always()
