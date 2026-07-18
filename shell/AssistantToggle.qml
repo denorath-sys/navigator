@@ -1,12 +1,12 @@
 import QtQuick
 
-// Navigator AI asistan paneli anahtarı — PLACEHOLDER.
-// Gerçek panel (ai-stack/router ile konuşan Quickshell bileşeni) Faz 3+'ta
-// gelecek; şimdilik sadece görsel buton + tıklama logu. hyprland/hyprland.conf
-// içindeki Super+Space kısayolu bu paneli açacak (henüz Quickshell IPC'siyle
-// bağlanmadı — ikisi bağımsız placeholder olarak duruyor).
+// Navigator AI asistan paneli anahtarı — AssistantPanel.qml'i (ai-stack/router'a
+// gerçekten bağlı) açıp kapatır. hyprland/hyprland.conf'taki Super+Space
+// kısayolu da aynı paneli Quickshell IPC üzerinden açar (bkz. shell.qml).
 Rectangle {
     id: root
+
+    signal toggled()
 
     Theme { id: theme }
 
@@ -31,6 +31,6 @@ Rectangle {
 
     MouseArea {
         anchors.fill: parent
-        onClicked: console.log("[Navigator] asistan paneli henüz uygulanmadı (Faz 3+)")
+        onClicked: root.toggled()
     }
 }

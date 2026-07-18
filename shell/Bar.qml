@@ -8,6 +8,8 @@ import Quickshell
 PanelWindow {
     id: bar
 
+    signal assistantToggled()
+
     anchors {
         top: true
         left: true
@@ -32,6 +34,7 @@ PanelWindow {
 
         AssistantToggle {
             Layout.alignment: Qt.AlignVCenter
+            onToggled: bar.assistantToggled()
         }
 
         Clock {

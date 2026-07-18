@@ -443,6 +443,39 @@ jobs:
             exit 1
           fi
           echo "OK: en az bir layer-shell yüzeyi (Bar.qml/PanelWindow) gerçekten map edildi."
+
+          echo "=== AssistantPanel'i ai-stack/router'a karşı test et (Quickshell IPC) ==="
+          # shell.qml'deki IpcHandler (target: "assistant") üzerinden gerçek
+          # bir soru soruyoruz — bu, AssistantPanel.qml'in gerçekten
+          # /usr/share/navigator/ai-stack/router'ı (bu adıma özel VM'e
+          # kopyalandı, bkz. "mcp-tools, hyprland.conf ve shell/ kodunu VM'e
+          # kopyala" adımı) subprocess ile çağırdığının kanıtı. CI'da ne Ollama
+          # ne Claude API kimlik bilgisi var, bu yüzden router kararı her
+          # zaman "cloud"a düşecek (model_ready=false kuralı) ve cloud-bridge
+          # "credentials_not_configured" ile graceful şekilde "unavailable"
+          # dönecek — bu, gerçek bir uçtan uca hata yolu testi, mock değil.
+          qs ipc call assistant ask "Merhaba, sen kimsin?"
+
+          LOADING="true"
+          for i in $(seq 1 30); do
+            LOADING="$(qs ipc call assistant isLoading)"
+            if [ "$LOADING" = "false" ]; then
+              break
+            fi
+            sleep 1
+          done
+          if [ "$LOADING" != "false" ]; then
+            echo "HATA: AssistantPanel 30 saniye içinde yüklenmeyi bitirmedi."
+            exit 1
+          fi
+
+          RESPONSE="$(qs ipc call assistant getResponse)"
+          echo "AssistantPanel yanıtı: $RESPONSE"
+          if [ -z "$RESPONSE" ]; then
+            echo "HATA: AssistantPanel'den hiç yanıt gelmedi."
+            exit 1
+          fi
+          echo "OK: AssistantPanel gerçekten ai-stack/router'ı çağırdı ve bir yanıt aldı."
           SCRIPT
           chmod +x hyprland-test.sh
 
@@ -532,6 +565,16 @@ jobs:
           # incelemesinden geçmişti (bkz. shell/README.md), gerçek
           # compositor'a karşı hiç çalıştırılmamıştı.
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r shell root@127.0.0.1:/root/shell
+          # ai-stack/router (+ router'ın varsayılan ../local-runtime,
+          # ../cloud-bridge göreli yollarıyla eşleşmesi için kardeşleri) —
+          # image/Containerfile Katman 5 (AI stack) hâlâ PLACEHOLDER olduğundan
+          # gerçek imajda henüz yok; AssistantPanel.qml'in varsaydığı
+          # /usr/share/navigator/ai-stack/ yolu (theme/ ile aynı kural,
+          # Katman 3 yorumuna bkz.) burada CI'a özel olarak taklit ediliyor.
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "mkdir -p /usr/share/navigator/ai-stack"
+          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/router root@127.0.0.1:/usr/share/navigator/ai-stack/router
+          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/local-runtime root@127.0.0.1:/usr/share/navigator/ai-stack/local-runtime
+          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/cloud-bridge root@127.0.0.1:/usr/share/navigator/ai-stack/cloud-bridge
 
       - name: DRM/GPU cihazlarını VM içinde listele (teşhis için)
         run: |

@@ -1,13 +1,46 @@
 import Quickshell
+import Quickshell.Io
 
-// Navigator OS — Quickshell giriş noktası (Faz 2 taslağı).
+// Navigator OS — Quickshell giriş noktası.
 //
-// Quickshell bu geliştirme ortamında kurulu değil (Fedora'ya özel COPR
-// paketi, bkz. image/Containerfile Katman 2 — errornointernet/quickshell,
-// Qt 6.10 gerektiriyor); bu dosyalar çalışma zamanında henüz test
-// EDİLMEDİ. Sözdizimi Quickshell 0.3.0 dokümantasyonuna göre yazıldı
-// (https://quickshell.outfoxxed.me/docs/). Gerçek doğrulama Faz 3'te,
-// Navigator imajı gerçek/sanal donanımda çalıştırıldığında yapılacak.
+// Faz 4'te CI'da gerçek bir Hyprland compositor'a karşı çalıştırılıp
+// doğrulandı (bkz. shell/README.md, build-disk-and-boot-test.yml
+// "hyprland-test" job'ı) — artık sadece statik incelemeden ibaret değil.
 ShellRoot {
-    Bar {}
+    id: root
+
+    // AssistantPanel'in görünürlüğü — AssistantToggle tıklaması (Bar.qml)
+    // veya Hyprland Super+Space kısayolu (qs ipc call assistant toggle,
+    // bkz. hyprland/hyprland.conf) ile değişir.
+    property bool assistantVisible: false
+
+    IpcHandler {
+        target: "assistant"
+
+        function toggle(): void {
+            root.assistantVisible = !root.assistantVisible
+        }
+
+        function ask(prompt: string): void {
+            root.assistantVisible = true
+            panel.ask(prompt)
+        }
+
+        function getResponse(): string {
+            return panel.responseText
+        }
+
+        function isLoading(): bool {
+            return panel.loading
+        }
+    }
+
+    Bar {
+        onAssistantToggled: root.assistantVisible = !root.assistantVisible
+    }
+
+    AssistantPanel {
+        id: panel
+        visible: root.assistantVisible
+    }
 }
