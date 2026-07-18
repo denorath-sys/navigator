@@ -454,11 +454,19 @@ jobs:
           # zaman "cloud"a düşecek (model_ready=false kuralı) ve cloud-bridge
           # "credentials_not_configured" ile graceful şekilde "unavailable"
           # dönecek — bu, gerçek bir uçtan uca hata yolu testi, mock değil.
-          qs ipc call assistant ask "Merhaba, sen kimsin?"
+          #
+          # -p buraya ("ipc" alt komutundan hemen sonra) gerekiyor: Quickshell
+          # kaynağında (launch/parsecommand.cpp) doğrulandı — Config Selection
+          # seçenek grubu "ipc" alt komutuna kayıtlı, "call"a değil. -p'siz
+          # çağrı "default" adlı bir config arıyor (bizimki özel bir yolda,
+          # /root/shell/shell.qml) ve "Could not find default config..."
+          # hatasıyla sessizce başarısız oluyordu (ilk gerçek denemede görüldü).
+          IPC="qs ipc -p /root/shell/shell.qml call"
+          ${IPC} assistant ask "Merhaba, sen kimsin?"
 
           LOADING="true"
           for i in $(seq 1 30); do
-            LOADING="$(qs ipc call assistant isLoading)"
+            LOADING="$(${IPC} assistant isLoading)"
             if [ "$LOADING" = "false" ]; then
               break
             fi
@@ -469,7 +477,7 @@ jobs:
             exit 1
           fi
 
-          RESPONSE="$(qs ipc call assistant getResponse)"
+          RESPONSE="$(${IPC} assistant getResponse)"
           echo "AssistantPanel yanıtı: $RESPONSE"
           if [ -z "$RESPONSE" ]; then
             echo "HATA: AssistantPanel'den hiç yanıt gelmedi."
