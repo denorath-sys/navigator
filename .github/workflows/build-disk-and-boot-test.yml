@@ -318,6 +318,68 @@ jobs:
           echo "=== hyprctl monitors ==="
           hyprctl monitors || { echo "HATA: hyprctl monitors başarısız"; exit 1; }
 
+          echo "=== hyprland.conf'un gerçekten yüklendiğini doğrula ==="
+          # Bu repodaki hyprland/hyprland.conf, "mcp-tools kodunu... kopyala"
+          # adımında /root/.config/hypr/hyprland.conf'a kopyalandı — Hyprland'ın
+          # varsayılan arayacağı yer. Şimdiye kadar bu dosya sadece statik
+          # olarak incelenmişti (bkz. hyprland/README.md); burada gerçek
+          # compositor'ın onu parse edip uyguladığını hyprctl getoption ile
+          # doğruluyoruz — sadece "çökmedi" değil, config'teki gerçek
+          # değerlerin gerçekten etkili olduğunu kontrol ediyoruz.
+          echo "--- config error/parse uyarıları (varsa) ---"
+          grep -i "config error\|syntax error" /root/hyprland.log || echo "(yok)"
+
+          CONFIG_OK=1
+          check_option() {
+            local option="$1" expected="$2"
+            local actual
+            actual="$(hyprctl getoption "$option" -j | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          for k in ("int", "str", "float", "bool"):
+              if k in d:
+                  v = d[k]
+                  print(str(v).lower() if isinstance(v, bool) else v)
+                  break
+          ' 2>/dev/null)"
+            if [ "$actual" = "$expected" ]; then
+              echo "OK: $option = $actual"
+            else
+              echo "HATA: $option beklenen '$expected', gerçek '$actual'"
+              CONFIG_OK=0
+            fi
+          }
+          # Bunların hepsi hyprland.conf'ta varsayılandan farklı değerler
+          # (border_size varsayılanı 1, rounding varsayılanı 0,
+          # resize_on_border varsayılanı false, blur:passes varsayılanı 1,
+          # touchpad:natural_scroll varsayılanı false — kaynakta
+          # ConfigValues.cpp'de doğrulandı) — bu yüzden eşleşmeleri
+          # gerçekten config'in yüklendiğinin kanıtı, varsayılan değerle
+          # tesadüfi çakışma değil.
+          check_option general:border_size 2
+          check_option decoration:rounding 10
+          check_option input:touchpad:natural_scroll true
+          check_option decoration:blur:passes 2
+          check_option general:resize_on_border true
+
+          echo "--- mainMod+RETURN -> kitty bind'i yüklendi mi ---"
+          if hyprctl binds -j | python3 -c '
+          import json, sys
+          binds = json.load(sys.stdin)
+          found = any(b.get("key") == "RETURN" and b.get("modmask") and "kitty" in b.get("arg", "") for b in binds)
+          sys.exit(0 if found else 1)
+          '; then
+            echo "OK: mainMod+RETURN -> kitty bind'i bulundu"
+          else
+            echo "HATA: mainMod+RETURN -> kitty bind'i bulunamadı"
+            CONFIG_OK=0
+          fi
+
+          if [ "$CONFIG_OK" -ne 1 ]; then
+            echo "HATA: hyprland.conf beklenen şekilde yüklenmedi."
+            exit 1
+          fi
+
           echo "=== mcp-tools ile gerçek araç çağrısı ==="
           cd /root/mcp-tools
           python3 -c "
@@ -401,11 +463,17 @@ jobs:
               ;;
           esac
 
-      - name: mcp-tools kodunu ve test betiğini VM'e kopyala
+      - name: mcp-tools kodunu, test betiğini ve hyprland.conf'u VM'e kopyala
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/mcp-tools root@127.0.0.1:/root/mcp-tools
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 hyprland-test.sh root@127.0.0.1:/root/hyprland-test.sh
+          # Bu repodaki gerçek hyprland.conf'u (şimdiye kadar sadece statik
+          # olarak incelendi, bkz. hyprland/README.md) Hyprland'ın varsayılan
+          # arayacağı konuma koyuyoruz ki gerçek compositor onu gerçekten
+          # parse edip yüklesin.
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "mkdir -p /root/.config/hypr"
+          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 hyprland/hyprland.conf root@127.0.0.1:/root/.config/hypr/hyprland.conf
 
       - name: DRM/GPU cihazlarını VM içinde listele (teşhis için)
         run: |
