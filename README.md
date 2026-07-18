@@ -144,7 +144,14 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   varsayılandan farklı beş değerin (border_size, rounding, blur:passes,
   resize_on_border, touchpad:natural_scroll) ve mainMod+RETURN→kitty
   bind'inin gerçekten etkili olduğu doğrulandı, hiç config hatası
-  bulunmadı. Kalan: Quickshell UI entegrasyonu.
+  bulunmadı. **Quickshell'in kendisi de aynı VM'de gerçek Hyprland'a
+  karşı çalıştırıldı:** şimdiye kadar sadece statik `qmllint`
+  incelemesinden geçmişti (bkz. `shell/README.md`), artık `qs -p
+  shell.qml` CI'da gerçekten başlıyor ve `Bar.qml` gerçek bir
+  layer-shell yüzeyi olarak (`hyprctl layers` ile doğrulanan,
+  `namespace: quickshell`, gerçek monitör genişliğinde) map ediliyor —
+  ilk gerçek uçtan uca compositor+shell testi. Kalan: görsel doğruluk,
+  gerçek Hyprland IPC, `ai-stack/router`'a bağlanan asistan paneli.
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 
