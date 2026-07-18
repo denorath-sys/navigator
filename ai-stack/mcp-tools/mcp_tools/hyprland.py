@@ -5,12 +5,12 @@ olarak sadece SORGU var — workspace değiştirme, pencere kapatma/taşıma
 gibi dispatch komutları YOK (kapsam Faz 2'de bilinçli olarak dar
 tutuldu, bkz. mcp-tools/README.md "Kapsam dışı").
 
-**Bilinen sınırlama:** Geliştirme ortamı Debian/Pardus olduğundan
-(Hyprland bu dağıtımda paketli değil) bu araçlar GERÇEK bir Hyprland
-compositor'a karşı test edilemedi — sadece mock'lanmış subprocess
-testleriyle doğrulandı (bkz. `hyprland/README.md`'deki aynı sınırlama,
-`hyprland.conf`'un statik incelemesi için). Gerçek doğrulama Faz 3'te
-Navigator imajı üzerinde yapılacak.
+Geliştirme ortamı Debian/Pardus olduğundan (Hyprland bu dağıtımda
+paketli değil) bu araçlar yerel makinede test edilemiyor — ama CI'da
+(`build-disk-and-boot-test.yml`, `hyprland-test` job) gerçek bir
+Hyprland compositor'a karşı doğrulandı, mock'lanmış subprocess
+testlerine ek olarak (bkz. `mcp-tools/README.md` "Hyprland araçları —
+kapsam ve sınırlama").
 """
 import json
 import os

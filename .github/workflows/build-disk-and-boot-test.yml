@@ -325,6 +325,7 @@ jobs:
           import json
           print('list_windows:', json.dumps(list_windows()))
           print('list_workspaces:', json.dumps(list_workspaces()))
+          print('active_window:', json.dumps(active_window()))
           "
           SCRIPT
           chmod +x hyprland-test.sh
