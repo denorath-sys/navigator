@@ -221,7 +221,7 @@ jobs:
           cat qemu.log || true
 
   hyprland-test:
-    name: Hyprland'ı VM'de gerçekten başlat, mcp-tools'u test et
+    name: Hyprland'ı VM'de gerçekten başlat, mcp-tools ve Quickshell'i test et
     needs: build-disk
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -395,6 +395,54 @@ jobs:
           print('list_workspaces:', json.dumps(list_workspaces()))
           print('active_window:', json.dumps(active_window()))
           "
+
+          echo "=== Quickshell'i gerçek compositor'a karşı başlat ==="
+          # shell/README.md'de belgelenen "gerçek render/compositor testi
+          # yapılmadı" sınırlaması burada gideriliyor. Quickshell'in Wayland
+          # soketine bağlanabilmesi için WAYLAND_DISPLAY gerekiyor — Hyprland
+          # bunu kendi çocuk süreçlerine otomatik veriyor ama biz Hyprland'ı
+          # ayrı bir arka plan süreci olarak başlattığımızdan (setsid nohup),
+          # kendi kabuğumuzda elle export etmemiz gerekiyor. Soket adı
+          # $XDG_RUNTIME_DIR altında wayland-N (kilit dosyası hariç).
+          WAYLAND_SOCK="$(ls "$XDG_RUNTIME_DIR" 2>/dev/null | grep -E '^wayland-[0-9]+$' | head -n1)"
+          if [ -z "$WAYLAND_SOCK" ]; then
+            echo "HATA: Wayland soketi bulunamadı — Quickshell test edilemiyor."
+            exit 1
+          fi
+          export WAYLAND_DISPLAY="$WAYLAND_SOCK"
+          export QT_QPA_PLATFORM=wayland
+          echo "WAYLAND_DISPLAY=$WAYLAND_DISPLAY"
+
+          # qs -p <dosya>: Quickshell kaynağında (launch/parsecommand.cpp)
+          # doğrulanan tam sözdizimi — "~/myshell/randomfile.qml can be run
+          # with qs -p ~/myshell/randomfile.qml" örneğiyle birebir eşleşiyor.
+          setsid nohup qs -p /root/shell/shell.qml > /root/quickshell.log 2>&1 < /dev/null &
+          disown
+          sleep 8
+
+          echo "=== Quickshell log ==="
+          cat /root/quickshell.log || true
+
+          if ! pgrep -f "qs -p" >/dev/null; then
+            echo "HATA: Quickshell süreci ayakta değil — muhtemelen çöktü."
+            exit 1
+          fi
+          echo "OK: Quickshell süreci ayakta."
+
+          echo "=== hyprctl layers (Quickshell gerçekten bir layer-shell yüzeyi map etti mi) ==="
+          hyprctl layers
+          if ! hyprctl layers -j | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          mon = data.get("Virtual-1", {})
+          levels = mon.get("levels", {})
+          found = any(len(v) > 0 for v in levels.values())
+          sys.exit(0 if found else 1)
+          '; then
+            echo "HATA: Virtual-1 monitöründe hiçbir layer-shell yüzeyi bulunamadı — Bar.qml (PanelWindow) map olmamış olabilir."
+            exit 1
+          fi
+          echo "OK: en az bir layer-shell yüzeyi (Bar.qml/PanelWindow) gerçekten map edildi."
           SCRIPT
           chmod +x hyprland-test.sh
 
@@ -469,7 +517,7 @@ jobs:
               ;;
           esac
 
-      - name: mcp-tools kodunu, test betiğini ve hyprland.conf'u VM'e kopyala
+      - name: mcp-tools, hyprland.conf ve shell/ kodunu VM'e kopyala
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/mcp-tools root@127.0.0.1:/root/mcp-tools
@@ -480,14 +528,18 @@ jobs:
           # parse edip yüklesin.
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "mkdir -p /root/.config/hypr"
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 hyprland/hyprland.conf root@127.0.0.1:/root/.config/hypr/hyprland.conf
+          # shell/ (Quickshell) — şimdiye kadar sadece statik qmllint
+          # incelemesinden geçmişti (bkz. shell/README.md), gerçek
+          # compositor'a karşı hiç çalıştırılmamıştı.
+          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r shell root@127.0.0.1:/root/shell
 
       - name: DRM/GPU cihazlarını VM içinde listele (teşhis için)
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
-            "ls -la /dev/dri/ 2>&1; echo ---; lspci | grep -i vga; echo ---; which Hyprland python3; echo ---; rpm -q seatd libseat 2>&1; which seatd 2>&1; echo ---; echo XDG_SESSION_ID=\$XDG_SESSION_ID; loginctl 2>&1 || true"
+            "ls -la /dev/dri/ 2>&1; echo ---; lspci | grep -i vga; echo ---; which Hyprland python3 qs; echo ---; rpm -q seatd libseat quickshell 2>&1; which seatd 2>&1; echo ---; echo XDG_SESSION_ID=\$XDG_SESSION_ID; loginctl 2>&1 || true"
 
-      - name: Hyprland'ı gerçekten başlat ve mcp-tools ile test et
+      - name: Hyprland'ı gerçekten başlat, mcp-tools ve Quickshell'i test et
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "bash /root/hyprland-test.sh"
