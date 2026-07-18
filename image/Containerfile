@@ -31,6 +31,17 @@ FROM ${BASE_IMAGE}:${BASE_TAG}
 # COPR'ındaki hyprland-qt-support bağımlılığı aylardır Qt 6.9 private
 # API'sine sabitli kalmış (build log'da doğrulandı) ve Katman 2'deki
 # quickshell'in gerektirdiği Qt 6.10 ile çakışıyor.
+#
+# seatd: CI'da gerçek bir VM'de Hyprland'ı başlatma denemesinde (bkz.
+# .github/workflows/build-disk-and-boot-test.yml, hyprland-test job)
+# Hyprland "CBackend::create() failed!" ile çöktü. aquamarine kaynağında
+# doğrulandı: DRM backend libseat_open_seat() ile bir seat açmaya
+# çalışıyor; base image'da sadece libseat (kütüphane) var, seatd (daemon)
+# yok — `rpm -q seatd` "package seatd is not installed" döndü ve
+# `loginctl` gerçek oturumların SEAT sütununu "-" gösterdi (systemd-logind
+# seat ataması yapmıyor). seatd, gerçek bir VT/seat olmadan da (ör. bu
+# QEMU VM'i, ileride uzak/headless kullanım senaryoları) cihaz erişimini
+# kendi yönetebiliyor.
 RUN dnf5 -y copr enable solopasha/hyprland \
     && rpm-ostree install \
         hyprland \
@@ -45,6 +56,7 @@ RUN dnf5 -y copr enable solopasha/hyprland \
         NetworkManager \
         pipewire \
         wireplumber \
+        seatd \
     && ostree container commit
 
 # ---------------------------------------------------------------------------
