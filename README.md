@@ -137,7 +137,14 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   `hyprctl monitors` bir "Virtual-1" (QEMU) monitörü gösterdi;
   `list_windows`, `list_workspaces` VE `active_window`'un üçü de gerçek
   JSON döndürdü — mock değil (bkz. `ai-stack/mcp-tools/README.md`
-  "Hyprland araçları"). Kalan: Quickshell UI entegrasyonu.
+  "Hyprland araçları"). **`hyprland.conf`'un kendisi de aynı VM'de gerçek
+  compositor'a yüklendi:** şimdiye kadar sadece statik sözdizimi
+  incelemesinden geçmişti (bkz. `hyprland/README.md`), artık CI'da
+  gerçekten parse edilip `hyprctl getoption`/`hyprctl binds` ile
+  varsayılandan farklı beş değerin (border_size, rounding, blur:passes,
+  resize_on_border, touchpad:natural_scroll) ve mainMod+RETURN→kitty
+  bind'inin gerçekten etkili olduğu doğrulandı, hiç config hatası
+  bulunmadı. Kalan: Quickshell UI entegrasyonu.
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 
