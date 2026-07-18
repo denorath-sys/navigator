@@ -571,7 +571,11 @@ jobs:
           # gerçek imajda henüz yok; AssistantPanel.qml'in varsaydığı
           # /usr/share/navigator/ai-stack/ yolu (theme/ ile aynı kural,
           # Katman 3 yorumuna bkz.) burada CI'a özel olarak taklit ediliyor.
-          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "mkdir -p /usr/share/navigator/ai-stack"
+          # /usr, ostree/bootc imajlarında runtime'da salt-okunur (bu, gerçek
+          # ilk denemede "Read-only file system" ile doğrulandı) — rpm-ostree
+          # usroverlay, tam olarak bu tür geçici testler için belgelenen
+          # kalıcı olmayan (reboot'ta kaybolan) yazılabilir overlay'i açıyor.
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "rpm-ostree usroverlay && mkdir -p /usr/share/navigator/ai-stack"
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/router root@127.0.0.1:/usr/share/navigator/ai-stack/router
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/local-runtime root@127.0.0.1:/usr/share/navigator/ai-stack/local-runtime
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/cloud-bridge root@127.0.0.1:/usr/share/navigator/ai-stack/cloud-bridge
