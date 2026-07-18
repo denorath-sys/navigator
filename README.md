@@ -122,8 +122,23 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   donanım/dosya/pencere ile ilgili anahtar kelimelere de bakıyor — kısa
   ama araç gerektiren istekler (ör. "kaç CPU çekirdeği var?") bu makinede
   (tier="low") artık otomatik olarak daha güvenilir bulut yoluna
-  düşüyor, gerçek testte doğrulandı. Kalan: gerçek Hyprland/Quickshell
-  compositor testi (Faz 3'ten ertelendi), UI entegrasyonu.
+  düşüyor, gerçek testte doğrulandı. **Gerçek Hyprland compositor testi
+  tamamlandı** (Faz 3'ten ertelenmişti): `build-disk-and-boot-test.yml`'e
+  eklenen `hyprland-test` job'ı, gerçek bir Navigator disk imajını
+  QEMU'da (`virtio-gpu-pci` + `-display vnc`, host'ta GPU/EGL
+  gerektirmez) boot edip Hyprland'ı gerçekten başlatıyor ve
+  `mcp-tools`'un Hyprland sorgu araçlarını gerçek bir compositor'a karşı
+  çağırıyor. Yolda iki gerçek sorun bulunup düzeltildi: Hyprland'ın
+  kasıtlı root reddi (`--i-am-really-stupid` bayrağı gerekti) ve
+  aquamarine'ın DRM backend'inin `libseat` üzerinden bir seat açmaya
+  çalışması (SSH oturumunun gerçek bir seat'i yok; imaja eksik olan
+  `seatd` paketi eklendi, test betiği Hyprland'dan önce seatd'yi
+  başlatıp `LIBSEAT_BACKEND=seatd` ayarlıyor). Sonuç: gerçek
+  `hyprctl monitors` bir "Virtual-1" (QEMU) monitörü gösterdi,
+  `list_windows`/`list_workspaces` gerçek JSON döndürdü — mock değil
+  (bkz. `ai-stack/mcp-tools/README.md` "Hyprland araçları"). Kalan:
+  Quickshell UI entegrasyonu, `active_window`'un aynı CI testine
+  eklenmesi.
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 

@@ -77,9 +77,10 @@ bilinçli olarak **salt-okunur** — workspace değiştirme, pencere
 kapatma/taşıma gibi dispatch komutları YOK. `hyprctl -j <komut>`'u
 subprocess ile çağırıp JSON çıktısını döndürür.
 
-**Bilinen ve önemli sınırlama:** Geliştirme ortamı Debian/Pardus
-olduğundan (Hyprland bu dağıtımda paketli değil) bu üç araç GERÇEK bir
-Hyprland compositor'a karşı test edilemedi — sadece:
+Geliştirme ortamı Debian/Pardus olduğundan (Hyprland bu dağıtımda
+paketli değil) bu üç araç yerel makinede test edilemiyor — ama CI'da
+GERÇEK bir Hyprland compositor'a karşı doğrulandı (aşağıya bkz.).
+Bunlara ek olarak:
 
 1. Mock'lanmış `subprocess.run`/`shutil.which` ile unit test edildi
    (`tests/test_hyprland.py`).
@@ -89,22 +90,44 @@ Hyprland compositor'a karşı test edilemedi — sadece:
    test_hyprland_integration.py`) — cloud-bridge'in kimlik bilgisiz
    yolunun doğrulanmasıyla aynı desen.
 
-**Faz 3'te bilinçli olarak ertelendi:** Gerçek pencere/workspace
-verisiyle uçtan uca doğrulama için Navigator VM'inde gerçek bir
-Hyprland oturumu çalıştırmak araştırıldı. Teknik olarak mümkün
-görünüyor (QEMU `virtio-gpu-pci` sanal GPU'su Hyprland'a gerçek bir
-ekran çıkışı sağlar — Hyprland Wiki'nin "Virtual-GPU" sayfasına göre bu,
-render-only vGPU passthrough'undan farklı ve `AQ_NO_KMS_REQUIREMENT`
-gerektirmeden çalışabilir) ama zincir uzun: sanal GPU eklemek, Mesa/
-llvmpipe'nin imajda kurulu olduğunu doğrulamak, Hyprland'ı SSH
-oturumundan (seat/logind olmadan, muhtemelen root olarak) DRM izin
-sorunu yaşamadan başlatmak, VE `ai-stack/mcp-tools` kodunu (imajın
-kendisinde yok) SSH ile VM'e taşımak gerekiyor. Her CI denemesi ~20
-dakika sürdüğünden (bkz. kök `README.md` Faz 3 notları) ve ilk denemede
-çalışma olasılığı düşük olduğundan, bu iş bilinçli olarak Faz 4/5'e
-ertelendi — mevcut mock'lanmış + graceful-hata testleri (yukarıda)
-şimdilik yeterli kabul edildi (bkz. `hyprland/README.md`'deki aynı
-sınırlama, `hyprland.conf`'un statik incelemesi için).
+**Gerçek compositor'a karşı doğrulandı (CI, 2026-07-18):**
+`.github/workflows/build-disk-and-boot-test.yml`'deki `hyprland-test`
+job'ı, gerçek bir Navigator disk imajını QEMU'da (`virtio-gpu-pci` +
+`-display vnc`, host'ta GPU/EGL gerektirmez — misafir kendi Mesa/
+llvmpipe'ıyla yazılımda render ediyor) boot edip Hyprland'ı gerçekten
+başlatıyor ve `mcp_tools.hyprland` fonksiyonlarını doğrudan çağırıyor.
+Yolda iki gerçek sorun çıktı ve çözüldü:
+
+- Hyprland kasıtlı olarak root'u reddediyor — CI'da yalnızca root SSH
+  erişimi var, `--i-am-really-stupid` bayrağıyla aşıldı.
+- aquamarine'ın DRM backend'i `libseat_open_seat()` ile bir seat açmaya
+  çalışıyor; SSH oturumunun systemd-logind'de gerçek bir seat'i
+  olmadığından bu başarısız oluyordu (`CBackend::create() failed!`).
+  imajda `seatd` paketi yoktu (`rpm -q seatd` → "package seatd is not
+  installed", `loginctl` → SEAT sütunu "-"); paket eklendi
+  (`image/Containerfile`) ve test betiği Hyprland'dan önce seatd'yi
+  arka planda başlatıp `LIBSEAT_BACKEND=seatd` ayarlıyor.
+
+Sonuç — gerçek `hyprctl monitors` çıktısı (QEMU sanal monitörü):
+
+```
+Monitor Virtual-1 (ID 0):
+	1280x800@74.99400 at 0x0
+	description: Red Hat Inc. QEMU Monitor
+	...
+	focused: yes
+```
+
+Ve gerçek `mcp_tools.hyprland` çağrıları (mock değil):
+
+```
+list_windows: []
+list_workspaces: [{"id": 1, "name": "1", "monitor": "Virtual-1", "monitorID": 0, "windows": 0, "hasfullscreen": false, "lastwindow": "0x0", "lastwindowtitle": "", "ispersistent": false}]
+```
+
+(`list_windows` boş dönüyor çünkü hiçbir pencere açılmadı — beklenen
+davranış; `active_window` de aynı yolla doğrulanabilir ama test
+betiğine henüz eklenmedi.)
 
 ## Kullanım
 
@@ -228,12 +251,15 @@ POST), token'sız/yanlış token ile her iki uç noktada da `401` (bkz.
 - Hyprland **kontrol** komutları yok — sadece sorgu (`list_windows`,
   `list_workspaces`, `active_window`). Workspace değiştirme, pencere
   odaklama/kapatma/taşıma gibi dispatch komutları bilinçli olarak
-  eklenmedi (daha geniş bir yetki yüzeyi, gerçek Hyprland olmadan test
-  edilemeyen bir alan daha).
+  eklenmedi (daha geniş bir yetki yüzeyi; CI'da gerçek Hyprland artık
+  test edilebiliyor ama bu, kapsamı genişletme kararını henüz
+  gerektirmedi).
 - Quickshell ile konuşan araçlar yok.
-- Hyprland araçları gerçek bir compositor'a karşı hiç test edilmedi (bu
-  makinede Hyprland çalışmıyor) — sadece mock'lanmış + graceful-hata
-  testleri var, bkz. "Hyprland araçları — kapsam ve sınırlama".
+- Hyprland araçları bu (Debian/Pardus) makinede test edilemiyor, ama
+  CI'da gerçek bir compositor'a karşı doğrulandı — bkz. "Hyprland
+  araçları — kapsam ve sınırlama". `active_window` henüz CI test
+  betiğine eklenmedi (sadece `list_windows`/`list_workspaces`
+  doğrulandı).
 - TLS/HTTPS yok — Bearer token düz HTTP üzerinden taşınıyor; şu an sadece
   `127.0.0.1` varsayımıyla güvenli, dışa açık kullanım için TLS şart.
 - MCP'nin daha yeni "Streamable HTTP" transport'u yok — sadece klasik
