@@ -123,11 +123,13 @@ Ve gerçek `mcp_tools.hyprland` çağrıları (mock değil):
 ```
 list_windows: []
 list_workspaces: [{"id": 1, "name": "1", "monitor": "Virtual-1", "monitorID": 0, "windows": 0, "hasfullscreen": false, "lastwindow": "0x0", "lastwindowtitle": "", "ispersistent": false}]
+active_window: {}
 ```
 
-(`list_windows` boş dönüyor çünkü hiçbir pencere açılmadı — beklenen
-davranış; `active_window` de aynı yolla doğrulanabilir ama test
-betiğine henüz eklenmedi.)
+(`list_windows` ve `active_window` boş dönüyor çünkü hiçbir pencere
+açılmadı — beklenen davranış, hata değil: `hyprctl -j activewindow`
+odaklanmış pencere yokken `{}` döner, `active_window()` bunu bir
+`HyprlandError` fırlatmadan olduğu gibi geçiriyor.)
 
 ## Kullanım
 
@@ -256,10 +258,9 @@ POST), token'sız/yanlış token ile her iki uç noktada da `401` (bkz.
   gerektirmedi).
 - Quickshell ile konuşan araçlar yok.
 - Hyprland araçları bu (Debian/Pardus) makinede test edilemiyor, ama
-  CI'da gerçek bir compositor'a karşı doğrulandı — bkz. "Hyprland
-  araçları — kapsam ve sınırlama". `active_window` henüz CI test
-  betiğine eklenmedi (sadece `list_windows`/`list_workspaces`
-  doğrulandı).
+  CI'da gerçek bir compositor'a karşı üçü de (`list_windows`,
+  `list_workspaces`, `active_window`) doğrulandı — bkz. "Hyprland
+  araçları — kapsam ve sınırlama".
 - TLS/HTTPS yok — Bearer token düz HTTP üzerinden taşınıyor; şu an sadece
   `127.0.0.1` varsayımıyla güvenli, dışa açık kullanım için TLS şart.
 - MCP'nin daha yeni "Streamable HTTP" transport'u yok — sadece klasik

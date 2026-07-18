@@ -134,11 +134,10 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   çalışması (SSH oturumunun gerçek bir seat'i yok; imaja eksik olan
   `seatd` paketi eklendi, test betiği Hyprland'dan önce seatd'yi
   başlatıp `LIBSEAT_BACKEND=seatd` ayarlıyor). Sonuç: gerçek
-  `hyprctl monitors` bir "Virtual-1" (QEMU) monitörü gösterdi,
-  `list_windows`/`list_workspaces` gerçek JSON döndürdü — mock değil
-  (bkz. `ai-stack/mcp-tools/README.md` "Hyprland araçları"). Kalan:
-  Quickshell UI entegrasyonu, `active_window`'un aynı CI testine
-  eklenmesi.
+  `hyprctl monitors` bir "Virtual-1" (QEMU) monitörü gösterdi;
+  `list_windows`, `list_workspaces` VE `active_window`'un üçü de gerçek
+  JSON döndürdü — mock değil (bkz. `ai-stack/mcp-tools/README.md`
+  "Hyprland araçları"). Kalan: Quickshell UI entegrasyonu.
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 
