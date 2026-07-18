@@ -356,11 +356,17 @@ jobs:
           # ConfigValues.cpp'de doğrulandı) — bu yüzden eşleşmeleri
           # gerçekten config'in yüklendiğinin kanıtı, varsayılan değerle
           # tesadüfi çakışma değil.
+          #
+          # Not: ilk gerçek CI denemesinde bool tipi seçeneklerin
+          # `hyprctl getoption -j` çıktısında "bool": true/false değil,
+          # "int": 1/0 olarak döndüğü görüldü (kaynak koduyla eşleşmeyen
+          # ama gerçek çalışan binary'nin gerçek davranışı) — beklenen
+          # değerler buna göre düzeltildi.
           check_option general:border_size 2
           check_option decoration:rounding 10
-          check_option input:touchpad:natural_scroll true
+          check_option input:touchpad:natural_scroll 1
           check_option decoration:blur:passes 2
-          check_option general:resize_on_border true
+          check_option general:resize_on_border 1
 
           echo "--- mainMod+RETURN -> kitty bind'i yüklendi mi ---"
           if hyprctl binds -j | python3 -c '
