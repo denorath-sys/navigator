@@ -480,12 +480,19 @@ jobs:
           RESPONSE="$(${IPC} assistant getResponse)"
           echo "AssistantPanel yanıtı: $RESPONSE"
 
-          echo "=== Quickshell log (assistant testinden SONRA — routerProcess teşhis çıktısı dahil) ==="
+          echo "=== Quickshell stdout/stderr log (assistant testinden SONRA) ==="
           cat /root/quickshell.log || true
+
+          # console.log() çıktısı /root/quickshell.log'a değil, Quickshell'in
+          # kendi yapılandırılmış qslog dosyasına gidiyor (üstteki
+          # "Saving logs to ..." satırında görüldü) — `qs log` bunu okumanın
+          # belgelenen yolu.
+          echo "=== Quickshell console.log çıktısı (qs log) ==="
+          qs log -p /root/shell/shell.qml || true
 
           case "$RESPONSE" in
             ""|"HATA:"*|"Ayrıştırma hatası"*)
-              echo "HATA: AssistantPanel gerçek bir yanıt üretmedi (bkz. yukarıdaki quickshell.log)."
+              echo "HATA: AssistantPanel gerçek bir yanıt üretmedi (bkz. yukarıdaki loglar)."
               exit 1
               ;;
           esac
