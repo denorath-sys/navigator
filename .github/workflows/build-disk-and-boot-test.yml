@@ -462,7 +462,13 @@ jobs:
           # /root/shell/shell.qml) ve "Could not find default config..."
           # hatasıyla sessizce başarısız oluyordu (ilk gerçek denemede görüldü).
           IPC="qs ipc -p /root/shell/shell.qml call"
-          ${IPC} assistant ask "Merhaba, sen kimsin?"
+          # Üçüncü gerçek denemede "qs log" hiçbir [AssistantPanel] satırı
+          # göstermedi — ask()'in hiç çalışmamış olabileceğini düşündürüyor.
+          # Bu çağrının kendi çıktısı/çıkış kodu hiç kontrol edilmiyordu;
+          # şimdi açıkça yakalanıp gösteriliyor.
+          ASK_OUT="$(${IPC} assistant ask "Merhaba, sen kimsin?" 2>&1)"
+          ASK_EXIT=$?
+          echo "qs ipc call assistant ask -> exit=${ASK_EXIT} çıktı=${ASK_OUT}"
 
           LOADING="true"
           for i in $(seq 1 30); do
