@@ -479,10 +479,16 @@ jobs:
 
           RESPONSE="$(${IPC} assistant getResponse)"
           echo "AssistantPanel yanıtı: $RESPONSE"
-          if [ -z "$RESPONSE" ]; then
-            echo "HATA: AssistantPanel'den hiç yanıt gelmedi."
-            exit 1
-          fi
+
+          echo "=== Quickshell log (assistant testinden SONRA — routerProcess teşhis çıktısı dahil) ==="
+          cat /root/quickshell.log || true
+
+          case "$RESPONSE" in
+            ""|"HATA:"*|"Ayrıştırma hatası"*)
+              echo "HATA: AssistantPanel gerçek bir yanıt üretmedi (bkz. yukarıdaki quickshell.log)."
+              exit 1
+              ;;
+          esac
           echo "OK: AssistantPanel gerçekten ai-stack/router'ı çağırdı ve bir yanıt aldı."
           SCRIPT
           chmod +x hyprland-test.sh

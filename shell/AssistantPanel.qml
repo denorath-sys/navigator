@@ -45,6 +45,8 @@ PanelWindow {
         panel.responseText = ""
         routerProcess.running = false
         routerProcess.command = ["python3", "-m", "router", "--prompt", trimmed]
+        console.log("[AssistantPanel] ask(): running router in " + routerProcess.workingDirectory
+            + " command=" + JSON.stringify(routerProcess.command))
         routerProcess.running = true
     }
 
@@ -52,12 +54,33 @@ PanelWindow {
         id: routerProcess
         workingDirectory: "/usr/share/navigator/ai-stack/router"
 
+        property int lastExitCode: -1
+
+        onExited: (exitCode, exitStatus) => {
+            routerProcess.lastExitCode = exitCode
+            console.log("[AssistantPanel] routerProcess exited: exitCode=" + exitCode + " exitStatus=" + exitStatus)
+        }
+
         stdout: StdioCollector {
             id: outCollector
+            waitForEnd: true
             onStreamFinished: {
                 panel.loading = false
+                const out = outCollector.text
+                console.log("[AssistantPanel] stdout finished, length=" + out.length
+                    + " stderr_length=" + errCollector.text.length)
+                if (out.length === 0) {
+                    // Boş stdout — çıkış kodu ve stderr'i olduğu gibi göster,
+                    // sessizce "Ayrıştırma hatası" deyip stderr'i gizleme
+                    // (ilk gerçek CI denemesinde tam olarak bu oldu: boş
+                    // yanıt "Ayrıştırma hatası: " olarak raporlandı ve
+                    // gerçek nedeni gizledi).
+                    panel.responseText = "HATA: router'dan çıktı gelmedi (exit=" + routerProcess.lastExitCode
+                        + ", stderr=" + (errCollector.text.length > 0 ? errCollector.text : "(boş)") + ")"
+                    return
+                }
                 try {
-                    const parsed = JSON.parse(outCollector.text)
+                    const parsed = JSON.parse(out)
                     const result = parsed.route === "cloud" ? parsed.cloud_bridge : parsed.local_runtime
                     if (result && result.status === "ok") {
                         panel.responseText = result.content
@@ -65,22 +88,16 @@ PanelWindow {
                         panel.responseText = "[" + parsed.route + "] " + (result.status || "hata") + ": "
                             + (result.reason || result.error || "bilinmeyen")
                     } else {
-                        panel.responseText = "Beklenmeyen yanıt: " + outCollector.text
+                        panel.responseText = "Beklenmeyen yanıt: " + out
                     }
                 } catch (e) {
-                    panel.responseText = "Ayrıştırma hatası: " + outCollector.text
+                    panel.responseText = "Ayrıştırma hatası (" + e + "): " + out
                 }
             }
         }
 
         stderr: StdioCollector {
             id: errCollector
-            onStreamFinished: {
-                if (errCollector.text.length > 0 && panel.responseText === "") {
-                    panel.loading = false
-                    panel.responseText = "Hata: " + errCollector.text
-                }
-            }
         }
     }
 
