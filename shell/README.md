@@ -14,14 +14,23 @@ edildi; gerekçe: QML'in performans/render avantajı ve Navigator'ın kendine
 
 ## Dosyalar
 
-- `shell.qml` — Quickshell giriş noktası (`ShellRoot`)
+- `shell.qml` — Quickshell giriş noktası (`ShellRoot`); `assistantVisible`
+  durumunu ve `IpcHandler` (`target: "assistant"`) ile
+  `toggle()`/`ask(prompt)`/`getResponse()`/`isLoading()` fonksiyonlarını
+  tutar — hem `Bar.qml`'deki tıklamayı hem Hyprland Super+Space kısayolunu
+  (`qs ipc call assistant toggle`) `AssistantPanel`'e bağlar.
 - `Theme.qml` — Navigator marka paleti (`../theme/palette.json` ile manuel
   senkron tutulur, `hyprland/hyprland.conf`'un renk senkron yöntemiyle aynı)
 - `Bar.qml` — üst panel (`PanelWindow`, wlr-layer-shell)
 - `WorkspaceIndicator.qml` — workspace göstergesi (**placeholder**: statik
   1-10 pil, henüz gerçek Hyprland IPC'siyle bağlı değil)
-- `AssistantToggle.qml` — AI asistan paneli anahtarı (**placeholder**: sadece
-  görsel buton, henüz `ai-stack/router`'a bağlı değil)
+- `AssistantToggle.qml` — AI asistan paneli anahtarı; tıklanınca `toggled()`
+  sinyali yayar (`Bar.qml` üzerinden `shell.qml`'e bağlı)
+- `AssistantPanel.qml` — **`ai-stack/router`'a gerçekten bağlı** asistan
+  paneli: metin girişi + `ai-stack/router`'ı `Quickshell.Io.Process` ile
+  subprocess olarak çağıran mantık + gerçek yanıtı (route + içerik, ya da
+  graceful hata) gösteren alan (bkz. "AssistantPanel — gerçek router
+  entegrasyonu" aşağıda)
 - `Clock.qml` — canlı saat göstergesi
 
 ## Gerçek compositor'da runtime doğrulaması (CI, Faz 4)
@@ -54,9 +63,54 @@ engellemedi).
 
 **Bilinen kalan sınırlama:** Bu, `Bar.qml`'in gerçekten map olup
 render edildiğinin kanıtı — görsel çıktının (renkler, blur, layout)
-piksel piksel doğru olduğu veya `WorkspaceIndicator`/`AssistantToggle`
-içindeki tıklama/etkileşimin çalıştığı ayrıca test edilmedi (headless
-VNC display'den ekran görüntüsü almak ek karmaşıklık gerektirir).
+piksel piksel doğru olduğu veya `WorkspaceIndicator` içindeki
+tıklama/etkileşimin çalıştığı ayrıca test edilmedi (headless VNC
+display'den ekran görüntüsü almak ek karmaşıklık gerektirir).
+
+## AssistantPanel — gerçek `ai-stack/router` entegrasyonu (CI, Faz 4)
+
+`AssistantToggle` artık sadece bir konsol logu yazmıyor — `AssistantPanel`'i
+açıp kapatıyor, ve bu panel `ai-stack/router`'ı **gerçekten** çağırıyor
+(`Quickshell.Io.Process` ile `python3 -m router --prompt <soru>`,
+`/usr/share/navigator/ai-stack/router` içinde). `shell.qml`'deki
+`IpcHandler` (`target: "assistant"`) hem `Bar.qml`'deki tıklamayı hem
+Hyprland Super+Space kısayolunu (`hyprland/hyprland.conf`: artık
+`exec, qs ipc call assistant toggle`, eskiden placeholder `echo`) aynı
+panele bağlıyor.
+
+`router`'ın kurulum yolu `image/Containerfile`'da henüz kararlaştırılmadı
+(Katman 5 "AI stack" hâlâ PLACEHOLDER, Faz 2+) — `theme/` ile aynı
+`/usr/share/navigator/` kuralı (Katman 3 yorumuna bkz.) izlenerek
+varsayıldı. `hyprland-test` job'ı bu varsayımı gerçekten test ediyor:
+`/usr` runtime'da salt-okunur olduğundan (`rpm-ostree usroverlay` ile
+geçici olarak yazılabilir yapılıyor — reboot'ta kaybolur, sadece bu
+tek seferlik CI VM'i için), `ai-stack/router` + `local-runtime` +
+`cloud-bridge` + `hardware-probe` (router'ın tam bağımlılık zinciri)
+`/usr/share/navigator/ai-stack/` altına kopyalanıyor, sonra
+`qs ipc -p /root/shell/shell.qml call assistant ask "<soru>"` ile
+gerçek bir soru soruluyor ve `getResponse()`/`isLoading()` ile sonuç
+okunuyor.
+
+Gerçek sonuç (CI'da ne Ollama ne Claude API kimlik bilgisi var, bu
+yüzden `model_ready=false` kuralıyla her zaman "cloud"a düşüyor ve
+`cloud-bridge` kimlik bilgisiz olduğundan graceful "unavailable"
+dönüyor — mock değil, gerçek bir uçtan uca hata yolu):
+
+```
+AssistantPanel yanıtı: [cloud] unavailable: credentials_not_configured
+```
+
+**Yol boyunca bulunup düzeltilen gerçek sorunlar:**
+- `qs ipc call`, `-p`/`--path`'i `ipc` alt komutunun kendisine kayıtlı
+  bekliyor (`call`'a değil) — kaynağında (`launch/parsecommand.cpp`)
+  doğrulandı; doğru sözdizimi `qs ipc -p <yol> call <target> <fn>`.
+- `ai-stack/router`'ın kendisi VM'e kopyalandıktan sonra bile
+  başarısız oluyordu: `local-runtime`'ın kendi varsayılan
+  `--hardware-probe-path` (`../hardware-probe`) bağımlılığı hiç
+  kopyalanmamıştı — Quickshell'den bağımsız, doğrudan SSH ile
+  izole edilip bulundu (bkz. CI'daki "ai-stack/router'ı doğrudan
+  SSH ile test et" adımı, kalıcı bir regresyon kontrolü olarak
+  bırakıldı).
 
 **Gerçek statik analiz yapıldı (compositor gerektirmez):** Bu makineye
 `qt6-declarative-dev-tools` kuruldu ve gerçek Qt6 `qmllint`'i altı QML
@@ -103,11 +157,15 @@ Fedora'da `qt6-qtdeclarative-devel` benzeri.)
 
 - ~~Üst panel: workspace göstergesi, saat~~ — ilk taslak hazır (placeholder
   workspace göstergesi ile)
+- ~~AI asistan paneli — gerçek implementasyon~~ — `ai-stack/router`'a
+  gerçekten bağlı, CI'da doğrulandı (bkz. "AssistantPanel — gerçek
+  ai-stack/router entegrasyonu"); kalan: `ai-stack`'in kendisinin
+  `image/Containerfile`'a gerçek bir katman olarak eklenmesi (Katman 5
+  hâlâ PLACEHOLDER)
 - Alt panel / bildirim merkezi
-- AI asistan paneli — gerçek implementasyon (şu an sadece buton placeholder'ı
-  var, `hyprland/hyprland.conf`'taki Super+Space kısayoluna henüz bağlı değil)
 - Uygulama başlatıcı (wofi'nin yerini alacak özgün launcher)
-- Gerçek Hyprland IPC entegrasyonu (aktif/dolu workspace tespiti)
+- Gerçek Hyprland IPC entegrasyonu (aktif/dolu workspace tespiti —
+  `WorkspaceIndicator` hâlâ statik placeholder)
 
 ## Durum
 
@@ -121,5 +179,8 @@ Faz 4'te CI'da gerçek bir Hyprland compositor'a karşı çalıştırıldı:
 `qs -p shell.qml` gerçekten başladı ve `Bar.qml` gerçek bir
 layer-shell yüzeyi olarak map edildi (`hyprctl layers` ile doğrulandı)
 — bkz. yukarıdaki "Gerçek compositor'da runtime doğrulaması" bölümü.
-Kalan: görsel piksel doğruluğu, gerçek Hyprland IPC (workspace/pencere
-verisi), tıklama/etkileşim testleri.
+**`AssistantToggle` artık `ai-stack/router`'a gerçekten bağlı**
+(`AssistantPanel.qml`, yeni) — aynı CI'da uçtan uca doğrulandı (bkz.
+"AssistantPanel — gerçek ai-stack/router entegrasyonu"). Kalan: görsel
+piksel doğruluğu, gerçek Hyprland IPC (workspace/pencere verisi),
+tıklama/etkileşim testleri, `ai-stack`'in Containerfile'a katmanlanması.

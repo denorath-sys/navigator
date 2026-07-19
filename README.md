@@ -150,8 +150,22 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   shell.qml` CI'da gerçekten başlıyor ve `Bar.qml` gerçek bir
   layer-shell yüzeyi olarak (`hyprctl layers` ile doğrulanan,
   `namespace: quickshell`, gerçek monitör genişliğinde) map ediliyor —
-  ilk gerçek uçtan uca compositor+shell testi. Kalan: görsel doğruluk,
-  gerçek Hyprland IPC, `ai-stack/router`'a bağlanan asistan paneli.
+  ilk gerçek uçtan uca compositor+shell testi. **`AssistantToggle` artık
+  `ai-stack/router`'a gerçekten bağlı:** yeni `AssistantPanel.qml`,
+  `Quickshell.Io.Process` ile `python3 -m router`'ı gerçekten subprocess
+  olarak çağırıyor; `shell.qml`'deki `IpcHandler` hem panel tıklamasını
+  hem Hyprland Super+Space'i (artık `qs ipc call assistant toggle`,
+  eskiden placeholder `echo`) aynı panele bağlıyor. CI'da uçtan uca
+  doğrulandı — gerçek yanıt: `[cloud] unavailable:
+  credentials_not_configured` (CI'da Ollama/Claude kimlik bilgisi yok,
+  bu yüzden router her zaman cloud'a düşüyor ve cloud-bridge graceful
+  "unavailable" dönüyor — mock değil, gerçek bir uçtan uca hata yolu).
+  Yol boyunca iki gerçek sorun bulunup düzeltildi: `qs ipc call`'ın
+  `-p` bayrağının `ipc` alt komutuna (`call`'a değil) kayıtlı olması,
+  ve `ai-stack/router`'ın kendi bağımlılığı `ai-stack/hardware-probe`'un
+  CI'a hiç kopyalanmamış olması (bkz. `shell/README.md` "AssistantPanel
+  — gerçek ai-stack/router entegrasyonu"). Kalan: görsel doğruluk,
+  gerçek Hyprland IPC, `ai-stack`'in Containerfile'a katmanlanması.
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 
