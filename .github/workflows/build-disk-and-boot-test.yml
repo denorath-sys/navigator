@@ -624,6 +624,12 @@ jobs:
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/router root@127.0.0.1:/usr/share/navigator/ai-stack/router
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/local-runtime root@127.0.0.1:/usr/share/navigator/ai-stack/local-runtime
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/cloud-bridge root@127.0.0.1:/usr/share/navigator/ai-stack/cloud-bridge
+          # local-runtime'ın kendi varsayılan ../hardware-probe yoluyla
+          # eşleşmesi için — altıncı gerçek denemede doğrudan SSH ile
+          # izole edilen gerçek hata buydu: "python3 -m local_runtime"
+          # exit=1 ile "python3 -m hardware_probe" çağrısı başarısız
+          # olduğundan çöküyordu (bu paket hiç kopyalanmamıştı).
+          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/hardware-probe root@127.0.0.1:/usr/share/navigator/ai-stack/hardware-probe
 
       - name: DRM/GPU cihazlarını VM içinde listele (teşhis için)
         run: |
