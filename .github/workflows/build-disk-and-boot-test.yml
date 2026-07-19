@@ -631,6 +631,21 @@ jobs:
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
             "ls -la /dev/dri/ 2>&1; echo ---; lspci | grep -i vga; echo ---; which Hyprland python3 qs; echo ---; rpm -q seatd libseat quickshell 2>&1; which seatd 2>&1; echo ---; echo XDG_SESSION_ID=\$XDG_SESSION_ID; loginctl 2>&1 || true"
 
+      - name: ai-stack/router'ı doğrudan SSH ile test et (Quickshell'siz teşhis)
+        run: |
+          # Beşinci gerçek denemede AssistantPanel.qml'in Process'i
+          # (routerProcess) "running=true" oldu ama stdout neredeyse anında
+          # (~0.2sn) boş kapandı ve exited sinyali hiç gelmedi — gerçek bir
+          # python3 -m router çağrısı (kendi içinde local_runtime/cloud_bridge
+          # için ek python3 -m alt-süreçleri başlatıyor) bundan çok daha uzun
+          # sürmeli. Quickshell'in Process wrapper'ını devre dışı bırakıp
+          # AYNI komutu düz SSH ile çalıştırarak sorunun ai-stack/router'ın
+          # kendisinde mi yoksa Quickshell'in süreç başlatma mekanizmasında mı
+          # olduğunu izole ediyoruz.
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
+            "ls -la /usr/share/navigator/ai-stack/router/ 2>&1; echo ---; cd /usr/share/navigator/ai-stack/router && time python3 -m router --prompt 'test' --pretty; echo \"exit=\$?\""
+
       - name: Hyprland'ı gerçekten başlat, mcp-tools ve Quickshell'i test et
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
