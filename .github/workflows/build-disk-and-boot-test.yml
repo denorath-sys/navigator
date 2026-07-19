@@ -462,31 +462,9 @@ jobs:
           # /root/shell/shell.qml) ve "Could not find default config..."
           # hatasıyla sessizce başarısız oluyordu (ilk gerçek denemede görüldü).
           IPC="qs ipc -p /root/shell/shell.qml call"
-          # Üçüncü gerçek denemede "qs log" hiçbir [AssistantPanel] satırı
-          # göstermedi — ask()'in hiç çalışmamış olabileceğini düşündürüyor.
-          # Bu çağrının kendi çıktısı/çıkış kodu hiç kontrol edilmiyordu;
-          # şimdi açıkça yakalanıp gösteriliyor.
           ASK_OUT="$(${IPC} assistant ask "Merhaba, sen kimsin?" 2>&1)"
           ASK_EXIT=$?
           echo "qs ipc call assistant ask -> exit=${ASK_EXIT} çıktı=${ASK_OUT}"
-
-          # Dördüncü gerçek denemede ask() çağrısı exit=0 döndü (void
-          # fonksiyon için beklenen) ama routerProcess hiç başlamadı ve
-          # qs log hiçbir [AssistantPanel] satırı göstermedi — ask()'in QML
-          # tarafında gerçekten hiç ÇALIŞMADIĞINDAN şüpheleniliyor. debugLastArg
-          # ask()'in İLK satırında (herhangi bir guard/return'den önce) set
-          # ediliyor — "(hiç çağrılmadı)" dönerse fonksiyon hiç çalışmamış
-          # demektir (IPC hedef/fonksiyon eşleştirme sorunu); gerçek bir
-          # değer dönerse promptText argümanının ne şekilde ulaştığını (ör.
-          # virgül içeren string'in bozulup bozulmadığını) gösterir.
-          DEBUG_ARG="$(${IPC} assistant debugLastArg)"
-          echo "ask() debugLastArg -> ${DEBUG_ARG}"
-          # qs log yeni satırları göstermedi (muhtemelen qslog dosyası
-          # tamponlanıyor) — debugStage, ask()'in hangi satıra kadar
-          # ilerlediğini tamponlama sorunu olmadan canlı okunan bir
-          # property üzerinden gösteriyor.
-          DEBUG_STAGE="$(${IPC} assistant debugStage)"
-          echo "ask() debugStage -> ${DEBUG_STAGE}"
 
           LOADING="true"
           for i in $(seq 1 30); do
@@ -506,13 +484,6 @@ jobs:
 
           echo "=== Quickshell stdout/stderr log (assistant testinden SONRA) ==="
           cat /root/quickshell.log || true
-
-          # console.log() çıktısı /root/quickshell.log'a değil, Quickshell'in
-          # kendi yapılandırılmış qslog dosyasına gidiyor (üstteki
-          # "Saving logs to ..." satırında görüldü) — `qs log` bunu okumanın
-          # belgelenen yolu.
-          echo "=== Quickshell console.log çıktısı (qs log) ==="
-          qs log -p /root/shell/shell.qml || true
 
           case "$RESPONSE" in
             ""|"HATA:"*|"Ayrıştırma hatası"*)
@@ -639,15 +610,12 @@ jobs:
 
       - name: ai-stack/router'ı doğrudan SSH ile test et (Quickshell'siz teşhis)
         run: |
-          # Beşinci gerçek denemede AssistantPanel.qml'in Process'i
-          # (routerProcess) "running=true" oldu ama stdout neredeyse anında
-          # (~0.2sn) boş kapandı ve exited sinyali hiç gelmedi — gerçek bir
-          # python3 -m router çağrısı (kendi içinde local_runtime/cloud_bridge
-          # için ek python3 -m alt-süreçleri başlatıyor) bundan çok daha uzun
-          # sürmeli. Quickshell'in Process wrapper'ını devre dışı bırakıp
-          # AYNI komutu düz SSH ile çalıştırarak sorunun ai-stack/router'ın
-          # kendisinde mi yoksa Quickshell'in süreç başlatma mekanizmasında mı
-          # olduğunu izole ediyoruz.
+          # AssistantPanel.qml'in Process'ini devreye sokmadan, aynı komutu
+          # düz SSH ile çalıştırarak ai-stack/router'ın (ve ../local-runtime,
+          # ../hardware-probe göreli bağımlılıklarının) VM'de tek başına
+          # çalıştığını doğruluyor — bir sorun çıkarsa Quickshell'in süreç
+          # başlatma mekanizmasından mı yoksa ai-stack'in kendisinden mi
+          # geldiğini hızlıca ayırt etmeye yarıyor.
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
             "ls -la /usr/share/navigator/ai-stack/router/ 2>&1; echo ---; cd /usr/share/navigator/ai-stack/router && time python3 -m router --prompt 'test' --pretty; echo \"exit=\$?\""

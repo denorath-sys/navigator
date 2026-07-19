@@ -30,14 +30,6 @@ ShellRoot {
             return panel.responseText
         }
 
-        function debugLastArg(): string {
-            return panel.debugLastArg
-        }
-
-        function debugStage(): string {
-            return panel.debugStage
-        }
-
         function isLoading(): bool {
             return panel.loading
         }

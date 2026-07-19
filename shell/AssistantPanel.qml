@@ -20,16 +20,6 @@ PanelWindow {
 
     property string responseText: ""
     property bool loading: false
-    // Teşhis amaçlı: ask()'e gerçekten hangi argümanın ulaştığını (varsa)
-    // dışarıdan (IpcHandler.debugLastArg() üzerinden) gözlemlemek için —
-    // beşinci gerçek CI denemesinde ask()'in hiç çalışmadığından şüphelenildi
-    // (routerProcess hiç başlamadı, console.log hiç görünmedi).
-    property string debugLastArg: "(hiç çağrılmadı)"
-    // qs log, Quickshell'in kendi qslog dosyasını okuyor ve pratikte
-    // (muhtemelen tamponlama nedeniyle) yeni yazılan satırları göstermedi
-    // — bu yüzden ask()'in NE KADAR ilerlediğini IPC ile canlı okunan
-    // property'lerle izliyoruz (tamponlama sorunu olmayan, senkron okuma).
-    property string debugStage: "(hiç çağrılmadı)"
 
     anchors {
         top: true
@@ -47,23 +37,15 @@ PanelWindow {
     Theme { id: theme }
 
     function ask(promptText) {
-        panel.debugStage = "başladı"
-        panel.debugLastArg = "typeof=" + (typeof promptText) + " value=" + JSON.stringify(promptText)
         const trimmed = promptText.trim()
-        panel.debugStage = "trim tamam, len=" + trimmed.length
-        if (trimmed.length === 0 || panel.loading) {
-            panel.debugStage = "guard'da durdu (len=" + trimmed.length + " loading=" + panel.loading + ")"
+        if (trimmed.length === 0 || panel.loading)
             return
-        }
 
         panel.loading = true
         panel.responseText = ""
         routerProcess.running = false
-        panel.debugStage = "guard geçildi, command set ediliyor"
         routerProcess.command = ["python3", "-m", "router", "--prompt", trimmed]
-        panel.debugStage = "command set edildi: " + JSON.stringify(routerProcess.command)
         routerProcess.running = true
-        panel.debugStage = "running=true set edildi, routerProcess.running=" + routerProcess.running
     }
 
     Process {
@@ -74,7 +56,6 @@ PanelWindow {
 
         onExited: (exitCode, exitStatus) => {
             routerProcess.lastExitCode = exitCode
-            console.log("[AssistantPanel] routerProcess exited: exitCode=" + exitCode + " exitStatus=" + exitStatus)
         }
 
         stdout: StdioCollector {
@@ -83,14 +64,9 @@ PanelWindow {
             onStreamFinished: {
                 panel.loading = false
                 const out = outCollector.text
-                console.log("[AssistantPanel] stdout finished, length=" + out.length
-                    + " stderr_length=" + errCollector.text.length)
                 if (out.length === 0) {
                     // Boş stdout — çıkış kodu ve stderr'i olduğu gibi göster,
-                    // sessizce "Ayrıştırma hatası" deyip stderr'i gizleme
-                    // (ilk gerçek CI denemesinde tam olarak bu oldu: boş
-                    // yanıt "Ayrıştırma hatası: " olarak raporlandı ve
-                    // gerçek nedeni gizledi).
+                    // sessizce "Ayrıştırma hatası" deyip stderr'i gizleme.
                     panel.responseText = "HATA: router'dan çıktı gelmedi (exit=" + routerProcess.lastExitCode
                         + ", stderr=" + (errCollector.text.length > 0 ? errCollector.text : "(boş)") + ")"
                     return
