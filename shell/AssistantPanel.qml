@@ -25,6 +25,11 @@ PanelWindow {
     // beşinci gerçek CI denemesinde ask()'in hiç çalışmadığından şüphelenildi
     // (routerProcess hiç başlamadı, console.log hiç görünmedi).
     property string debugLastArg: "(hiç çağrılmadı)"
+    // qs log, Quickshell'in kendi qslog dosyasını okuyor ve pratikte
+    // (muhtemelen tamponlama nedeniyle) yeni yazılan satırları göstermedi
+    // — bu yüzden ask()'in NE KADAR ilerlediğini IPC ile canlı okunan
+    // property'lerle izliyoruz (tamponlama sorunu olmayan, senkron okuma).
+    property string debugStage: "(hiç çağrılmadı)"
 
     anchors {
         top: true
@@ -42,18 +47,23 @@ PanelWindow {
     Theme { id: theme }
 
     function ask(promptText) {
+        panel.debugStage = "başladı"
         panel.debugLastArg = "typeof=" + (typeof promptText) + " value=" + JSON.stringify(promptText)
         const trimmed = promptText.trim()
-        if (trimmed.length === 0 || panel.loading)
+        panel.debugStage = "trim tamam, len=" + trimmed.length
+        if (trimmed.length === 0 || panel.loading) {
+            panel.debugStage = "guard'da durdu (len=" + trimmed.length + " loading=" + panel.loading + ")"
             return
+        }
 
         panel.loading = true
         panel.responseText = ""
         routerProcess.running = false
+        panel.debugStage = "guard geçildi, command set ediliyor"
         routerProcess.command = ["python3", "-m", "router", "--prompt", trimmed]
-        console.log("[AssistantPanel] ask(): running router in " + routerProcess.workingDirectory
-            + " command=" + JSON.stringify(routerProcess.command))
+        panel.debugStage = "command set edildi: " + JSON.stringify(routerProcess.command)
         routerProcess.running = true
+        panel.debugStage = "running=true set edildi, routerProcess.running=" + routerProcess.running
     }
 
     Process {

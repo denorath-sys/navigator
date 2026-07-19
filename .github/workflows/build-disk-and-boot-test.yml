@@ -481,6 +481,12 @@ jobs:
           # virgül içeren string'in bozulup bozulmadığını) gösterir.
           DEBUG_ARG="$(${IPC} assistant debugLastArg)"
           echo "ask() debugLastArg -> ${DEBUG_ARG}"
+          # qs log yeni satırları göstermedi (muhtemelen qslog dosyası
+          # tamponlanıyor) — debugStage, ask()'in hangi satıra kadar
+          # ilerlediğini tamponlama sorunu olmadan canlı okunan bir
+          # property üzerinden gösteriyor.
+          DEBUG_STAGE="$(${IPC} assistant debugStage)"
+          echo "ask() debugStage -> ${DEBUG_STAGE}"
 
           LOADING="true"
           for i in $(seq 1 30); do
