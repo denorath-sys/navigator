@@ -470,6 +470,18 @@ jobs:
           ASK_EXIT=$?
           echo "qs ipc call assistant ask -> exit=${ASK_EXIT} çıktı=${ASK_OUT}"
 
+          # Dördüncü gerçek denemede ask() çağrısı exit=0 döndü (void
+          # fonksiyon için beklenen) ama routerProcess hiç başlamadı ve
+          # qs log hiçbir [AssistantPanel] satırı göstermedi — ask()'in QML
+          # tarafında gerçekten hiç ÇALIŞMADIĞINDAN şüpheleniliyor. debugLastArg
+          # ask()'in İLK satırında (herhangi bir guard/return'den önce) set
+          # ediliyor — "(hiç çağrılmadı)" dönerse fonksiyon hiç çalışmamış
+          # demektir (IPC hedef/fonksiyon eşleştirme sorunu); gerçek bir
+          # değer dönerse promptText argümanının ne şekilde ulaştığını (ör.
+          # virgül içeren string'in bozulup bozulmadığını) gösterir.
+          DEBUG_ARG="$(${IPC} assistant debugLastArg)"
+          echo "ask() debugLastArg -> ${DEBUG_ARG}"
+
           LOADING="true"
           for i in $(seq 1 30); do
             LOADING="$(${IPC} assistant isLoading)"

@@ -20,6 +20,11 @@ PanelWindow {
 
     property string responseText: ""
     property bool loading: false
+    // Teşhis amaçlı: ask()'e gerçekten hangi argümanın ulaştığını (varsa)
+    // dışarıdan (IpcHandler.debugLastArg() üzerinden) gözlemlemek için —
+    // beşinci gerçek CI denemesinde ask()'in hiç çalışmadığından şüphelenildi
+    // (routerProcess hiç başlamadı, console.log hiç görünmedi).
+    property string debugLastArg: "(hiç çağrılmadı)"
 
     anchors {
         top: true
@@ -37,6 +42,7 @@ PanelWindow {
     Theme { id: theme }
 
     function ask(promptText) {
+        panel.debugLastArg = "typeof=" + (typeof promptText) + " value=" + JSON.stringify(promptText)
         const trimmed = promptText.trim()
         if (trimmed.length === 0 || panel.loading)
             return
