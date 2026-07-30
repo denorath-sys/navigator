@@ -11,3 +11,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# Yerel Claude Code oturum notları (kişisel, commit edilmez)
+.claude-session-notes.md
