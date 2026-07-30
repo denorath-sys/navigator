@@ -89,6 +89,56 @@ Yerel bir deneyde (mtime'lar 1970'e çekilip dizin salt-okunur yapılarak)
 - `checked-hash` → `# ...probe.cpython-313.pyc matches ...probe.py`
   (hash tabanlı doğrulama mtime'dan bağımsız, .pyc kullanılıyor)
 
+### Gerçek CI kanıtı
+
+Bu katman gerçek bir Navigator disk imajında, QEMU/KVM ile boot edilmiş
+bir VM'de doğrulandı ([run
+30504082821](https://github.com/denorath-sys/navigator/actions/runs/30504082821),
+`build-disk-and-boot-test.yml` → `hyprland-test`). Doğrulama adımı önce
+`/usr`'a yazmayı deniyor ve BAŞARISIZ olmasını şart koşuyor — yani
+aşağıdaki her şey imajın kendisinden geliyor, hiçbir `scp`/`usroverlay`
+devrede değil:
+
+```
+OK: /usr salt-okunur, dolayısıyla aşağıdaki her şey imajdan geliyor.
+OK: hardware-probe / local-runtime / cloud-bridge / mcp-tools / router / assistant
+OK: sadece çalışma zamanı kodu var.          (tests/ ve .env* sızmamış)
+pyc sayısı: 36
+# /usr/share/navigator/ai-stack/router/router/__pycache__/status.cpython-314.pyc
+    matches /usr/share/navigator/ai-stack/router/router/status.py
+OK: .pyc'ler kullanılıyor, çalışma zamanında yeniden derleme yok.
+```
+
+Modüller imajdaki yolundan gerçekten çalıştı (kısaltılmış):
+
+```
+hardware-probe: {"cpu": {"model": "AMD EPYC 7763 64-Core Processor", ...},
+                 "memory": {"total_gb": 3.8}, ...}
+local-runtime:  {"hardware_tier": "minimal", "ollama_available": false,
+                 "model_ready": false}
+cloud-bridge:   {"provider": "anthropic", "credentials_configured": false}
+router:         {"route": "cloud", "reasoning": "yerel model hazır değil
+                 (Ollama kapalı veya model indirilmemiş)"}
+```
+
+`local-runtime`'ın durum raporu kendi `../hardware-probe` kardeşini,
+`router --decide-only` ise `../local-runtime`'ı subprocess olarak
+çağırdığı için bu iki satır aynı zamanda düz kardeş hiyerarşisinin
+imajda gerçekten çözüldüğünün kanıtı.
+
+Aynı run'da `mcp-tools`'un Hyprland araçları da artık imajdaki yoldan
+(`/usr/share/navigator/ai-stack/mcp-tools`, salt-okunur `/usr`) gerçek
+compositor'a karşı çağrıldı ve `shell/AssistantPanel.qml` imajdaki
+`router`'ı gerçekten çalıştırdı:
+
+```
+list_workspaces: [{"id": 1, "name": "1", "monitor": "Virtual-1", ...}]
+AssistantPanel yanıtı: [cloud] unavailable: credentials_not_configured
+```
+
+(Son satır beklenen doğru davranış: CI'da ne Ollama ne Claude kimlik
+bilgisi var — graceful hata yolu, mock değil.)
+
 ### Kimlik bilgisi (bilinen sınırlama)
 
 `cloud-bridge` kimlik bilgisini **sadece** `ANTHROPIC_API_KEY` /
