@@ -92,11 +92,72 @@ RUN dnf5 -y copr enable errornointernet/quickshell \
 # COPY hyprland/hyprland.conf /etc/skel/.config/hypr/hyprland.conf
 
 # ---------------------------------------------------------------------------
-# Katman 5: AI stack bağımlılıkları — PLACEHOLDER (Faz 2+)
+# Katman 5: Navigator AI stack (ai-stack/ — altı Python modülü)
 # ---------------------------------------------------------------------------
-# llama.cpp / Ollama gibi büyük bağımlılıklar, boyut kısıtı nedeniyle Faz 1'de
-# katmanlanmıyor. Faz 2'de ai-stack/local-runtime README'sindeki tasarım
-# netleştikten sonra ayrı bir katman olarak eklenecek.
+# ai-stack'in altı modülü /usr/share/navigator/ai-stack/ altına, repodaki
+# dizin adlarıyla BİREBİR AYNI düz kardeş hiyerarşiyle kopyalanır. Bu
+# hiyerarşi keyfi değil, çalışma zamanı sözleşmesinin parçası: modüller
+# birbirini `python3 -m <modül>` subprocess'i olarak, cwd'ye göreli
+# kardeş yollarla çağırıyor (router → ../local-runtime, ../cloud-bridge;
+# local-runtime → ../hardware-probe; assistant → ../router, ../mcp-tools —
+# bkz. ilgili __main__.py'lerdeki varsayılanlar). Dizin adları değişirse
+# veya düzleşme bozulursa zincir sessizce kırılır; gerçek bir CI
+# denemesinde tam olarak bu oldu (hardware-probe eksikti, router boş
+# stdout döndürdü).
+#
+# `shell/AssistantPanel.qml`'in `workingDirectory`'si de bu yolu
+# (/usr/share/navigator/ai-stack/router) kullanıyor; bu katman eklenene
+# kadar o yol CI'da scp + `rpm-ostree usroverlay` ile taklit ediliyordu.
+# Artık imajın kendisinde, /usr salt-okunur haldeyken mevcut.
+#
+# Sadece çalışma zamanında gerekli olanlar kopyalanıyor: paket dizini +
+# pyproject.toml (metadata/entry point tanımı). `tests/` kasıtlı olarak
+# imaja girmiyor; `.env.local` (gerçek API key, gitignore'lı) da öyle —
+# kimlik bilgisi imaja gömülmez, çalışma zamanında ortam değişkeni olarak
+# gelir (bkz. ai-stack/cloud-bridge/README.md; kod dosyadan değil sadece
+# ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN ortam değişkenlerinden okuyor).
+#
+# Altı modülün hiçbirinin üçüncü parti bağımlılığı yok (hepsinde
+# `dependencies = []`, stdlib-only) — bu yüzden bu katmanda pip/venv
+# gerekmiyor, ek bir paket kurulmuyor.
+COPY ai-stack/hardware-probe/hardware_probe/ /usr/share/navigator/ai-stack/hardware-probe/hardware_probe/
+COPY ai-stack/hardware-probe/pyproject.toml  /usr/share/navigator/ai-stack/hardware-probe/
+COPY ai-stack/local-runtime/local_runtime/   /usr/share/navigator/ai-stack/local-runtime/local_runtime/
+COPY ai-stack/local-runtime/pyproject.toml   /usr/share/navigator/ai-stack/local-runtime/
+COPY ai-stack/cloud-bridge/cloud_bridge/     /usr/share/navigator/ai-stack/cloud-bridge/cloud_bridge/
+COPY ai-stack/cloud-bridge/pyproject.toml    /usr/share/navigator/ai-stack/cloud-bridge/
+COPY ai-stack/mcp-tools/mcp_tools/           /usr/share/navigator/ai-stack/mcp-tools/mcp_tools/
+COPY ai-stack/mcp-tools/pyproject.toml       /usr/share/navigator/ai-stack/mcp-tools/
+COPY ai-stack/router/router/                 /usr/share/navigator/ai-stack/router/router/
+COPY ai-stack/router/pyproject.toml          /usr/share/navigator/ai-stack/router/
+COPY ai-stack/assistant/assistant/           /usr/share/navigator/ai-stack/assistant/assistant/
+COPY ai-stack/assistant/pyproject.toml       /usr/share/navigator/ai-stack/assistant/
+
+# python3, base-main imajında zaten var (CI'da `which python3` ile
+# doğrulandı) ama ai-stack'in tek çalışma zamanı bağımlılığı olduğu için
+# örtük bırakılmıyor: sürüm burada, build sırasında iddia ediliyor.
+# Böylece taban imaj ileride python3'ü düşürse veya 3.11'in altına inse
+# build kırılır — çalışma zamanında sessizce bozulmuş bir asistan yerine.
+#
+# compileall: /usr, çalışan sistemde salt-okunur olduğundan Python
+# __pycache__'i çalışma zamanında yazamaz ve her çağrıda kaynağı yeniden
+# derler (bu zincirde her istek 3-4 subprocess demek). Bytecode build
+# sırasında üretiliyor. `checked-hash` bilinçli bir seçim: ostree commit
+# tüm dosya mtime'larını normalize ediyor, dolayısıyla varsayılan
+# timestamp tabanlı geçersizleştirme .pyc'leri bayat sayardı — hash
+# tabanlı doğrulama mtime'dan bağımsızdır.
+RUN python3 -c "import sys; assert sys.version_info >= (3, 11), f'ai-stack Python >= 3.11 gerektiriyor, bulunan: {sys.version}'" \
+    && python3 -m compileall -q --invalidation-mode checked-hash /usr/share/navigator/ai-stack \
+    && ostree container commit
+
+# ---------------------------------------------------------------------------
+# Katman 6: Yerel model runtime (Ollama) — PLACEHOLDER
+# ---------------------------------------------------------------------------
+# llama.cpp / Ollama gibi büyük ikililer, boyut kısıtı nedeniyle hâlâ
+# katmanlanmıyor. Katman 5'teki `local-runtime` bu runtime'ın VARLIĞINI
+# gerektirmiyor: Ollama yoksa `model_ready: false` döndürüyor ve router
+# isteği buluta yönlendiriyor (CI'da gerçekten doğrulanan yol). Ollama
+# katmanlandığında yerel yol kendiliğinden devreye girer.
 
 # ---------------------------------------------------------------------------
 # Metadata

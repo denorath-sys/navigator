@@ -78,18 +78,14 @@ Hyprland Super+Space kısayolunu (`hyprland/hyprland.conf`: artık
 `exec, qs ipc call assistant toggle`, eskiden placeholder `echo`) aynı
 panele bağlıyor.
 
-`router`'ın kurulum yolu `image/Containerfile`'da henüz kararlaştırılmadı
-(Katman 5 "AI stack" hâlâ PLACEHOLDER, Faz 2+) — `theme/` ile aynı
-`/usr/share/navigator/` kuralı (Katman 3 yorumuna bkz.) izlenerek
-varsayıldı. `hyprland-test` job'ı bu varsayımı gerçekten test ediyor:
-`/usr` runtime'da salt-okunur olduğundan (`rpm-ostree usroverlay` ile
-geçici olarak yazılabilir yapılıyor — reboot'ta kaybolur, sadece bu
-tek seferlik CI VM'i için), `ai-stack/router` + `local-runtime` +
-`cloud-bridge` + `hardware-probe` (router'ın tam bağımlılık zinciri)
-`/usr/share/navigator/ai-stack/` altına kopyalanıyor, sonra
-`qs ipc -p /root/shell/shell.qml call assistant ask "<soru>"` ile
-gerçek bir soru soruluyor ve `getResponse()`/`isLoading()` ile sonuç
-okunuyor.
+`router`'ın kurulum yolu artık bir varsayım değil: `image/Containerfile`
+**Katman 5** ai-stack'in altı modülünü `/usr/share/navigator/ai-stack/`
+altına gerçekten kopyalıyor (bkz. `ai-stack/README.md`, "İmajdaki kurulum
+yolu"). İlk sürümde bu yol CI'da scp + `rpm-ostree usroverlay` ile taklit
+ediliyordu; o taklit kaldırıldı, `hyprland-test` job'ı artık `/usr`
+salt-okunur haldeyken imajın kendi içeriğini doğruluyor. Sonra
+`qs ipc -p /root/shell/shell.qml call assistant ask "<soru>"` ile gerçek
+bir soru soruluyor ve `getResponse()`/`isLoading()` ile sonuç okunuyor.
 
 Gerçek sonuç (CI'da ne Ollama ne Claude API kimlik bilgisi var, bu
 yüzden `model_ready=false` kuralıyla her zaman "cloud"a düşüyor ve
@@ -159,9 +155,10 @@ Fedora'da `qt6-qtdeclarative-devel` benzeri.)
   workspace göstergesi ile)
 - ~~AI asistan paneli — gerçek implementasyon~~ — `ai-stack/router`'a
   gerçekten bağlı, CI'da doğrulandı (bkz. "AssistantPanel — gerçek
-  ai-stack/router entegrasyonu"); kalan: `ai-stack`'in kendisinin
-  `image/Containerfile`'a gerçek bir katman olarak eklenmesi (Katman 5
-  hâlâ PLACEHOLDER)
+  ai-stack/router entegrasyonu")
+- ~~`ai-stack`'in `image/Containerfile`'a gerçek bir katman olarak
+  eklenmesi~~ — Katman 5 artık gerçek, CI `/usr` salt-okunur haldeyken
+  doğruluyor
 - Alt panel / bildirim merkezi
 - Uygulama başlatıcı (wofi'nin yerini alacak özgün launcher)
 - Gerçek Hyprland IPC entegrasyonu (aktif/dolu workspace tespiti —
@@ -181,6 +178,8 @@ layer-shell yüzeyi olarak map edildi (`hyprctl layers` ile doğrulandı)
 — bkz. yukarıdaki "Gerçek compositor'da runtime doğrulaması" bölümü.
 **`AssistantToggle` artık `ai-stack/router`'a gerçekten bağlı**
 (`AssistantPanel.qml`, yeni) — aynı CI'da uçtan uca doğrulandı (bkz.
-"AssistantPanel — gerçek ai-stack/router entegrasyonu"). Kalan: görsel
-piksel doğruluğu, gerçek Hyprland IPC (workspace/pencere verisi),
-tıklama/etkileşim testleri, `ai-stack`'in Containerfile'a katmanlanması.
+"AssistantPanel — gerçek ai-stack/router entegrasyonu"), ve panelin
+çağırdığı `/usr/share/navigator/ai-stack/router` yolu artık imajın
+kendisinden geliyor (Containerfile Katman 5). Kalan: görsel piksel
+doğruluğu, gerçek Hyprland IPC (workspace/pencere verisi),
+tıklama/etkileşim testleri.

@@ -9,12 +9,12 @@ import Quickshell.Io
 // kısayoluyla (qs ipc call assistant toggle, bkz. hyprland/hyprland.conf
 // ve shell.qml'deki IpcHandler) açılıp kapanır.
 //
-// router'ın kurulum yolu image/Containerfile'da henüz kararlaştırılmadı
-// (Katman 5 hâlâ PLACEHOLDER, Faz 2+) — theme/ ile aynı /usr/share/
-// navigator/ kuralı (bkz. Containerfile Katman 3 yorumu) izlenerek
-// /usr/share/navigator/ai-stack/router varsayıldı. CI'da bu yol, ai-stack/'i
-// aynı hiyerarşiyle VM'e kopyalayarak gerçekten test ediliyor (bkz.
-// build-disk-and-boot-test.yml).
+// Aşağıdaki workingDirectory artık bir varsayım değil: image/Containerfile
+// Katman 5, ai-stack'in altı modülünü /usr/share/navigator/ai-stack/ altına
+// gerçekten kopyalıyor. CI, bu yolun imajın kendisinden geldiğini
+// (/usr salt-okunur, hiçbir scp/usroverlay devrede değil) doğruluyor —
+// bkz. build-disk-and-boot-test.yml, "ai-stack'in imajın kendisinde
+// olduğunu doğrula" adımı.
 PanelWindow {
     id: panel
 

@@ -16,6 +16,9 @@ on:
       - "image/Containerfile"
       - "theme/**"
       - "hyprland/**"
+      # ai-stack/ artık imaja gerçekten kopyalanıyor (Containerfile Katman 5),
+      # dolayısıyla ai-stack'teki bir değişiklik imajı bayatlatıyor.
+      - "ai-stack/**"
       - ".github/workflows/build-image.yml"
 
 env:

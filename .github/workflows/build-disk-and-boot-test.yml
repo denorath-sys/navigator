@@ -386,8 +386,11 @@ jobs:
             exit 1
           fi
 
-          echo "=== mcp-tools ile gerçek araç çağrısı ==="
-          cd /root/mcp-tools
+          echo "=== mcp-tools ile gerçek araç çağrısı (imajdaki yoldan) ==="
+          # Katman 5'ten beri mcp-tools imajın kendisinde; artık VM'e
+          # kopyalanmıyor, /usr/share/navigator/ai-stack/mcp-tools'tan
+          # (salt-okunur /usr) çalıştırılıyor.
+          cd /usr/share/navigator/ai-stack/mcp-tools
           python3 -c "
           from mcp_tools.hyprland import list_windows, list_workspaces, active_window
           import json
@@ -566,10 +569,9 @@ jobs:
               ;;
           esac
 
-      - name: mcp-tools, hyprland.conf ve shell/ kodunu VM'e kopyala
+      - name: hyprland.conf ve shell/ kodunu VM'e kopyala
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/mcp-tools root@127.0.0.1:/root/mcp-tools
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 hyprland-test.sh root@127.0.0.1:/root/hyprland-test.sh
           # Bu repodaki gerçek hyprland.conf'u (şimdiye kadar sadece statik
           # olarak incelendi, bkz. hyprland/README.md) Hyprland'ın varsayılan
@@ -581,26 +583,104 @@ jobs:
           # incelemesinden geçmişti (bkz. shell/README.md), gerçek
           # compositor'a karşı hiç çalıştırılmamıştı.
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r shell root@127.0.0.1:/root/shell
-          # ai-stack/router (+ router'ın varsayılan ../local-runtime,
-          # ../cloud-bridge göreli yollarıyla eşleşmesi için kardeşleri) —
-          # image/Containerfile Katman 5 (AI stack) hâlâ PLACEHOLDER olduğundan
-          # gerçek imajda henüz yok; AssistantPanel.qml'in varsaydığı
-          # /usr/share/navigator/ai-stack/ yolu (theme/ ile aynı kural,
-          # Katman 3 yorumuna bkz.) burada CI'a özel olarak taklit ediliyor.
-          # /usr, ostree/bootc imajlarında runtime'da salt-okunur (bu, gerçek
-          # ilk denemede "Read-only file system" ile doğrulandı) — rpm-ostree
-          # usroverlay, tam olarak bu tür geçici testler için belgelenen
-          # kalıcı olmayan (reboot'ta kaybolan) yazılabilir overlay'i açıyor.
-          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "rpm-ostree usroverlay && mkdir -p /usr/share/navigator/ai-stack"
-          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/router root@127.0.0.1:/usr/share/navigator/ai-stack/router
-          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/local-runtime root@127.0.0.1:/usr/share/navigator/ai-stack/local-runtime
-          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/cloud-bridge root@127.0.0.1:/usr/share/navigator/ai-stack/cloud-bridge
-          # local-runtime'ın kendi varsayılan ../hardware-probe yoluyla
-          # eşleşmesi için — altıncı gerçek denemede doğrudan SSH ile
-          # izole edilen gerçek hata buydu: "python3 -m local_runtime"
-          # exit=1 ile "python3 -m hardware_probe" çağrısı başarısız
-          # olduğundan çöküyordu (bu paket hiç kopyalanmamıştı).
-          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r ai-stack/hardware-probe root@127.0.0.1:/usr/share/navigator/ai-stack/hardware-probe
+          # ai-stack ARTIK KOPYALANMIYOR: image/Containerfile Katman 5 onu
+          # gerçekten imaja gömüyor, /usr/share/navigator/ai-stack/ altına.
+          # Daha önce burada scp + `rpm-ostree usroverlay` ile CI'a özel bir
+          # taklit vardı; artık test gerçek üretim yolunu, /usr salt-okunur
+          # haldeyken doğruluyor (bkz. sonraki adım).
+
+      - name: ai-stack'in imajın kendisinde olduğunu doğrula (/usr salt-okunur)
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          # Bu adımın tek amacı, ai-stack'in CI tarafından kopyalanmış değil
+          # imajda katmanlanmış olduğunu kanıtlamak. Üç şeyi birlikte
+          # gösteriyor: (1) /usr gerçekten salt-okunur (yani hiçbir
+          # usroverlay/scp devrede değil), (2) altı modülün tamamı yerinde,
+          # (3) bytecode build sırasında üretilmiş (compileall katmanı).
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 'bash -s' <<'CHECK'
+          set -u
+          echo "=== /usr yazılabilir mi? (salt-okunur OLMASI bekleniyor) ==="
+          findmnt -no OPTIONS /usr || true
+          if touch /usr/share/navigator/.write-probe 2>/dev/null; then
+            rm -f /usr/share/navigator/.write-probe
+            echo "HATA: /usr yazılabilir — bu test artık gerçek imajı doğrulamıyor olabilir."
+            exit 1
+          fi
+          echo "OK: /usr salt-okunur, dolayısıyla aşağıdaki her şey imajdan geliyor."
+
+          echo "=== ai-stack modülleri ==="
+          ls -la /usr/share/navigator/ai-stack/
+          MISSING=0
+          for m in hardware-probe local-runtime cloud-bridge mcp-tools router assistant; do
+            if [ -f "/usr/share/navigator/ai-stack/$m/pyproject.toml" ]; then
+              echo "OK: $m"
+            else
+              echo "HATA: $m imajda yok"
+              MISSING=1
+            fi
+          done
+          [ "$MISSING" -eq 0 ] || exit 1
+
+          echo "=== tests/ ve .env* imaja SIZMAMIŞ olmalı ==="
+          if find /usr/share/navigator/ai-stack -name 'tests' -o -name '.env*' | grep -q .; then
+            echo "HATA: imajda istenmeyen dosyalar var:"
+            find /usr/share/navigator/ai-stack -name 'tests' -o -name '.env*'
+            exit 1
+          fi
+          echo "OK: sadece çalışma zamanı kodu var."
+
+          echo "=== build sırasında derlenmiş bytecode (salt-okunur /usr için) ==="
+          PYC_COUNT="$(find /usr/share/navigator/ai-stack -name '*.pyc' | wc -l)"
+          echo "pyc sayısı: ${PYC_COUNT}"
+          if [ "$PYC_COUNT" -eq 0 ]; then
+            echo "HATA: hiç .pyc yok — compileall katmanı çalışmamış."
+            exit 1
+          fi
+
+          echo "=== .pyc'ler çalışma zamanında GERÇEKTEN kullanılıyor mu ==="
+          # Sadece .pyc'lerin varlığını saymak yetmez: ostree mtime'ları
+          # normalize ettiği için timestamp tabanlı bir .pyc "bayat" sayılır
+          # ve salt-okunur /usr'da her çağrıda yeniden derlenirdi (yerelde
+          # python3 -v ile doğrulandı). checked-hash'in bu imajda gerçekten
+          # işe yaradığını python3 -v çıktısıyla kanıtlıyoruz.
+          IMPORT_V="$(cd /usr/share/navigator/ai-stack/router && python3 -v -c 'import router.decision' 2>&1 || true)"
+          if echo "$IMPORT_V" | grep -q "bytecode is stale"; then
+            echo "HATA: bytecode bayat sayılıyor — checked-hash beklendiği gibi çalışmıyor:"
+            echo "$IMPORT_V" | grep -E "bytecode is stale|could not create" | head -5
+            exit 1
+          fi
+          echo "$IMPORT_V" | grep -E "router/__pycache__" | head -3
+          echo "OK: .pyc'ler kullanılıyor, çalışma zamanında yeniden derleme yok."
+
+          echo "=== modüller imajdaki yolundan gerçekten çalışıyor mu ==="
+          # Argümansız çağrılar durum raporu basıyor (bkz. ilgili
+          # __main__.py docstring'leri). local_runtime'ın durum raporu kendi
+          # ../hardware-probe kardeşini subprocess olarak çalıştırıyor,
+          # router --decide-only ise ../local-runtime'ı — yani bu iki çağrı
+          # imajdaki düz kardeş hiyerarşisinin gerçekten çözüldüğünü de
+          # kanıtlıyor. mcp_tools bir sunucu (çağrılırsa bloklar) ve
+          # assistant tam zinciri istiyor; ikisi için import kontrolü
+          # yapılıyor — bu da .pyc'lerin gerçekten yüklenebildiğini gösterir.
+          FAIL=0
+          run_mod() {
+            dir="$1"; shift
+            printf '  %s: ' "$dir"
+            if (cd "/usr/share/navigator/ai-stack/$dir" && "$@" >/tmp/aistack.out 2>/tmp/aistack.err); then
+              head -c 300 /tmp/aistack.out; echo
+            else
+              echo "HATA (exit=$?)"; cat /tmp/aistack.err; FAIL=1
+            fi
+          }
+          run_mod hardware-probe python3 -m hardware_probe
+          run_mod local-runtime  python3 -m local_runtime
+          run_mod cloud-bridge   python3 -m cloud_bridge
+          run_mod router         python3 -m router --decide-only --prompt "test"
+          run_mod mcp-tools      python3 -c "import mcp_tools.server, mcp_tools.tools, mcp_tools.hyprland, mcp_tools.http_transport; print('import OK')"
+          run_mod assistant      python3 -c "import assistant.conversation, assistant.mcp_client; print('import OK')"
+          [ "$FAIL" -eq 0 ] || exit 1
+          echo "OK: ai-stack imajdaki gerçek yolundan çalışıyor."
+          CHECK
 
       - name: DRM/GPU cihazlarını VM içinde listele (teşhis için)
         run: |

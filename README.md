@@ -164,8 +164,18 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   `-p` bayrağının `ipc` alt komutuna (`call`'a değil) kayıtlı olması,
   ve `ai-stack/router`'ın kendi bağımlılığı `ai-stack/hardware-probe`'un
   CI'a hiç kopyalanmamış olması (bkz. `shell/README.md` "AssistantPanel
-  — gerçek ai-stack/router entegrasyonu"). Kalan: görsel doğruluk,
-  gerçek Hyprland IPC, `ai-stack`'in Containerfile'a katmanlanması.
+  — gerçek ai-stack/router entegrasyonu"). **`ai-stack` artık imajın
+  gerçek bir katmanı:** `image/Containerfile` Katman 5 (bugüne kadar
+  PLACEHOLDER) altı modülü `/usr/share/navigator/ai-stack/` altına
+  kopyalıyor ve build sırasında `compileall --invalidation-mode
+  checked-hash` ile bytecode üretiyor (ostree mtime'ları normalize
+  ettiği için timestamp tabanlı .pyc'ler salt-okunur `/usr`'da her
+  çağrıda yeniden derlenirdi — yerel `python3 -v` deneyiyle doğrulandı,
+  bkz. `ai-stack/README.md` "İmajdaki kurulum yolu"). Böylece CI'daki
+  scp + `rpm-ostree usroverlay` taklidi kaldırıldı: `hyprland-test`
+  artık `/usr` salt-okunur haldeyken imajın kendi içeriğini doğruluyor.
+  Kalan: görsel doğruluk, gerçek Hyprland IPC, Ollama'nın imaja
+  katmanlanması (Katman 6, hâlâ PLACEHOLDER).
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 
