@@ -36,6 +36,15 @@ karşılaştırıyor (`build-disk-and-boot-test.yml`, "Katman 3/4" adımı):
 gerçekten iş gördüğü, kasıtlı sapma enjekte edilerek doğrulandı — hem
 gradyan/açı hem `Theme.qml` sapması yakalandı.
 
+Gerçek CI sonucu
+([run 30664668160](https://github.com/denorath-sys/navigator/actions/runs/30664668160)):
+
+```
+OK: ikisi de repodaki dosyalarla birebir aynı (imaj bayat değil).
+OK: palette.json <-> hyprland.conf (imajdan) <-> shell/Theme.qml senkron.
+    teal=4fd1c5 purple=8b7cf6 gold=e8d9a8 navy=0b0f1a, gradyan açısı=45deg
+```
+
 ## Durum
 
 Faz 1 — palet tanımı gerçek ve artık imajda; `gtk/`, `qt/` hâlâ boş

@@ -646,15 +646,25 @@ jobs:
                 f"navy={colors['navy']}, gradyan açısı={angle}deg")
           PY
 
-          echo "=== TEŞHİS (başarısız olsa da job'ı düşürmez): /etc/skel yeni hesaba uygulandı mı ==="
-          # /etc/skel sadece HESAP OLUŞTURMA anında kopyalanır. disk.toml'daki
-          # navtest kullanıcısı bootc-image-builder tarafından oluşturuluyor —
-          # bib'in bunu useradd/skel yoluyla mı yaptığı belgelenmiş bir garanti
-          # değil, o yüzden burada iddia etmek yerine GERÇEK cevabı ölçüyoruz.
-          # Çıktıya göre bir sonraki turda ya bu kontrol katılaştırılacak ya da
-          # config'i kullanıcıya ulaştırmak için başka bir yol seçilecek.
+          echo "=== Katman 4 yeni kullanıcıya gerçekten ulaşıyor mu (/etc/skel) ==="
+          # /etc/skel sadece HESAP OLUŞTURMA anında kopyalanır ve disk.toml'daki
+          # navtest kullanıcısını bootc-image-builder oluşturuyor — bib'in bunu
+          # useradd/skel yoluyla yaptığı belgelenmiş bir garanti DEĞİL. Bu yüzden
+          # ilk turda teşhis olarak ölçüldü (run 30664668160) ve gerçek cevap
+          # alındı: navtest'in ev dizini /var/home/navtest ve içinde hem
+          # .bashrc/.bash_profile hem .config/hypr/hyprland.conf var — yani skel
+          # gerçekten uygulanıyor. Ölçüm kesin sonuç verdiğine göre artık
+          # iddia ediliyor: bib veya taban imaj bu davranışı değiştirirse
+          # (Katman 4 yeni kullanıcılara ulaşmayı bırakırsa) test kırılsın.
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
-            "getent passwd navtest; echo ---; ls -la /home/navtest/ 2>&1; echo ---; ls -la /home/navtest/.config/hypr/ 2>&1; echo ---; cmp -s /home/navtest/.config/hypr/hyprland.conf /etc/skel/.config/hypr/hyprland.conf && echo 'SKEL-UYGULANDI: navtest ev dizinindeki config /etc/skel ile birebir aynı' || echo 'SKEL-UYGULANMADI: navtest ev dizininde eşleşen config yok'" || true
+            "getent passwd navtest; echo ---; ls -la /home/navtest/.config/hypr/ 2>&1"
+          if ! ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
+               "cmp -s /home/navtest/.config/hypr/hyprland.conf /etc/skel/.config/hypr/hyprland.conf"; then
+            echo "HATA: navtest'in ev dizinindeki hyprland.conf /etc/skel'dekiyle aynı değil (ya da hiç yok)."
+            echo "      Katman 4 yeni kullanıcılara ulaşmıyor — /etc/skel yerine başka bir yol gerekiyor."
+            exit 1
+          fi
+          echo "OK: bootc-image-builder'ın oluşturduğu hesap /etc/skel'i aldı — Katman 4 yeni kullanıcılara gerçekten ulaşıyor."
 
       - name: Test betiğini ve shell/ kodunu VM'e kopyala
         run: |

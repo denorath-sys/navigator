@@ -23,6 +23,15 @@ Navigator kullanıcısı bu config ile başlıyor; sonrasında kendi
 güncellemeleri bu dosyayı **ezmiyor** (`/etc/skel` yalnızca hesap
 oluşturma anında okunur).
 
+Bu mekanizmanın bootc-image-builder'ın oluşturduğu hesaplarda gerçekten
+işlediği varsayılmadı, ölçüldü: CI önce teşhis olarak sordu
+([run 30664668160](https://github.com/denorath-sys/navigator/actions/runs/30664668160)),
+gerçek cevap alındı — `navtest`'in ev dizini `/var/home/navtest` (ostree
+düzeni) ve içinde `.bashrc`/`.bash_profile` ile birlikte
+`.config/hypr/hyprland.conf` var, `/etc/skel`'dekiyle birebir aynı.
+Ölçüm kesin olduğu için kontrol artık **iddia**: bib veya taban imaj bu
+davranışı değiştirirse test kırılır.
+
 ## Faz 2 — statik sözdizimi incelemesi
 
 Geliştirme ortamı Debian/Pardus tabanlı olduğundan (Hyprland bu dağıtımda
