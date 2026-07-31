@@ -11,8 +11,33 @@ Kuzey Yıldızı temalı nautical/gökyüzü estetiği.
 - `gtk/` — GTK3/GTK4 tema varlıkları için yer tutucu (Faz 2).
 - `qt/` — Qt5/Qt6 (qt5ct/qt6ct) tema varlıkları için yer tutucu (Faz 2).
 
+## İmajdaki kurulum yolu (Katman 3)
+
+`image/Containerfile` Katman 3, buradan imaja **sadece `palette.json`**'u
+alıyor → `/usr/share/navigator/theme/palette.json`. `gtk/` ve `qt/` hâlâ
+boş iskelet (içlerinde yalnızca `.gitkeep`) olduğundan katmanlanmıyor:
+boş dizinleri imaja koymak, olmayan bir GTK/Qt temasının varmış gibi
+görünmesine yol açardı.
+
+### Renk tekrarı artık gerçekten doğrulanıyor
+
+`palette.json` makine-okunur tek kaynak, ama aynı hex değerleri
+`hyprland/hyprland.conf` ve `shell/Theme.qml` içinde **elle** tekrar
+ediliyor. Bu sessizce sapabilecek bir tekrardı; CI artık her koşuda
+karşılaştırıyor (`build-disk-and-boot-test.yml`, "Katman 3/4" adımı):
+
+- `col.active_border` gradyan durakları **ve** açısı ↔
+  `gradients.assistant.stops` / `.angle`
+- `decoration:shadow:color` ↔ `colors.navy`
+- `shell/Theme.qml`'deki `teal`/`purple`/`gold`/`navy` ↔ `colors.*`
+
+`palette.json` ve `hyprland.conf` bu karşılaştırmada **imajdan** okunuyor
+(`Theme.qml` henüz imaja katmanlanmadığı için repodan). Kontrolün
+gerçekten iş gördüğü, kasıtlı sapma enjekte edilerek doğrulandı — hem
+gradyan/açı hem `Theme.qml` sapması yakalandı.
+
 ## Durum
 
-Faz 1 — sadece palet tanımı ve boş dizin iskeleti var. Gerçek GTK/Qt tema
-üretimi (ikon seti, cursor teması, GTK CSS, Qt Kvantum/QQC2 stili) Faz 2
-kapsamında ele alınacak.
+Faz 1 — palet tanımı gerçek ve artık imajda; `gtk/`, `qt/` hâlâ boş
+iskelet. Gerçek GTK/Qt tema üretimi (ikon seti, cursor teması, GTK CSS,
+Qt Kvantum/QQC2 stili) Faz 2 kapsamında ele alınacak.

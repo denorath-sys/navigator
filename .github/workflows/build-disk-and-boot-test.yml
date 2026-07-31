@@ -569,19 +569,108 @@ jobs:
               ;;
           esac
 
-      - name: hyprland.conf ve shell/ kodunu VM'e kopyala
+      - name: Katman 3/4 — theme ve hyprland.conf imajda mı, marka renkleri senkron mu
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          SCP="scp ${SSH_OPTS} -i ${SSH_KEY} -P 2222"
+
+          echo "=== Katman 3: /usr/share/navigator/theme/ ==="
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "ls -la /usr/share/navigator/theme/"
+          ${SCP} root@127.0.0.1:/usr/share/navigator/theme/palette.json image-palette.json
+
+          echo "=== Katman 4: /etc/skel/.config/hypr/ ==="
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "ls -la /etc/skel/.config/hypr/"
+          ${SCP} root@127.0.0.1:/etc/skel/.config/hypr/hyprland.conf image-hyprland.conf
+
+          echo "=== imajdaki dosyalar repodakilerle birebir aynı mı ==="
+          if ! cmp -s image-palette.json theme/palette.json; then
+            echo "HATA: imajdaki palette.json repodakinden farklı:"
+            diff -u theme/palette.json image-palette.json | head -20
+            exit 1
+          fi
+          if ! cmp -s image-hyprland.conf hyprland/hyprland.conf; then
+            echo "HATA: imajdaki hyprland.conf repodakinden farklı:"
+            diff -u hyprland/hyprland.conf image-hyprland.conf | head -20
+            exit 1
+          fi
+          echo "OK: ikisi de repodaki dosyalarla birebir aynı (imaj bayat değil)."
+
+          echo "=== marka renkleri senkron mu (palette.json tek kaynak) ==="
+          # palette.json makine-okunur tek kaynak ama hem hyprland.conf hem
+          # shell/Theme.qml aynı hex'leri ELLE tekrar ediyor (ikisi de kendi
+          # yorumunda "manuel senkron" diyor). Bu, sessizce sapabilecek bir
+          # tekrar — burada gerçekten doğrulanıyor. hyprland.conf İMAJDAN
+          # okunuyor; Theme.qml henüz imaja katmanlanmadığı için repodan.
+          python3 - <<'PY'
+          import json, re, sys
+
+          palette = json.load(open("image-palette.json"))
+          conf = open("image-hyprland.conf").read()
+          theme_qml = open("shell/Theme.qml").read()
+
+          colors = {k: v["hex"].lstrip("#").lower() for k, v in palette["colors"].items()}
+          grad = palette["gradients"]["assistant"]
+          stops = [s.lstrip("#").lower() for s in grad["stops"]]
+          angle = grad["angle"]
+          fails = []
+
+          m = re.search(r"col\.active_border\s*=\s*(.+)", conf)
+          if not m:
+              fails.append("hyprland.conf'ta col.active_border bulunamadı")
+          else:
+              line = m.group(1).strip()
+              hexes = [h.lower() for h in re.findall(r"rgba\(([0-9a-fA-F]{6})[0-9a-fA-F]{2}\)", line)]
+              if hexes != stops:
+                  fails.append(f"col.active_border gradyanı uyuşmuyor: conf={hexes} palette={stops}")
+              if f"{angle}deg" not in line:
+                  fails.append(f"col.active_border açısı uyuşmuyor: conf={line!r} palette={angle}deg")
+
+          m = re.search(r"shadow\s*\{[^}]*?color\s*=\s*rgba\(([0-9a-fA-F]{6})[0-9a-fA-F]{2}\)", conf, re.S)
+          if not m:
+              fails.append("hyprland.conf'ta shadow color bulunamadı")
+          elif m.group(1).lower() != colors["navy"]:
+              fails.append(f"shadow color navy ile uyuşmuyor: conf={m.group(1)} palette={colors['navy']}")
+
+          for name in ("teal", "purple", "gold", "navy"):
+              if not re.search(rf'property color {name}:\s*"#{colors[name]}"', theme_qml, re.I):
+                  fails.append(f"shell/Theme.qml içindeki {name} uyuşmuyor (beklenen #{colors[name]})")
+
+          if fails:
+              print("HATA: marka renkleri senkron değil:")
+              for f in fails:
+                  print("  -", f)
+              sys.exit(1)
+          print("OK: palette.json <-> hyprland.conf (imajdan) <-> shell/Theme.qml senkron.")
+          print(f"    teal={colors['teal']} purple={colors['purple']} gold={colors['gold']} "
+                f"navy={colors['navy']}, gradyan açısı={angle}deg")
+          PY
+
+          echo "=== TEŞHİS (başarısız olsa da job'ı düşürmez): /etc/skel yeni hesaba uygulandı mı ==="
+          # /etc/skel sadece HESAP OLUŞTURMA anında kopyalanır. disk.toml'daki
+          # navtest kullanıcısı bootc-image-builder tarafından oluşturuluyor —
+          # bib'in bunu useradd/skel yoluyla mı yaptığı belgelenmiş bir garanti
+          # değil, o yüzden burada iddia etmek yerine GERÇEK cevabı ölçüyoruz.
+          # Çıktıya göre bir sonraki turda ya bu kontrol katılaştırılacak ya da
+          # config'i kullanıcıya ulaştırmak için başka bir yol seçilecek.
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
+            "getent passwd navtest; echo ---; ls -la /home/navtest/ 2>&1; echo ---; ls -la /home/navtest/.config/hypr/ 2>&1; echo ---; cmp -s /home/navtest/.config/hypr/hyprland.conf /etc/skel/.config/hypr/hyprland.conf && echo 'SKEL-UYGULANDI: navtest ev dizinindeki config /etc/skel ile birebir aynı' || echo 'SKEL-UYGULANMADI: navtest ev dizininde eşleşen config yok'" || true
+
+      - name: Test betiğini ve shell/ kodunu VM'e kopyala
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 hyprland-test.sh root@127.0.0.1:/root/hyprland-test.sh
-          # Bu repodaki gerçek hyprland.conf'u (şimdiye kadar sadece statik
-          # olarak incelendi, bkz. hyprland/README.md) Hyprland'ın varsayılan
-          # arayacağı konuma koyuyoruz ki gerçek compositor onu gerçekten
-          # parse edip yüklesin.
-          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "mkdir -p /root/.config/hypr"
-          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 hyprland/hyprland.conf root@127.0.0.1:/root/.config/hypr/hyprland.conf
-          # shell/ (Quickshell) — şimdiye kadar sadece statik qmllint
-          # incelemesinden geçmişti (bkz. shell/README.md), gerçek
-          # compositor'a karşı hiç çalıştırılmamıştı.
+          # hyprland.conf ARTIK KOPYALANMIYOR: Containerfile Katman 4 onu
+          # imaja /etc/skel/.config/hypr/hyprland.conf olarak gömüyor.
+          # Hyprland'ın root olarak arayacağı konuma imajın KENDİ dosyasını
+          # koyuyoruz — böylece aşağıdaki config doğrulaması (border_size,
+          # rounding, blur:passes, ...) gerçekten imajdaki dosyayı test ediyor.
+          # (Test root olarak çalışıyor; /etc/skel sadece YENİ hesaplara
+          # kopyalanır, root zaten mevcut olduğundan elle kopyalamak gerekiyor.)
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
+            "mkdir -p /root/.config/hypr && cp /etc/skel/.config/hypr/hyprland.conf /root/.config/hypr/hyprland.conf"
+          # shell/ (Quickshell) — henüz imaja katmanlanmadı, hâlâ runner'dan
+          # kopyalanıyor (bkz. shell/README.md).
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r shell root@127.0.0.1:/root/shell
           # ai-stack ARTIK KOPYALANMIYOR: image/Containerfile Katman 5 onu
           # gerçekten imaja gömüyor, /usr/share/navigator/ai-stack/ altına.

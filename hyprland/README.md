@@ -6,9 +6,22 @@ Navigator masaüstünün compositor katmanı: [Hyprland](https://hyprland.org) (
   pencere yönetimi ve animasyon ayarları.
 - Görsel kimlik (`theme/palette.json`) ile senkron tutulan renk değerleri
   (aktif kenarlık gradyanı vb.) burada sabit kodlanmıştır; ileride tema
-  dosyalarından otomatik üretilecek şekilde script'e bağlanabilir.
-- Super+Space kısayolu, Faz 2'de `ai-stack/router` ile bağlanacak asistan
-  paneli için şimdilik placeholder bir komuta işaret ediyor.
+  dosyalarından otomatik üretilecek şekilde script'e bağlanabilir. Bu
+  tekrar artık **CI'da gerçekten doğrulanıyor** — imajdaki
+  `hyprland.conf`'un `col.active_border` gradyanı/açısı ve `shadow`
+  rengi, imajdaki `palette.json` ile karşılaştırılıyor (aşağıya bkz.).
+- Super+Space kısayolu Faz 4'te `ai-stack/router`'a gerçekten bağlandı
+  (`qs ipc call assistant toggle` → `shell/AssistantPanel.qml`).
+
+## İmajdaki kurulum yolu (Katman 4)
+
+`image/Containerfile` Katman 4, bu dosyayı imaja
+`/etc/skel/.config/hypr/hyprland.conf` olarak koyuyor. `useradd` yeni bir
+hesap açarken `/etc/skel`'i ev dizinine kopyaladığı için her yeni
+Navigator kullanıcısı bu config ile başlıyor; sonrasında kendi
+`~/.config/hypr/hyprland.conf`'unu serbestçe değiştirebiliyor ve imaj
+güncellemeleri bu dosyayı **ezmiyor** (`/etc/skel` yalnızca hesap
+oluşturma anında okunur).
 
 ## Faz 2 — statik sözdizimi incelemesi
 
@@ -41,9 +54,16 @@ bırakılmıştı. Aşağıya bkz.
 
 `.github/workflows/build-disk-and-boot-test.yml`'deki `hyprland-test`
 job'ı artık bu dosyayı (`hyprland.conf`) gerçek bir Navigator disk
-imajında, gerçek bir Hyprland compositor'a **gerçekten yüklüyor**
-(`/root/.config/hypr/hyprland.conf`'a kopyalanıp Hyprland'ın varsayılan
-arama yolundan okunuyor) — statik inceleme değil, çalışan bir compositor.
+imajında, gerçek bir Hyprland compositor'a **gerçekten yüklüyor** —
+statik inceleme değil, çalışan bir compositor.
+
+Katman 4'ten beri test edilen dosya **imajın kendi dosyası**: daha önce
+runner'dan VM'e `scp` ile kopyalanıyordu (bir "CI taklidi"), şimdi
+`/etc/skel/.config/hypr/hyprland.conf` içinden `/root/.config/hypr/`'a
+alınıyor (test root olarak çalışıyor; `/etc/skel` sadece yeni hesaplara
+kopyalandığından root için elle almak gerekiyor). Ayrı bir adım imajdaki
+dosyanın repodakiyle **birebir aynı** olduğunu da doğruluyor — yani imaj
+bayatsa test yeşil kalmıyor.
 
 Doğrulama, config'teki Hyprland'ın kendi varsayılanlarından **farklı**
 değerlerin gerçekten etkili olup olmadığını `hyprctl getoption -j` ile

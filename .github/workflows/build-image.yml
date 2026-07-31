@@ -14,6 +14,8 @@ on:
     branches: [main]
     paths:
       - "image/Containerfile"
+      # theme/palette.json (Katman 3) ve hyprland/hyprland.conf (Katman 4)
+      # artık imaja gerçekten kopyalanıyor.
       - "theme/**"
       - "hyprland/**"
       # ai-stack/ artık imaja gerçekten kopyalanıyor (Containerfile Katman 5),

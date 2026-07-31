@@ -79,17 +79,36 @@ RUN dnf5 -y copr enable errornointernet/quickshell \
 # ---------------------------------------------------------------------------
 # Katman 3: Navigator marka/tema varlıkları
 # ---------------------------------------------------------------------------
-# theme/ dizinindeki palette.json ve GTK/Qt varlıkları, imaj içine
-# /usr/share/navigator/theme altında kopyalanacak (Faz 1'de dosyalar henüz
-# placeholder olduğu için bu adım Faz 2'de etkinleştirilecek).
-# COPY theme/ /usr/share/navigator/theme/
+# `theme/`den imaja SADECE `palette.json` giriyor, çünkü şu an gerçek olan
+# tek varlık o: `theme/gtk/` ve `theme/qt/` hâlâ boş iskelet (içlerinde
+# sadece `.gitkeep` var, bkz. theme/README.md "Durum"). Boş dizinleri
+# katmanlamak, olmayan bir GTK/Qt temasının varmış gibi görünmesine yol
+# açardı — gerçek varlıklar üretildiğinde buraya eklenecekler.
+#
+# palette.json, marka renklerinin makine-okunur tek kaynağı: hem
+# `hyprland/hyprland.conf` (col.active_border, shadow) hem
+# `shell/Theme.qml` aynı hex değerlerini ELLE tekrar ediyor (ikisi de bunu
+# kendi yorumunda belirtiyor). Bu tekrar bir sapma riski; imajdaki
+# palette.json ile imajdaki hyprland.conf'un tutarlılığı artık CI'da
+# gerçekten doğrulanıyor (bkz. build-disk-and-boot-test.yml, "Katman 3/4"
+# adımı).
+COPY theme/palette.json /usr/share/navigator/theme/palette.json
 
 # ---------------------------------------------------------------------------
 # Katman 4: Navigator sistem config'leri
 # ---------------------------------------------------------------------------
-# hyprland/hyprland.conf, sistem geneli varsayılan olarak /etc/skel altına
-# kopyalanabilir; kullanıcı bazlı override'lar korunur.
-# COPY hyprland/hyprland.conf /etc/skel/.config/hypr/hyprland.conf
+# hyprland.conf sistem geneli varsayılan olarak /etc/skel altına giriyor:
+# useradd yeni bir kullanıcı oluştururken /etc/skel'i ev dizinine kopyalar,
+# yani her yeni Navigator kullanıcısı bu config ile başlar ama sonrasında
+# kendi ~/.config/hypr/hyprland.conf'unu serbestçe değiştirebilir (imaj
+# güncellemeleri kullanıcının dosyasını EZMEZ — /etc/skel sadece hesap
+# oluşturma anında okunur).
+#
+# Bu katmandan önce hyprland.conf gerçek imajda hiç yoktu; CI onu
+# runner'dan VM'e scp ile kopyalayıp test ediyordu (Katman 5 öncesi
+# ai-stack'te olduğu gibi bir "CI taklidi"). Artık test, imajın kendi
+# dosyasını kullanıyor.
+COPY hyprland/hyprland.conf /etc/skel/.config/hypr/hyprland.conf
 
 # ---------------------------------------------------------------------------
 # Katman 5: Navigator AI stack (ai-stack/ — altı Python modülü)

@@ -174,8 +174,20 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   bkz. `ai-stack/README.md` "İmajdaki kurulum yolu"). Böylece CI'daki
   scp + `rpm-ostree usroverlay` taklidi kaldırıldı: `hyprland-test`
   artık `/usr` salt-okunur haldeyken imajın kendi içeriğini doğruluyor.
-  Kalan: görsel doğruluk, gerçek Hyprland IPC, Ollama'nın imaja
-  katmanlanması (Katman 6, hâlâ PLACEHOLDER).
+  **Katman 3 ve 4 de gerçek yapıldı:** `theme/palette.json` →
+  `/usr/share/navigator/theme/`, `hyprland/hyprland.conf` →
+  `/etc/skel/.config/hypr/` (yeni kullanıcılar bu config ile başlar,
+  kendi kopyaları imaj güncellemelerinde ezilmez). Böylece
+  `hyprland.conf`'un `scp` taklidi de kalktı — compositor testi artık
+  imajın kendi dosyasını yüklüyor ve ayrı bir adım imajdaki iki dosyanın
+  repodakilerle birebir aynı olduğunu doğruluyor. Üstüne, `palette.json`
+  ile `hyprland.conf`/`shell/Theme.qml` arasındaki **elle** tutulan renk
+  tekrarı artık CI'da karşılaştırılıyor (gradyan durakları + açı, shadow
+  rengi, dört Theme.qml sabiti); kontrolün iş gördüğü kasıtlı sapma
+  enjekte edilerek doğrulandı. `theme/gtk` ve `theme/qt` bilinçli olarak
+  katmanlanmadı — hâlâ boş iskelet. Kalan: görsel doğruluk, gerçek
+  Hyprland IPC, Ollama'nın imaja katmanlanması (Katman 6, hâlâ
+  PLACEHOLDER).
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 
