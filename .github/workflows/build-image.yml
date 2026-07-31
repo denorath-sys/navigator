@@ -21,6 +21,8 @@ on:
       # ai-stack/ artık imaja gerçekten kopyalanıyor (Containerfile Katman 5),
       # dolayısıyla ai-stack'teki bir değişiklik imajı bayatlatıyor.
       - "ai-stack/**"
+      # shell/*.qml aynı şekilde (Katman 7).
+      - "shell/**"
       - ".github/workflows/build-image.yml"
 
 env:

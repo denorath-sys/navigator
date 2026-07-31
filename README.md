@@ -185,9 +185,17 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   tekrarı artık CI'da karşılaştırılıyor (gradyan durakları + açı, shadow
   rengi, dört Theme.qml sabiti); kontrolün iş gördüğü kasıtlı sapma
   enjekte edilerek doğrulandı. `theme/gtk` ve `theme/qt` bilinçli olarak
-  katmanlanmadı — hâlâ boş iskelet. Kalan: görsel doğruluk, gerçek
-  Hyprland IPC, Ollama'nın imaja katmanlanması (Katman 6, hâlâ
-  PLACEHOLDER).
+  katmanlanmadı — hâlâ boş iskelet. **Katman 7 ile `shell/*.qml` de
+  imaja girdi** (`/usr/share/navigator/shell/`, program kodu olduğu için
+  `/etc/skel` değil — kullanıcı kopyası dondurulmasın, imaj
+  güncellemeleri shell'i güncelleyebilsin). Böylece
+  `build-disk-and-boot-test.yml`'de runner'dan VM'e kopyalanan tek şey
+  test betiğinin kendisi kaldı: test edilen her Navigator bileşeni
+  imajdan geliyor, ve renk senkron kontrolü artık üç dosyayı da
+  (`palette.json`, `hyprland.conf`, `Theme.qml`) imajdan okuyor. Kalan:
+  görsel doğruluk, gerçek Hyprland IPC, Hyprland'ın shell'i otomatik
+  başlatması (`exec-once` henüz yok), Ollama'nın imaja katmanlanması
+  (Katman 6, hâlâ PLACEHOLDER).
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 

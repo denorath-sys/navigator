@@ -24,17 +24,18 @@ görünmesine yol açardı.
 `palette.json` makine-okunur tek kaynak, ama aynı hex değerleri
 `hyprland/hyprland.conf` ve `shell/Theme.qml` içinde **elle** tekrar
 ediliyor. Bu sessizce sapabilecek bir tekrardı; CI artık her koşuda
-karşılaştırıyor (`build-disk-and-boot-test.yml`, "Katman 3/4" adımı):
+karşılaştırıyor (`build-disk-and-boot-test.yml`, "Katman 3/4/7" adımı):
 
 - `col.active_border` gradyan durakları **ve** açısı ↔
   `gradients.assistant.stops` / `.angle`
 - `decoration:shadow:color` ↔ `colors.navy`
 - `shell/Theme.qml`'deki `teal`/`purple`/`gold`/`navy` ↔ `colors.*`
 
-`palette.json` ve `hyprland.conf` bu karşılaştırmada **imajdan** okunuyor
-(`Theme.qml` henüz imaja katmanlanmadığı için repodan). Kontrolün
-gerçekten iş gördüğü, kasıtlı sapma enjekte edilerek doğrulandı — hem
-gradyan/açı hem `Theme.qml` sapması yakalandı.
+Katman 7'den beri **üçü de imajdan** okunuyor (`palette.json`,
+`hyprland.conf`, `Theme.qml`) — yani karşılaştırılan şey kullanıcının
+gerçekten çalıştıracağı içerik. Kontrolün gerçekten iş gördüğü kasıtlı
+sapma enjekte edilerek doğrulandı — gradyan durağı, açı ve `Theme.qml`
+sapmalarının üçü de yakalandı.
 
 Gerçek CI sonucu
 ([run 30664668160](https://github.com/denorath-sys/navigator/actions/runs/30664668160)):

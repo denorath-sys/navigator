@@ -419,7 +419,7 @@ jobs:
           # qs -p <dosya>: Quickshell kaynağında (launch/parsecommand.cpp)
           # doğrulanan tam sözdizimi — "~/myshell/randomfile.qml can be run
           # with qs -p ~/myshell/randomfile.qml" örneğiyle birebir eşleşiyor.
-          setsid nohup qs -p /root/shell/shell.qml > /root/quickshell.log 2>&1 < /dev/null &
+          setsid nohup qs -p /usr/share/navigator/shell/shell.qml > /root/quickshell.log 2>&1 < /dev/null &
           disown
           sleep 8
 
@@ -462,9 +462,9 @@ jobs:
           # kaynağında (launch/parsecommand.cpp) doğrulandı — Config Selection
           # seçenek grubu "ipc" alt komutuna kayıtlı, "call"a değil. -p'siz
           # çağrı "default" adlı bir config arıyor (bizimki özel bir yolda,
-          # /root/shell/shell.qml) ve "Could not find default config..."
+          # /usr/share/navigator/shell/shell.qml) ve "Could not find default config..."
           # hatasıyla sessizce başarısız oluyordu (ilk gerçek denemede görüldü).
-          IPC="qs ipc -p /root/shell/shell.qml call"
+          IPC="qs ipc -p /usr/share/navigator/shell/shell.qml call"
           ASK_OUT="$(${IPC} assistant ask "Merhaba, sen kimsin?" 2>&1)"
           ASK_EXIT=$?
           echo "qs ipc call assistant ask -> exit=${ASK_EXIT} çıktı=${ASK_OUT}"
@@ -569,7 +569,7 @@ jobs:
               ;;
           esac
 
-      - name: Katman 3/4 — theme ve hyprland.conf imajda mı, marka renkleri senkron mu
+      - name: Katman 3/4/7 — theme, hyprland.conf ve shell imajda mı, marka renkleri senkron mu
         run: |
           set -euo pipefail
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
@@ -583,6 +583,11 @@ jobs:
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "ls -la /etc/skel/.config/hypr/"
           ${SCP} root@127.0.0.1:/etc/skel/.config/hypr/hyprland.conf image-hyprland.conf
 
+          echo "=== Katman 7: /usr/share/navigator/shell/ ==="
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "ls -la /usr/share/navigator/shell/"
+          mkdir -p image-shell
+          ${SCP} "root@127.0.0.1:/usr/share/navigator/shell/*.qml" image-shell/
+
           echo "=== imajdaki dosyalar repodakilerle birebir aynı mı ==="
           if ! cmp -s image-palette.json theme/palette.json; then
             echo "HATA: imajdaki palette.json repodakinden farklı:"
@@ -594,20 +599,36 @@ jobs:
             diff -u hyprland/hyprland.conf image-hyprland.conf | head -20
             exit 1
           fi
-          echo "OK: ikisi de repodaki dosyalarla birebir aynı (imaj bayat değil)."
+          # shell/'de KAÇ dosya olduğunu da kontrol ediyoruz: sadece var olanları
+          # karşılaştırmak, imaja hiç girmemiş bir .qml'i gözden kaçırırdı.
+          REPO_QML_COUNT="$(ls shell/*.qml | wc -l)"
+          IMAGE_QML_COUNT="$(ls image-shell/*.qml | wc -l)"
+          if [ "${REPO_QML_COUNT}" -ne "${IMAGE_QML_COUNT}" ]; then
+            echo "HATA: imajda ${IMAGE_QML_COUNT} .qml var, repoda ${REPO_QML_COUNT}:"
+            ls shell/*.qml image-shell/*.qml
+            exit 1
+          fi
+          for f in shell/*.qml; do
+            if ! cmp -s "$f" "image-shell/$(basename "$f")"; then
+              echo "HATA: imajdaki $(basename "$f") repodakinden farklı:"
+              diff -u "$f" "image-shell/$(basename "$f")" | head -20
+              exit 1
+            fi
+          done
+          echo "OK: palette.json, hyprland.conf ve ${IMAGE_QML_COUNT} .qml dosyası repodakilerle birebir aynı (imaj bayat değil)."
 
           echo "=== marka renkleri senkron mu (palette.json tek kaynak) ==="
           # palette.json makine-okunur tek kaynak ama hem hyprland.conf hem
           # shell/Theme.qml aynı hex'leri ELLE tekrar ediyor (ikisi de kendi
           # yorumunda "manuel senkron" diyor). Bu, sessizce sapabilecek bir
-          # tekrar — burada gerçekten doğrulanıyor. hyprland.conf İMAJDAN
-          # okunuyor; Theme.qml henüz imaja katmanlanmadığı için repodan.
+          # tekrar — burada gerçekten doğrulanıyor. Katman 7'den beri ÜÇÜ DE
+          # (palette.json, hyprland.conf, Theme.qml) imajdan okunuyor.
           python3 - <<'PY'
           import json, re, sys
 
           palette = json.load(open("image-palette.json"))
           conf = open("image-hyprland.conf").read()
-          theme_qml = open("shell/Theme.qml").read()
+          theme_qml = open("image-shell/Theme.qml").read()
 
           colors = {k: v["hex"].lstrip("#").lower() for k, v in palette["colors"].items()}
           grad = palette["gradients"]["assistant"]
@@ -634,14 +655,14 @@ jobs:
 
           for name in ("teal", "purple", "gold", "navy"):
               if not re.search(rf'property color {name}:\s*"#{colors[name]}"', theme_qml, re.I):
-                  fails.append(f"shell/Theme.qml içindeki {name} uyuşmuyor (beklenen #{colors[name]})")
+                  fails.append(f"Theme.qml içindeki {name} uyuşmuyor (beklenen #{colors[name]})")
 
           if fails:
               print("HATA: marka renkleri senkron değil:")
               for f in fails:
                   print("  -", f)
               sys.exit(1)
-          print("OK: palette.json <-> hyprland.conf (imajdan) <-> shell/Theme.qml senkron.")
+          print("OK: palette.json <-> hyprland.conf <-> Theme.qml senkron (üçü de imajdan).")
           print(f"    teal={colors['teal']} purple={colors['purple']} gold={colors['gold']} "
                 f"navy={colors['navy']}, gradyan açısı={angle}deg")
           PY
@@ -666,7 +687,7 @@ jobs:
           fi
           echo "OK: bootc-image-builder'ın oluşturduğu hesap /etc/skel'i aldı — Katman 4 yeni kullanıcılara gerçekten ulaşıyor."
 
-      - name: Test betiğini ve shell/ kodunu VM'e kopyala
+      - name: Test betiğini VM'e kopyala
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 hyprland-test.sh root@127.0.0.1:/root/hyprland-test.sh
@@ -679,9 +700,10 @@ jobs:
           # kopyalanır, root zaten mevcut olduğundan elle kopyalamak gerekiyor.)
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
             "mkdir -p /root/.config/hypr && cp /etc/skel/.config/hypr/hyprland.conf /root/.config/hypr/hyprland.conf"
-          # shell/ (Quickshell) — henüz imaja katmanlanmadı, hâlâ runner'dan
-          # kopyalanıyor (bkz. shell/README.md).
-          scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 -r shell root@127.0.0.1:/root/shell
+          # shell/ ARTIK KOPYALANMIYOR: Containerfile Katman 7 onu imaja
+          # /usr/share/navigator/shell/ altına koyuyor. Bununla birlikte bu
+          # workflow'da runner'dan VM'e kopyalanan tek şey test betiğinin
+          # kendisi kaldı — test edilen her Navigator bileşeni imajdan geliyor.
           # ai-stack ARTIK KOPYALANMIYOR: image/Containerfile Katman 5 onu
           # gerçekten imaja gömüyor, /usr/share/navigator/ai-stack/ altına.
           # Daha önce burada scp + `rpm-ostree usroverlay` ile CI'a özel bir

@@ -179,6 +179,31 @@ RUN python3 -c "import sys; assert sys.version_info >= (3, 11), f'ai-stack Pytho
 # katmanlandığında yerel yol kendiliğinden devreye girer.
 
 # ---------------------------------------------------------------------------
+# Katman 7: Navigator shell (Quickshell QML — bkz. shell/README.md)
+# ---------------------------------------------------------------------------
+# Katman 2 Quickshell'in KENDİSİNİ (çalıştırıcı) kuruyor; bu katman
+# Navigator'ın kendi QML shell'ini koyuyor. Çalıştırma:
+#   qs -p /usr/share/navigator/shell/shell.qml
+#
+# Neden /usr/share/navigator/shell/ (Quickshell'in alışılmış
+# ~/.config/quickshell/ yolu değil): bunlar kullanıcı yapılandırması değil
+# PROGRAM KODU. /etc/skel'e konsaydı her kullanıcı kendi donmuş kopyasını
+# alır ve imaj güncellemeleri shell'i hiç güncelleyemezdi (hyprland.conf
+# için istediğimizin tam tersi — orada kullanıcının dosyasını EZMEMEK
+# doğruydu, burada güncelleyebilmek doğru). Kendi shell'ini çalıştırmak
+# isteyen kullanıcı bu dizini kopyalayıp `qs -p` ile kendi yolunu
+# gösterebilir.
+#
+# Katman numarası sırası, katmanların GERÇEK olma sırasını izliyor; bir
+# bağımlılık sırası değil. Sona konması ayrıca kasıtlı: shell/ en sık
+# değişen COPY içeriği, en sonda olması üstündeki katmanların build
+# cache'ini korur.
+#
+# Sadece .qml dosyaları giriyor; shell/README.md geliştirici belgesi,
+# imajda işi yok.
+COPY shell/*.qml /usr/share/navigator/shell/
+
+# ---------------------------------------------------------------------------
 # Metadata
 # ---------------------------------------------------------------------------
 LABEL org.opencontainers.image.title="Navigator OS"

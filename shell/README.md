@@ -12,6 +12,34 @@ edildi; gerekçe: QML'in performans/render avantajı ve Navigator'ın kendine
 İmaja kurulumu `image/Containerfile` Katman 2'de tanımlı
 (`errornointernet/quickshell` COPR, Fedora'ya özel).
 
+## İmajdaki kurulum yolu (Katman 7)
+
+Katman 2 Quickshell'in kendisini (çalıştırıcı) kuruyor; **Katman 7** bu
+dizindeki `.qml` dosyalarını imaja koyuyor:
+
+```
+/usr/share/navigator/shell/*.qml
+```
+
+Çalıştırma: `qs -p /usr/share/navigator/shell/shell.qml`
+
+**Neden `/usr/share/navigator/` ve `/etc/skel` değil:** bunlar kullanıcı
+yapılandırması değil program kodu. `/etc/skel`'e konsaydı her kullanıcı
+kendi donmuş kopyasını alır, imaj güncellemeleri shell'i hiç
+güncelleyemezdi. `hyprland.conf`'ta (Katman 4) istediğimiz bunun tam
+tersiydi — orada kullanıcının dosyasını *ezmemek* doğruydu; burada
+*güncelleyebilmek* doğru. Kendi shell'ini çalıştırmak isteyen kullanıcı bu
+dizini kopyalayıp `qs -p` ile kendi yolunu gösterebilir.
+
+`README.md` imaja girmiyor (geliştirici belgesi). Katman sırası
+bağımlılık değil, katmanların gerçek olma sırasını izliyor; shell/ en sık
+değişen COPY içeriği olduğu için sonda olması üstündeki katmanların build
+cache'ini de koruyor.
+
+Bu katmandan sonra `build-disk-and-boot-test.yml`'de runner'dan VM'e
+kopyalanan **tek şey test betiğinin kendisi** — test edilen her Navigator
+bileşeni imajdan geliyor.
+
 ## Dosyalar
 
 - `shell.qml` — Quickshell giriş noktası (`ShellRoot`); `assistantVisible`
@@ -20,7 +48,10 @@ edildi; gerekçe: QML'in performans/render avantajı ve Navigator'ın kendine
   tutar — hem `Bar.qml`'deki tıklamayı hem Hyprland Super+Space kısayolunu
   (`qs ipc call assistant toggle`) `AssistantPanel`'e bağlar.
 - `Theme.qml` — Navigator marka paleti (`../theme/palette.json` ile manuel
-  senkron tutulur, `hyprland/hyprland.conf`'un renk senkron yöntemiyle aynı)
+  senkron tutulur, `hyprland/hyprland.conf`'un renk senkron yöntemiyle
+  aynı). Bu manuel senkron artık CI'da **gerçekten doğrulanıyor**: dört
+  renk sabiti imajdaki `palette.json` ile karşılaştırılıyor (bkz.
+  `theme/README.md`).
 - `Bar.qml` — üst panel (`PanelWindow`, wlr-layer-shell)
 - `WorkspaceIndicator.qml` — workspace göstergesi (**placeholder**: statik
   1-10 pil, henüz gerçek Hyprland IPC'siyle bağlı değil)
@@ -40,8 +71,10 @@ bu geliştirme ortamında (Debian tabanlı, Qt 6.8.2) hâlâ kurulamıyor —
 ama artık CI'da gerçek bir compositor'a karşı doğrulanıyor.
 
 `.github/workflows/build-disk-and-boot-test.yml`'deki `hyprland-test`
-job'ı, Hyprland gerçekten başladıktan sonra bu dizini VM'e kopyalayıp
-`qs -p /root/shell/shell.qml` ile gerçekten başlatıyor (Hyprland'ın
+job'ı, Hyprland gerçekten başladıktan sonra shell'i **imajdaki
+yolundan** — `qs -p /usr/share/navigator/shell/shell.qml` — gerçekten
+başlatıyor (Katman 7 öncesinde bu dizin runner'dan VM'e kopyalanıyordu;
+o son taklit de kalktı). (Hyprland'ın
 oluşturduğu gerçek Wayland soketine `WAYLAND_DISPLAY` üzerinden
 bağlanarak) ve sadece "süreç çökmedi" değil, `hyprctl layers -j` ile
 `Bar.qml`'in (`PanelWindow`, wlr-layer-shell) gerçekten bir yüzey map
@@ -84,8 +117,8 @@ altına gerçekten kopyalıyor (bkz. `ai-stack/README.md`, "İmajdaki kurulum
 yolu"). İlk sürümde bu yol CI'da scp + `rpm-ostree usroverlay` ile taklit
 ediliyordu; o taklit kaldırıldı, `hyprland-test` job'ı artık `/usr`
 salt-okunur haldeyken imajın kendi içeriğini doğruluyor. Sonra
-`qs ipc -p /root/shell/shell.qml call assistant ask "<soru>"` ile gerçek
-bir soru soruluyor ve `getResponse()`/`isLoading()` ile sonuç okunuyor.
+`qs ipc -p /usr/share/navigator/shell/shell.qml call assistant ask
+"<soru>"` ile gerçek bir soru soruluyor ve `getResponse()`/`isLoading()` ile sonuç okunuyor.
 
 Gerçek sonuç (CI'da ne Ollama ne Claude API kimlik bilgisi var, bu
 yüzden `model_ready=false` kuralıyla her zaman "cloud"a düşüyor ve
@@ -132,12 +165,25 @@ doğrulandı. Gerçek çalışma zamanı/render doğrulaması artık CI'da yapı
 (yukarıya bkz.) — kalan sınırlama sadece görsel piksel doğruluğu ve
 etkileşim testleri.
 
-## Çalıştırma (Faz 3'te, imaj içinde)
+## Çalıştırma
+
+İmaj içinde (Katman 7'den beri gerçek yol):
+
+```sh
+qs -p /usr/share/navigator/shell/shell.qml
+```
+
+Repodan, geliştirirken:
 
 ```sh
 cd shell
 qs -p shell.qml
 ```
+
+**Not:** Hyprland şu an bu shell'i otomatik başlatmıyor —
+`hyprland/hyprland.conf`'ta hiç `exec-once` yok (sadece bu shell için
+değil, hiçbir bileşen için). Otomatik başlatma ayrı bir karar olarak
+duruyor.
 
 ## Statik analiz (şimdi, herhangi bir Qt6 ortamında)
 
@@ -159,6 +205,9 @@ Fedora'da `qt6-qtdeclarative-devel` benzeri.)
 - ~~`ai-stack`'in `image/Containerfile`'a gerçek bir katman olarak
   eklenmesi~~ — Katman 5 artık gerçek, CI `/usr` salt-okunur haldeyken
   doğruluyor
+- ~~`shell/`in imaja katmanlanması~~ — Katman 7 artık gerçek
+- Hyprland'ın shell'i otomatik başlatması (`exec-once`) — henüz yok,
+  ayrı bir karar
 - Alt panel / bildirim merkezi
 - Uygulama başlatıcı (wofi'nin yerini alacak özgün launcher)
 - Gerçek Hyprland IPC entegrasyonu (aktif/dolu workspace tespiti —
