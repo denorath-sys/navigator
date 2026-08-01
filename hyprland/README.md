@@ -12,6 +12,43 @@ Navigator masaüstünün compositor katmanı: [Hyprland](https://hyprland.org) (
   rengi, imajdaki `palette.json` ile karşılaştırılıyor (aşağıya bkz.).
 - Super+Space kısayolu Faz 4'te `ai-stack/router`'a gerçekten bağlandı
   (`qs ipc call assistant toggle` → `shell/AssistantPanel.qml`).
+- `exec-once` ile otomatik başlatma (aşağıya bkz.).
+
+## Otomatik başlatma (`exec-once`)
+
+Bu dosyada uzun süre hiç `exec-once` yoktu — imajda bulunan bileşenleri
+hiçbir şey başlatmıyordu. Katman 7 ile shell imaja girdikten sonra iki
+giriş eklendi:
+
+| Komut | Neden |
+|---|---|
+| `qs -p /usr/share/navigator/shell/shell.qml` | Navigator shell (Katman 7'nin koyduğu yol) |
+| `/usr/libexec/polkit-mate-authentication-agent-1` | Ajan yoksa GUI'den yetki isteyen işlemler kullanıcıya hiç sorulmadan sessizce reddedilir |
+
+**Bilinçli olarak eklenmeyenler**, gerekçeleriyle config'in içinde de
+yazılı:
+
+- **waybar** — Navigator'ın kendi üst paneli var (`shell/Bar.qml`); ikisi
+  birlikte çalışırsa iki panel üst üste biner.
+- **hyprpaper, hypridle** — ikisi de kendi config dosyasını gerektiriyor
+  ve Navigator henüz ikisini de yazmadı (duvar kağıdı varlığı da yok).
+  Config'siz başlatmak ilk saniyede pes eden bir daemon demek olurdu.
+- **NetworkManager, pipewire, wireplumber** — systemd tarafından
+  yönetiliyorlar (sistem servisi ve socket ile tetiklenen kullanıcı
+  servisleri), compositor'ın işi değil.
+
+### `exec-once` hedefleri CI'da doğrulanıyor
+
+Yanlış yazılmış ya da paket değişimiyle kaybolmuş bir `exec-once`'ı
+Hyprland **sessizce yutar**: compositor yine açılır, sadece masaüstü
+eksik başlar ve hiçbir test kırılmaz. Bu yüzden CI, imajdaki
+`hyprland.conf`'tan `exec-once` satırlarını ayrıştırıp her hedefin
+imajda gerçekten çalıştırılabilir olduğunu kontrol ediyor.
+
+Ayrıca Quickshell artık CI'da **elle başlatılmıyor** — Hyprland'ın kendi
+`exec-once`'ı başlatıyor ve test bunu doğruluyor. (Elle de başlatılsaydı
+ikinci bir örnek olur, `qs ipc` çağrılarının hangi örneğe gittiği
+belirsizleşirdi.)
 
 ## İmajdaki kurulum yolu (Katman 4)
 
@@ -50,7 +87,7 @@ dizimine göre satır satır statik olarak incelendi:
 **Sonuç:** Sözdizimsel bir hata bulunamadı.
 
 **Açık bir not:** `mouse_down`/`mouse_up` ile workspace geçişi `e+1`/`e-1`
-kullanıyor (satır 154-155) — bu, "sıradaki workspace" değil "bir sonraki/
+kullanıyor (satır 184-185) — bu, "sıradaki workspace" değil "bir sonraki/
 önceki **boş** workspace'e git" anlamına gelir. Sıralı geçiş kastedilmişse
 `+1`/`-1` olarak değiştirilmesi gerekebilir; şu an kasıtlı mı yoksa
 düzeltilmesi mi gerekiyor netleşmedi, olduğu gibi bırakıldı.

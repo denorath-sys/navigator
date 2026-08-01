@@ -180,10 +180,11 @@ cd shell
 qs -p shell.qml
 ```
 
-**Not:** Hyprland şu an bu shell'i otomatik başlatmıyor —
-`hyprland/hyprland.conf`'ta hiç `exec-once` yok (sadece bu shell için
-değil, hiçbir bileşen için). Otomatik başlatma ayrı bir karar olarak
-duruyor.
+Elle çalıştırmak genelde gerekmiyor: `hyprland/hyprland.conf`'taki
+`exec-once` shell'i oturum açılışında başlatıyor (bkz.
+`hyprland/README.md` "Otomatik başlatma"). CI de artık elle
+başlatmıyor — Hyprland'ın `exec-once`'ının gerçekten çalıştığını
+doğruluyor.
 
 ## Statik analiz (şimdi, herhangi bir Qt6 ortamında)
 
@@ -206,8 +207,8 @@ Fedora'da `qt6-qtdeclarative-devel` benzeri.)
   eklenmesi~~ — Katman 5 artık gerçek, CI `/usr` salt-okunur haldeyken
   doğruluyor
 - ~~`shell/`in imaja katmanlanması~~ — Katman 7 artık gerçek
-- Hyprland'ın shell'i otomatik başlatması (`exec-once`) — henüz yok,
-  ayrı bir karar
+- ~~Hyprland'ın shell'i otomatik başlatması (`exec-once`)~~ — eklendi,
+  CI otomatik başlatmayı gerçekten doğruluyor
 - Alt panel / bildirim merkezi
 - Uygulama başlatıcı (wofi'nin yerini alacak özgün launcher)
 - Gerçek Hyprland IPC entegrasyonu (aktif/dolu workspace tespiti —

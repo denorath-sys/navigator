@@ -399,14 +399,17 @@ jobs:
           print('active_window:', json.dumps(active_window()))
           "
 
-          echo "=== Quickshell'i gerçek compositor'a karşı başlat ==="
-          # shell/README.md'de belgelenen "gerçek render/compositor testi
-          # yapılmadı" sınırlaması burada gideriliyor. Quickshell'in Wayland
-          # soketine bağlanabilmesi için WAYLAND_DISPLAY gerekiyor — Hyprland
-          # bunu kendi çocuk süreçlerine otomatik veriyor ama biz Hyprland'ı
-          # ayrı bir arka plan süreci olarak başlattığımızdan (setsid nohup),
-          # kendi kabuğumuzda elle export etmemiz gerekiyor. Soket adı
-          # $XDG_RUNTIME_DIR altında wayland-N (kilit dosyası hariç).
+          echo "=== Quickshell'i Hyprland'ın kendi exec-once'ı başlattı mı ==="
+          # ARTIK ELLE BAŞLATMIYORUZ. hyprland.conf'a exec-once eklendiğinden
+          # Quickshell'i compositor'ın kendisi başlatıyor; elle de
+          # başlatsaydık ikinci bir örnek olurdu ve `qs ipc` çağrılarının
+          # hangi örneğe gittiği belirsizleşirdi. Böylece bu adım artık
+          # otomatik başlatmanın gerçekten çalıştığını da doğruluyor.
+          #
+          # Quickshell, Hyprland'ın çocuğu olarak başladığı için
+          # WAYLAND_DISPLAY'i compositor'dan miras alıyor — bizim elle
+          # export etmemize gerek kalmadı. Kendi kabuğumuz için yine de
+          # gerekiyor (aşağıdaki qs ipc çağrıları).
           WAYLAND_SOCK="$(ls "$XDG_RUNTIME_DIR" 2>/dev/null | grep -E '^wayland-[0-9]+$' | head -n1)"
           if [ -z "$WAYLAND_SOCK" ]; then
             echo "HATA: Wayland soketi bulunamadı — Quickshell test edilemiyor."
@@ -416,21 +419,27 @@ jobs:
           export QT_QPA_PLATFORM=wayland
           echo "WAYLAND_DISPLAY=$WAYLAND_DISPLAY"
 
-          # qs -p <dosya>: Quickshell kaynağında (launch/parsecommand.cpp)
-          # doğrulanan tam sözdizimi — "~/myshell/randomfile.qml can be run
-          # with qs -p ~/myshell/randomfile.qml" örneğiyle birebir eşleşiyor.
-          setsid nohup qs -p /usr/share/navigator/shell/shell.qml > /root/quickshell.log 2>&1 < /dev/null &
-          disown
-          sleep 8
-
-          echo "=== Quickshell log ==="
-          cat /root/quickshell.log || true
-
-          if ! pgrep -f "qs -p" >/dev/null; then
-            echo "HATA: Quickshell süreci ayakta değil — muhtemelen çöktü."
+          QS_PATTERN="qs -p /usr/share/navigator/shell/shell.qml"
+          for i in $(seq 1 20); do
+            if pgrep -f "${QS_PATTERN}" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          if ! pgrep -af "${QS_PATTERN}"; then
+            echo "HATA: Quickshell süreci yok — hyprland.conf'taki exec-once çalışmamış"
+            echo "      ya da Quickshell çökmüş olabilir. Hyprland log'u aşağıda."
+            echo "--- Hyprland log ---"
+            cat /root/hyprland.log || true
             exit 1
           fi
-          echo "OK: Quickshell süreci ayakta."
+          echo "OK: Quickshell'i Hyprland'ın kendi exec-once'ı başlattı (elle başlatılmadı)."
+
+          echo "=== Polkit ajanı da exec-once ile başladı mı ==="
+          # Bu bir iddia değil bilgi: polkit ajanı headless bir VM'de
+          # (görünür oturum/seat olmadan) başlamayabilir; masaüstünün
+          # gerçek kullanımında önemli ama burada testi düşürmesi anlamsız.
+          pgrep -af "polkit-mate-authentication-agent" || echo "(polkit ajanı görünmüyor — headless VM'de beklenebilir)"
 
           echo "=== hyprctl layers (Quickshell gerçekten bir layer-shell yüzeyi map etti mi) ==="
           hyprctl layers
@@ -485,8 +494,11 @@ jobs:
           RESPONSE="$(${IPC} assistant getResponse)"
           echo "AssistantPanel yanıtı: $RESPONSE"
 
-          echo "=== Quickshell stdout/stderr log (assistant testinden SONRA) ==="
-          cat /root/quickshell.log || true
+          echo "=== Hyprland log (assistant testinden SONRA) ==="
+          # Quickshell artık exec-once ile Hyprland'ın çocuğu olarak
+          # başladığından stdout/stderr'i ayrı bir dosyada değil,
+          # compositor'ın log'unda.
+          tail -n 40 /root/hyprland.log || true
 
           case "$RESPONSE" in
             ""|"HATA:"*|"Ayrıştırma hatası"*)
@@ -616,6 +628,26 @@ jobs:
             fi
           done
           echo "OK: palette.json, hyprland.conf ve ${IMAGE_QML_COUNT} .qml dosyası repodakilerle birebir aynı (imaj bayat değil)."
+
+          echo "=== hyprland.conf'taki exec-once hedefleri imajda var mı ==="
+          # Yanlış yazılmış ya da paket değişimiyle kaybolmuş bir exec-once,
+          # Hyprland tarafından SESSİZCE yutulur: compositor yine de açılır,
+          # sadece masaüstü eksik başlar ve hiçbir test kırılmaz. Bu yüzden
+          # her exec-once'ın çalıştırılabilirini imajda gerçekten arıyoruz.
+          EXECS="$(grep -E '^[[:space:]]*exec-once[[:space:]]*=' image-hyprland.conf | sed -E 's/^[^=]*=[[:space:]]*//' | awk '{print $1}')"
+          if [ -z "${EXECS}" ]; then
+            echo "HATA: hyprland.conf'ta hiç exec-once yok — en az Navigator shell'i bekleniyordu."
+            exit 1
+          fi
+          for e in ${EXECS}; do
+            if ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
+                 "command -v '$e' >/dev/null 2>&1 || [ -x '$e' ]"; then
+              echo "OK: $e"
+            else
+              echo "HATA: exec-once hedefi '$e' imajda yok ya da çalıştırılabilir değil."
+              exit 1
+            fi
+          done
 
           echo "=== marka renkleri senkron mu (palette.json tek kaynak) ==="
           # palette.json makine-okunur tek kaynak ama hem hyprland.conf hem

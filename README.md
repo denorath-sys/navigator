@@ -192,10 +192,18 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   `build-disk-and-boot-test.yml`'de runner'dan VM'e kopyalanan tek şey
   test betiğinin kendisi kaldı: test edilen her Navigator bileşeni
   imajdan geliyor, ve renk senkron kontrolü artık üç dosyayı da
-  (`palette.json`, `hyprland.conf`, `Theme.qml`) imajdan okuyor. Kalan:
-  görsel doğruluk, gerçek Hyprland IPC, Hyprland'ın shell'i otomatik
-  başlatması (`exec-once` henüz yok), Ollama'nın imaja katmanlanması
-  (Katman 6, hâlâ PLACEHOLDER).
+  (`palette.json`, `hyprland.conf`, `Theme.qml`) imajdan okuyor. **Hyprland artık masaüstünü
+  kendisi başlatıyor:** `hyprland.conf`'a ilk kez `exec-once` eklendi —
+  Navigator shell'i (Katman 7'nin koyduğu yoldan) ve polkit
+  yetkilendirme ajanı. waybar (kendi panelimizle çakışır), hyprpaper ve
+  hypridle (ikisi de henüz yazılmamış kendi config'ini gerektiriyor) ile
+  systemd'nin yönettiği servisler bilinçli olarak dışarıda; gerekçeler
+  hem config'te hem `hyprland/README.md`'de yazılı. CI iki yeni şeyi
+  doğruluyor: her `exec-once` hedefinin imajda gerçekten çalıştırılabilir
+  olduğu (yanlış bir yolu Hyprland sessizce yutar, hiçbir test kırılmaz)
+  ve Quickshell'in artık elle değil compositor'ın kendi `exec-once`'ıyla
+  başladığı. Kalan: görsel doğruluk, gerçek Hyprland IPC, Ollama'nın
+  imaja katmanlanması (Katman 6, hâlâ PLACEHOLDER).
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 
