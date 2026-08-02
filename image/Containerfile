@@ -97,10 +97,12 @@ RUN dnf5 -y copr enable denorath/navigator-hyprland \
 # implemented yet" hatası veriyor (--experimental ile bile). Bu yüzden bu
 # katmanda düz `dnf5 install` kullanılıyor — dnf5'in normal bağımlılık
 # çözücüsü rpm-ostree'nin aksine gerekli paketleri sorunsuz yükseltebiliyor.
-# F44 tabanında bu gerekçe muhtemelen ortadan kalkıyor (Qt sürümleri artık
-# uyuşuyor), ama BU DOĞRULANMADI — `dnf5 install` her iki durumda da çalıştığı
-# için bilerek dokunulmadı. rpm-ostree'ye geri dönmek ayrı bir değişiklik
-# olmalı, F44 geçişiyle aynı build'de denenmemeli.
+# F44 tabanında bu gerekçe ortadan kalkmış görünüyor: ilk F44 build'inin
+# log'unda qt6-qtbase-6.11.1 YÜKSELTİLMEDEN, doğrudan `updates` deposundan
+# kuruldu — yani tabanda çakışacak eski bir Qt yok. Buna rağmen
+# `rpm-ostree install`'a dönmek DENENMEDİ: `dnf5 install` çalışıyor ve bu
+# ayrı bir değişiklik olmalı. F44 geçişiyle aynı build'de iki değişken
+# birden değiştirilmedi ki bir şey kırılsa hangisi olduğu belli olsun.
 RUN dnf5 -y copr enable errornointernet/quickshell \
     && dnf5 -y install quickshell \
     && ostree container commit

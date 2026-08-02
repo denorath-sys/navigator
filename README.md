@@ -202,8 +202,47 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   doğruluyor: her `exec-once` hedefinin imajda gerçekten çalıştırılabilir
   olduğu (yanlış bir yolu Hyprland sessizce yutar, hiçbir test kırılmaz)
   ve Quickshell'in artık elle değil compositor'ın kendi `exec-once`'ıyla
-  başladığı. Kalan: görsel doğruluk, gerçek Hyprland IPC, Ollama'nın
-  imaja katmanlanması (Katman 6, hâlâ PLACEHOLDER).
+  başladığı. **Taban Fedora 43'ten 44'e taşındı** (commit `f017ac5`).
+  Taban 43'e sabitlenmişti çünkü `solopasha/hyprland` COPR paketleri
+  fc44'te depsolve olmuyordu; teşhis edildiğinde bunun bir ABI
+  uyumsuzluğu değil, **hiç yapılmamış bir rebuild** olduğu ortaya çıktı:
+  o COPR'ın fc44 chroot'u paketleri fc43'ten kopyalamış (COPR'da
+  `forked` durumu), dolayısıyla aquamarine hâlâ `libdisplay-info.so.2`
+  istiyordu ve F44 `.so.3` taşıyor. Kanıt: aynı kaynak, libdisplay-info
+  0.3 taşıyan rawhide chroot'unda sorunsuz derlenmiş. Çözüm kendi
+  COPR'umuz: **`denorath/navigator-hyprland`**, aynı spec deposundan
+  (`solopasha/hyprlandRPM`) fedora-44'e karşı gerçekten derlenmiş 13
+  paket; `aquamarine`'in artık `libdisplay-info.so.3` istediği depo
+  metadata'sında doğrulandı. Yolda üç gerçek sorun bulundu: COPR'ın
+  `spec` alanı boş bırakılınca `.copr/Makefile`'a dizin adının
+  geçirilmesi (bu, solopasha'nın kararlı `hyprland` paketinin de neden
+  Ekim 2025'ten beri hiç derlenmediğini açıklıyor); `glaze-static`
+  build bağımlılığının spec'in Lua bloğunda gizli olması; ve **F44'ün
+  aynı zamanda GCC 15'ten 16'ya geçmesi** — WG21 P3953R3
+  `std::runtime_format`'ı `std::dynamic_format` olarak yeniden
+  adlandırdı ve libstdc++ 16 sadece yeni ismi sağlıyor, bu yüzden
+  Hyprland 0.51.1 tek bir kaynak yaması gerektirdi
+  (`denorath-sys/hyprlandRPM`, `navigator-f44` dalı; yazım biçimi
+  `__cpp_lib_format`'tan seçiliyor, yani aynı kaynak F43'te de derlenir
+  — upstream bu çağrıları 0.51.1'den sonra kaldırdığı için sürüm
+  yükseltmesinde düşürülmeli). `solopasha/hyprland` Containerfile'da
+  **bilerek etkinleştirilmiyor**: ikisi birden açık olsaydı onların
+  kopyalanmış `0.51.1-3.fc43`'ü bizim `0.51.1-1.fc44`'ümüzü yenerdi
+  (rpm önce release'i karşılaştırıyor) ve imaj sessizce bozuk paketlere
+  dönerdi; Katman 1'in ihtiyaç duyduğu diğer sekiz paketin hepsi resmi
+  F44 deposunda mevcut. Uçtan uca doğrulandı: imaj build'i geçti ve
+  `build-disk-and-boot-test.yml` VM'de `Fedora Linux 44.20260801.0`
+  raporladı, Hyprland açıldı, Quickshell'i kendi `exec-once`'ı imaj
+  yolundan başlattı ve `hyprctl layers` gerçek bir layer-shell yüzeyi
+  gösterdi (`namespace: quickshell`), AssistantPanel → `ai-stack/router`
+  zinciri yanıt verdi. Katman 2'nin `dnf5 install` tercihi bilinçli
+  olarak değiştirilmedi: gerekçesi (taban imajdaki eski Qt'nin
+  yükseltilememesi) F44'te ortadan kalkmış görünüyor — CI log'unda
+  `qt6-qtbase-6.11.1` yükseltilmeden `updates`'ten kuruldu — ama
+  `rpm-ostree install`'a dönmek ayrı bir deney olmalı, F44 geçişiyle
+  aynı build'de iki değişken değiştirilmedi. Kalan: görsel doğruluk,
+  gerçek Hyprland IPC, Ollama'nın imaja katmanlanması (Katman 6, hâlâ
+  PLACEHOLDER).
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 
