@@ -46,8 +46,51 @@ OK: palette.json <-> hyprland.conf (imajdan) <-> shell/Theme.qml senkron.
     teal=4fd1c5 purple=8b7cf6 gold=e8d9a8 navy=0b0f1a, gradyan açısı=45deg
 ```
 
+## Duvar kâğıdı — üretilen, taşınan değil
+
+`generate-wallpaper.py` Navigator'ın duvar kâğıdını **prosedürel olarak
+üretiyor**: gece göğü gradyanı, yıldız alanı, Orion takımyıldızı ve
+Kuzey Yıldızı — `palette.json`'daki nautical/gökyüzü kimliğinin doğrudan
+görsel karşılığı. Bağımlılık yok (stdlib; PNG yazıcısı da betiğin
+içinde).
+
+Depoda ikili bir görsel taşımak yerine üreticiyi taşımanın üç somut
+faydası var:
+
+1. **Renkler tek kaynaktan.** Betik marka renklerini `palette.json`'dan
+   OKUYOR. `hyprland.conf` ve `shell/Theme.qml` hex'leri elle tekrar
+   ediyor (bu yüzden CI onları karşılaştırmak zorunda); duvar kâğıdında
+   o sapma riski hiç doğmuyor — palet değişirse görsel de değişir.
+2. **Deterministik.** Sabit tohumlu PRNG; aynı girdi aynı baytları
+   üretiyor, yani imaj build'i tekrarlanabilir kalıyor (yerelde iki
+   üretimin byte-identik olduğu doğrulandı).
+3. **Çözünürlükten bağımsız.** `--width`/`--height` ile istenen boyutta
+   üretiliyor; imajda 2560x1440 üretiliyor.
+
+İmajda: `image/Containerfile` **Katman 3** betiği kopyalayıp build
+sırasında çalıştırıyor → `/usr/share/navigator/theme/wallpaper.png`.
+`hyprland/hyprpaper.conf` (Katman 4, `/etc/skel` üzerinden) onu
+yüklüyor ve `hyprland.conf`'a eklenen `exec-once = hyprpaper` hyprpaper'ı
+başlatıyor.
+
+**Neden şimdi:** Navigator bu ana kadar **stok Hyprland duvar kâğıdını**
+gösteriyordu (varsayılan görsel + "A day without Hyprland is a day
+wasted"), yani masaüstü markasız görünüyordu. Bunu hiçbir metinsel test
+göremezdi; ilk gerçek ekran görüntüsü alınınca ortaya çıktı (bkz.
+`shell/README.md`, "İlk ekran görüntüsü ne buldu").
+
+Duvar kâğıdı bilinçli olarak **koyu ve sakin**: üstünde bar, pencereler
+ve asistan paneli okunacak, onlarla yarışmamalı. Ölçüldü — orta bant
+ortalama parlaklığı (luma) **21.6**; stok Hyprland görselinde aynı ölçüm
+CI'da **85.3** çıkmıştı. CI bu farkı gerçek bir iddiaya çeviriyor:
+ekran görüntüsündeki masaüstü bandının luma'sı 55'i aşarsa job düşüyor
+(hyprpaper hiç başlamazsa stok görsel geri gelir ve iddia yakalar).
+Kontrolün iş gördüğü, parlaklığı stok seviyesine çekilmiş sahte bir
+görüntü enjekte edilerek doğrulandı.
+
 ## Durum
 
-Faz 1 — palet tanımı gerçek ve artık imajda; `gtk/`, `qt/` hâlâ boş
-iskelet. Gerçek GTK/Qt tema üretimi (ikon seti, cursor teması, GTK CSS,
-Qt Kvantum/QQC2 stili) Faz 2 kapsamında ele alınacak.
+Faz 1 — palet tanımı gerçek ve artık imajda; duvar kâğıdı da gerçek
+(üretilen, imajda, CI'da görsel olarak doğrulanan). `gtk/`, `qt/` hâlâ
+boş iskelet. Gerçek GTK/Qt tema üretimi (ikon seti, cursor teması, GTK
+CSS, Qt Kvantum/QQC2 stili) Faz 2 kapsamında ele alınacak.

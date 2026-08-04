@@ -308,9 +308,24 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   (`gesture = 3, horizontal, workspace`) ve asıl ders CI'a yazıldı:
   eski `grep "config error" hyprland.log` kontrolü **yanlış güvence
   veriyordu** ("(yok)" basıyordu), yerine compositor'a doğrudan soran
-  `hyprctl configerrors` iddiası kondu. Kalan: gerçek fare tıklaması
-  (girdi enjeksiyonu), Navigator duvar kâğıdı, Ollama'nın imaja
-  katmanlanması (Katman 6, hâlâ PLACEHOLDER).
+  `hyprctl configerrors` iddiası kondu. **Masaüstü ilk kez Navigator gibi görünüyor:** ekran görüntüsünün
+  ortaya çıkardığı iki eksik de kapatıldı. (1) `hyprland-qtutils`
+  eksikti ve Hyprland masaüstünde sarı bir bilgi afişi gösterip üst
+  panelin sağını kapatıyordu; paket Fedora'da hiç yok (dist-git'te bile),
+  bu yüzden çalışma zamanı bağımlılığı `hyprland-qt-support` ile birlikte
+  kendi COPR'umuza eklenip fedora-44'e karşı derlendi. (2) Masaüstü stok
+  Hyprland duvar kâğıdını gösteriyordu; artık Navigator'ın kendi duvar
+  kâğıdı var — ve bu bir depo varlığı değil, **üretilen** bir görsel:
+  `theme/generate-wallpaper.py` gece göğü gradyanını, yıldız alanını,
+  Orion'u ve Kuzey Yıldızı'nı prosedürel olarak çiziyor, marka renklerini
+  `palette.json`'dan OKUYARAK (elle tekrar yok, dolayısıyla sapma riski
+  de yok) ve deterministik olarak (sabit tohum → tekrarlanabilir build).
+  `hyprpaper` config'iyle birlikte `exec-once`'a girdi. Doğrulama yine
+  ölçüme dayanıyor: masaüstü bandının parlaklığı stok görselde 85.3'tü,
+  Navigator'ınkinde 21.6; CI 55 eşiğiyle ikisini ayırt ediyor ve
+  kontrolün iş gördüğü parlaklaştırılmış sahte bir görüntüyle
+  doğrulandı. Kalan: gerçek fare tıklaması (girdi enjeksiyonu),
+  Ollama'nın imaja katmanlanması (Katman 6, hâlâ PLACEHOLDER).
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 

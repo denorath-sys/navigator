@@ -63,9 +63,21 @@ FROM ${BASE_IMAGE}:${BASE_TAG}
 # seat ataması yapmıyor). seatd, gerçek bir VT/seat olmadan da (ör. bu
 # QEMU VM'i, ileride uzak/headless kullanım senaryoları) cihaz erişimini
 # kendi yönetebiliyor.
+#
+# hyprland-qtutils: eksikken Hyprland masaüstünde sarı bir bilgi afişi
+# gösteriyordu ("This is a runtime dependency for some dialogs") ve afiş
+# üst panelin sağını (asistan düğmesi + saat) kapatıyordu. Bir config
+# hatası olmadığı için `hyprctl configerrors` temizdi; ilk ekran
+# görüntüleri alınana kadar hiç görülmedi. Paket Fedora'da HİÇ YOK
+# (dist-git'te bile), sadece COPR'larda — bu yüzden çalışma zamanı
+# bağımlılığı hyprland-qt-support ile birlikte kendi COPR'umuza eklendi
+# (ikisi de solopasha/hyprlandRPM spec'lerinden fedora-44'e karşı
+# derlendi; solopasha'nın deposunu açmak seçenek değil, bkz. yukarıdaki
+# "forked chroot" notu).
 RUN dnf5 -y copr enable denorath/navigator-hyprland \
     && rpm-ostree install \
         hyprland \
+        hyprland-qtutils \
         hyprpaper \
         hypridle \
         hyprlock \
@@ -125,6 +137,18 @@ RUN dnf5 -y copr enable errornointernet/quickshell \
 # adımı).
 COPY theme/palette.json /usr/share/navigator/theme/palette.json
 
+# Duvar kâğıdı bir depo varlığı DEĞİL, burada üretiliyor. Gerekçe:
+# üreticiyi taşımak ikili bir görsel taşımaktan iyi — palet değişirse
+# duvar kâğıdı da değişir, çünkü betik renkleri yukarıdaki palette.json'un
+# TA KENDİSİNDEN okuyor (hyprland.conf ve Theme.qml'in aksine burada elle
+# tekrar edilen bir hex yok, dolayısıyla sapma riski hiç doğmuyor).
+# Çıktı deterministik (sabit tohumlu PRNG), yani build tekrarlanabilir.
+COPY theme/generate-wallpaper.py /usr/share/navigator/theme/generate-wallpaper.py
+RUN python3 /usr/share/navigator/theme/generate-wallpaper.py \
+        /usr/share/navigator/theme/wallpaper.png \
+    && test -s /usr/share/navigator/theme/wallpaper.png \
+    && ostree container commit
+
 # ---------------------------------------------------------------------------
 # Katman 4: Navigator sistem config'leri
 # ---------------------------------------------------------------------------
@@ -140,6 +164,13 @@ COPY theme/palette.json /usr/share/navigator/theme/palette.json
 # ai-stack'te olduğu gibi bir "CI taklidi"). Artık test, imajın kendi
 # dosyasını kullanıyor.
 COPY hyprland/hyprland.conf /etc/skel/.config/hypr/hyprland.conf
+
+# hyprpaper config'i aynı gerekçeyle /etc/skel altında: duvar kâğıdını
+# değiştirmek kullanıcının hakkı ve imaj güncellemeleri onun seçimini
+# ezmemeli. hyprland.conf artık `exec-once = hyprpaper` içeriyor;
+# config'siz başlatılan hyprpaper ilk saniyede pes ederdi, bu yüzden
+# ikisi birlikte girdi.
+COPY hyprland/hyprpaper.conf /etc/skel/.config/hypr/hyprpaper.conf
 
 # Kimlik bilgisi yapılandırma dosyası — İÇİ BOŞ bir şablon (hiçbir sır
 # imaja girmez, girmesi de mümkün değil: imaj herkese açık).

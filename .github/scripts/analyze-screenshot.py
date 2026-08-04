@@ -29,6 +29,10 @@ from collections import Counter
 # aranıyorlar: "bu renk ekranda kaç piksel" sorusunun cevabı okunmadan
 # hiçbir renk iddiaya çevrilmemeli (blur/alpha/kompozisyon değerleri
 # kaydırabilir).
+# Masaüstü bandı için üst parlaklık sınırı. Ölçülmüş iki değerin
+# ortasında: stok Hyprland duvar kâğıdı 85.3, Navigator'ınki 21.6.
+MAX_DESKTOP_LUMA = 55.0
+
 BRAND = {
     "teal": (0x4F, 0xD1, 0xC5),
     "purple": (0x8B, 0x7C, 0xF6),
@@ -172,6 +176,28 @@ def main() -> int:
     for name, rgb in BRAND.items():
         n = all_colors.get(rgb, 0)
         print(f"  {name:7s} {hexs(rgb)}: {n} piksel")
+
+    # --- İDDİA: masaüstü Navigator'ın duvar kâğıdını gösteriyor ---
+    # Sayılar tahmin değil, ölçüm:
+    #   stok Hyprland duvar kâğıdı (CI'da ölçüldü)     : luma 85.3
+    #   Navigator duvar kâğıdı (üreticiden hesaplandı) : luma 21.6
+    # Eşik ikisinin ortasında, her iki yana da geniş pay bırakacak
+    # şekilde 55. hyprpaper hiç başlamazsa ya da duvar kâğıdı
+    # yüklenemezse stok görsel geri gelir ve bu iddia düşer.
+    # Bant, üst bar ile asistan panelinin dışında kalacak şekilde seçildi.
+    band_y0, band_y1 = int(height * 0.45), int(height * 0.70)
+    band = Counter()
+    for y in range(band_y0, band_y1):
+        band.update(row_colors(width, pixels, y))
+    desktop_luma = mean_luma(band)
+    print(f"\nmasaüstü bandı (y={band_y0}..{band_y1}) ortalama luma: {desktop_luma:.1f}")
+    if desktop_luma > MAX_DESKTOP_LUMA:
+        print(
+            f"HATA: masaüstü çok parlak ({desktop_luma:.1f} > {MAX_DESKTOP_LUMA}) — "
+            "Navigator duvar kâğıdı yüklenmemiş olabilir (stok Hyprland görseli ~85)."
+        )
+        return 1
+    print(f"OK: masaüstü koyu ({desktop_luma:.1f} <= {MAX_DESKTOP_LUMA}) — Navigator duvar kâğıdı yüklü.")
 
     print("\n--- TEŞHİS: bar bölgesi ile masaüstü ortası farklı mı ---")
     bar_rows = Counter()

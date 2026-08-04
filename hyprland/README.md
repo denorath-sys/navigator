@@ -24,18 +24,43 @@ giriş eklendi:
 |---|---|
 | `qs -p /usr/share/navigator/shell/shell.qml` | Navigator shell (Katman 7'nin koyduğu yol) |
 | `/usr/libexec/polkit-mate-authentication-agent-1` | Ajan yoksa GUI'den yetki isteyen işlemler kullanıcıya hiç sorulmadan sessizce reddedilir |
+| `hyprpaper` | Navigator duvar kâğıdı; olmadan masaüstü stok Hyprland görselini gösteriyordu |
 
 **Bilinçli olarak eklenmeyenler**, gerekçeleriyle config'in içinde de
 yazılı:
 
 - **waybar** — Navigator'ın kendi üst paneli var (`shell/Bar.qml`); ikisi
   birlikte çalışırsa iki panel üst üste biner.
-- **hyprpaper, hypridle** — ikisi de kendi config dosyasını gerektiriyor
-  ve Navigator henüz ikisini de yazmadı (duvar kağıdı varlığı da yok).
-  Config'siz başlatmak ilk saniyede pes eden bir daemon demek olurdu.
+- **hypridle** — kendi config dosyasını (`hypridle.conf`) gerektiriyor
+  ve Navigator henüz yazmadı. Config'siz başlatmak ilk saniyede pes eden
+  bir daemon demek olurdu. (**hyprpaper** aynı gerekçeyle uzun süre
+  burada değildi; artık hem `hyprpaper.conf`'u hem duvar kâğıdı varlığı
+  olduğu için listeye girdi — aşağıya bkz.)
 - **NetworkManager, pipewire, wireplumber** — systemd tarafından
   yönetiliyorlar (sistem servisi ve socket ile tetiklenen kullanıcı
   servisleri), compositor'ın işi değil.
+
+### `hyprpaper.conf` — duvar kâğıdı
+
+`hyprpaper.conf` de `hyprland.conf` ile aynı yolu izliyor: `/etc/skel`
+üzerinden yeni kullanıcının `~/.config/hypr/`'ına kopyalanıyor, yani
+kullanıcı duvar kâğıdını değiştirebiliyor ve seçimi imaj
+güncellemelerinde ezilmiyor.
+
+Görselin kendisi depoda YOK, build sırasında üretiliyor
+(`theme/generate-wallpaper.py` → `/usr/share/navigator/theme/wallpaper.png`,
+Katman 3). Gerekçesi ve marka renklerinin `palette.json`'dan okunması
+için bkz. `theme/README.md`, "Duvar kâğıdı — üretilen, taşınan değil".
+
+`wallpaper = , <yol>` satırındaki boş monitör alanı "tüm monitörler"
+demek; monitör adı yazmak taşınabilir olmazdı (CI'daki QEMU VM'inde
+monitör adı `Virtual-1`, gerçek donanımda başka).
+
+CI iki ayrı şeyi doğruluyor: hyprpaper süreci gerçekten ayakta mı ve
+`hyprctl hyprpaper listloaded` Navigator'ın duvar kâğıdını bildiriyor mu.
+Asıl kanıt ise görsel — ekran görüntüsündeki masaüstü bandının
+parlaklığı ölçülüyor (bkz. `theme/README.md`); hyprpaper hiç başlamazsa
+stok Hyprland görseli geri gelir ve o iddia düşer.
 
 ### `exec-once` hedefleri CI'da doğrulanıyor
 

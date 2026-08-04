@@ -490,6 +490,30 @@ jobs:
           fi
           echo "OK: Quickshell'i Hyprland'ın kendi exec-once'ı başlattı (elle başlatılmadı)."
 
+          echo "=== hyprpaper exec-once ile başladı ve duvar kâğıdını yükledi mi ==="
+          # Duvar kâğıdı buraya kadar stok Hyprland görseliydi; bu ilk
+          # ekran görüntüsü alınana kadar fark edilmemişti. Süreç kontrolü
+          # tek başına yetmez (hyprpaper config'i okuyamazsa da ayakta
+          # kalabilir), bu yüzden IPC'den yüklü duvar kâğıdı da soruluyor.
+          # Asıl kanıt yine görsel: ekran görüntüsü adımı masaüstü
+          # parlaklığını ölçüp stok görselden ayırt ediyor.
+          for i in $(seq 1 15); do
+            pgrep -x hyprpaper >/dev/null && break
+            sleep 1
+          done
+          if ! pgrep -af hyprpaper; then
+            echo "HATA: hyprpaper süreci yok — exec-once çalışmamış ya da config'i okuyamamış."
+            grep -i "hyprpaper" /root/hyprland.log | tail -20 || true
+            exit 1
+          fi
+          WALL="$(hyprctl hyprpaper listloaded 2>&1 || true)"
+          echo "hyprctl hyprpaper listloaded -> ${WALL}"
+          if ! echo "${WALL}" | grep -q "/usr/share/navigator/theme/wallpaper.png"; then
+            echo "HATA: Navigator duvar kâğıdı hyprpaper'a yüklenmemiş."
+            exit 1
+          fi
+          echo "OK: hyprpaper ayakta ve Navigator duvar kâğıdını yüklemiş."
+
           echo "=== Polkit ajanı da exec-once ile başladı mı ==="
           # Bu bir iddia değil bilgi: polkit ajanı headless bir VM'de
           # (görünür oturum/seat olmadan) başlamayabilir; masaüstünün
@@ -999,7 +1023,7 @@ jobs:
           # (Test root olarak çalışıyor; /etc/skel sadece YENİ hesaplara
           # kopyalanır, root zaten mevcut olduğundan elle kopyalamak gerekiyor.)
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
-            "mkdir -p /root/.config/hypr && cp /etc/skel/.config/hypr/hyprland.conf /root/.config/hypr/hyprland.conf"
+            "mkdir -p /root/.config/hypr && cp /etc/skel/.config/hypr/hyprland.conf /root/.config/hypr/hyprland.conf && cp /etc/skel/.config/hypr/hyprpaper.conf /root/.config/hypr/hyprpaper.conf"
           # shell/ ARTIK KOPYALANMIYOR: Containerfile Katman 7 onu imaja
           # /usr/share/navigator/shell/ altına koyuyor. Bununla birlikte bu
           # workflow'da runner'dan VM'e kopyalanan tek şey test betiğinin
