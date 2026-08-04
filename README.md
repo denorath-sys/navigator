@@ -296,8 +296,21 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   görüntünün tek renk olmaması — düz siyah bir ekran sessizce yeşil
   kalmamalı); bar yüksekliği, marka renklerinin piksel sayısı ve satır
   parlaklıkları şimdilik TEŞHİS, gerçek sayılar okunmadan iddiaya
-  çevrilmeyecek. Kalan: gerçek fare tıklaması (girdi enjeksiyonu),
-  Ollama'nın imaja katmanlanması (Katman 6, hâlâ PLACEHOLDER).
+  çevrilmeyecek. **İlk ekran görüntüsü kendini hemen amorti etti:** marka
+  teal'inin ekranda birebir render edildiği (1904 piksel) ve
+  AssistantPanel'in Türkçe kimlik bilgisi mesajının gerçekten göründüğü
+  doğrulandı — ama aynı görüntü, o ana kadar BÜTÜN metinsel testlerden
+  sessizce geçmiş iki gerçek sorunu da ortaya çıkardı: (1) ekranın
+  tepesinde Hyprland'ın kırmızı config hata afişi —
+  `gestures:workspace_swipe` 0.51'de kaldırılmıştı ve config hâlâ onu
+  kullanıyordu; (2) masaüstü hâlâ stok Hyprland duvar kâğıdını
+  gösteriyor, Navigator'ın kendi duvar kâğıdı yok. Birincisi düzeltildi
+  (`gesture = 3, horizontal, workspace`) ve asıl ders CI'a yazıldı:
+  eski `grep "config error" hyprland.log` kontrolü **yanlış güvence
+  veriyordu** ("(yok)" basıyordu), yerine compositor'a doğrudan soran
+  `hyprctl configerrors` iddiası kondu. Kalan: gerçek fare tıklaması
+  (girdi enjeksiyonu), Navigator duvar kâğıdı, Ollama'nın imaja
+  katmanlanması (Katman 6, hâlâ PLACEHOLDER).
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 

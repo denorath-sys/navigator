@@ -78,13 +78,48 @@ dizimine göre satır satır statik olarak incelendi:
 
 - Süslü parantez dengesi otomatik kontrol edildi: **OK**
 - `general`, `decoration` (iç içe `blur`/`shadow`), `animations`, `dwindle`,
-  `input` (iç içe `touchpad`), `gestures` blokları güncel Hyprland söz
-  dizimine uygun
+  `input` (iç içe `touchpad`) blokları güncel Hyprland söz dizimine uygun
+- ⚠️ **`gestures` bloğu hakkındaki bu değerlendirme YANLIŞTI** — aşağıya
+  bkz. "Statik incelemenin kaçırdığı gerçek hata"
 - Değişkenler (`$mainMod`, `$terminal` vb.) kullanılmadan önce tanımlı —
   sıralama doğru (Hyprlang basit metin ikamesi yapar)
 - Tüm `bind`/`bindm` satırları geçerli dispatcher isimleri kullanıyor
 
-**Sonuç:** Sözdizimsel bir hata bulunamadı.
+**Sonuç:** Sözdizimsel bir hata bulunamadı — **ama bu sonuç eksikti.**
+
+## Statik incelemenin kaçırdığı gerçek hata
+
+`gestures { workspace_swipe = true }` sözdizimsel olarak kusursuzdu ve
+Hyprland belgelerinde yıllarca böyleydi. Ama **Hyprland 0.51 jest
+sistemini baştan yazdı ve bu seçeneği kaldırdı**; imajdaki sürüm
+(0.51.1) onu görünce gerçek bir config hatası üretiyordu:
+
+```
+Config error in file /var/roothome/.config/hypr/hyprland.conf at line 113:
+config option <gestures:workspace_swipe> does not exist.
+```
+
+Bu hata kullanıcının ekranında **kırmızı bir hata afişi** olarak
+duruyordu. Yakalanmasının hiçbir yolu olmadığı için değil — üç ayrı
+kontrol vardı ve üçü de sessiz kaldı:
+
+1. Statik sözdizimi incelemesi: hyprlang'a göre geçerli, seçeneğin var
+   olup olmadığını bilmesi mümkün değil.
+2. CI'daki `hyprctl getoption` kontrolleri: sadece beş belirli seçeneği
+   soruyordu, hatalı olan onların arasında değildi.
+3. CI'daki `grep -i "config error" /root/hyprland.log`: **"(yok)" bastı**
+   — yani yanlış güvence verdi. Hyprland bu hatayı o log'a o ifadeyle
+   yazmıyor.
+
+Ortaya çıkaran şey **görsel doğruluk testinin ilk ekran görüntüsü**
+oldu: afiş ekranın tepesinde duruyordu. Ders, bu projede genel olarak
+geçerli: bir bileşenin çıktısı görselse, metinsel kontroller "sessiz
+kaldı" diye doğru çalıştığını göstermez.
+
+Düzeltme iki parçalı: config'te yeni sözdizimi
+(`gesture = 3, horizontal, workspace`), ve CI'daki işe yaramaz log
+grep'i yerine compositor'a doğrudan soran gerçek bir iddia
+(`hyprctl configerrors`, "no errors" bekleniyor).
 
 **Açık bir not:** `mouse_down`/`mouse_up` ile workspace geçişi `e+1`/`e-1`
 kullanıyor (satır 184-185) — bu, "sıradaki workspace" değil "bir sonraki/

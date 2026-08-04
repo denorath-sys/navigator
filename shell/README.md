@@ -143,6 +143,35 @@ verdiği, tamamen siyah bir ekranın ve bozuk bir dosyanın ise
 reddedildiği doğrulandı; üretilen PNG'nin geçerliliği de ayrıca kontrol
 edildi.
 
+### İlk ekran görüntüsü ne buldu
+
+İlk gerçek çalıştırma ([run
+30915860029](https://github.com/denorath-sys/navigator/actions/runs/30915860029))
+kendini hemen amorti etti. Ölçülenler:
+
+```
+boyut: 1280x800, farklı renk sayısı: 265280
+teal #4fd1c5: 1904 piksel     navy #0b0f1a: 2560 piksel
+purple #8b7cf6: 10 piksel     gold #e8d9a8: 0 piksel
+```
+
+Yani marka teal'i ekranda **birebir** render ediliyor (odaklı workspace
+pili + AssistantToggle). Bar, saat, workspace pili ve AssistantPanel'in
+Türkçe kimlik bilgisi mesajı görüntüde gerçekten görünüyor — panelin
+`explainReason()` çevirisi ilk kez gözle doğrulandı.
+
+Ama görüntü **iki gerçek sorun** da gösterdi, ikisi de o ana kadar
+bütün metinsel testlerden sessizce geçmişti:
+
+1. **Ekranın tepesinde Hyprland'ın kırmızı config hata afişi**:
+   `config option <gestures:workspace_swipe> does not exist`. Ayrıntı ve
+   neden üç ayrı kontrolün de kaçırdığı için bkz. `hyprland/README.md`,
+   "Statik incelemenin kaçırdığı gerçek hata".
+2. **Masaüstü hâlâ stok Hyprland duvar kâğıdı** (varsayılan anime
+   görseli + "A day without Hyprland is a day wasted"). Navigator'ın
+   kendi duvar kâğıdı yok — `hyprpaper` bilinçli olarak dışarıda
+   bırakılmıştı, ama sonucun markasız göründüğü ilk kez görüldü.
+
 ## WorkspaceIndicator — gerçek Hyprland verisi (CI, Faz 4)
 
 `WorkspaceIndicator` uzun süre statik bir placeholder'dı: 1-10 arası

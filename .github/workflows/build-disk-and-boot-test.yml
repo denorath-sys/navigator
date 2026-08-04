@@ -326,8 +326,23 @@ jobs:
           # compositor'ın onu parse edip uyguladığını hyprctl getoption ile
           # doğruluyoruz — sadece "çökmedi" değil, config'teki gerçek
           # değerlerin gerçekten etkili olduğunu kontrol ediyoruz.
-          echo "--- config error/parse uyarıları (varsa) ---"
-          grep -i "config error\|syntax error" /root/hyprland.log || echo "(yok)"
+          echo "--- config hataları (compositor'ın KENDİ raporu) ---"
+          # Burada eskiden /root/hyprland.log'da "config error" grep'leniyordu
+          # ve bu YANLIŞ GÜVENCE veriyordu: gerçekte config'te bir hata
+          # varken bile "(yok)" basıyordu. Hata Hyprland'ın EKRANDAKİ hata
+          # afişinde duruyordu ve ilk ekran görüntüsü alınana kadar hiç
+          # görülmedi (gestures:workspace_swipe, 0.51'de kaldırılmıştı).
+          #
+          # Doğrusu compositor'a doğrudan sormak. `hyprctl configerrors`
+          # hata yoksa "no errors" döner.
+          CONFIG_ERRORS="$(hyprctl configerrors 2>&1 || true)"
+          echo "${CONFIG_ERRORS}"
+          if ! echo "${CONFIG_ERRORS}" | grep -qi "no errors"; then
+            echo "HATA: Hyprland config hatası bildiriyor (yukarıda)."
+            echo "      Bu, kullanıcının masaüstünde kırmızı bir hata afişi demek."
+            exit 1
+          fi
+          echo "OK: compositor hiç config hatası bildirmiyor."
 
           CONFIG_OK=1
           check_option() {
