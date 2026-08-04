@@ -742,32 +742,35 @@ jobs:
           # asıl merak edilen ölçüm (yeni hesabın kopyası) hiç çalışmadı.
           # Ölçmek istediğin şeyi, kanıtlanmamış bir iddianın arkasına koyma.
 
-          echo "=== TEŞHİS: dizin modu ostree /etc yolunda korunuyor mu? ==="
-          # Ölçüldü (run 30893404648): dosya 600 geldi ama DİZİN 755 —
+          echo "=== TEŞHİS: dizin modu nerede kayboluyor? ==="
+          # İki turda ölçüldü: dosya 600 geliyor ama DİZİN 755 —
           # Containerfile'daki `chmod 700 /etc/skel/.config/navigator`
-          # deploy edilmiş /etc'ye taşınmadı. Mekanizmayı ayırt etmek için
-          # /usr/etc (ostree'nin "varsayılan config" ağacı) de soruluyor:
-          # orada 700 ise sorun deployment'taki /etc merge'ü, 755 ise
-          # chmod imaj katmanında zaten tutmamış demektir.
+          # tutmuyor. İkinci tur (run 30895377833) nerede kaybolduğunu da
+          # söyledi: /usr/etc'de de 755, yani sorun deployment'taki /etc
+          # merge'ü DEĞİL, imaj katmanı/commit aşaması. Aynı RUN'daki
+          # `chmod 600` dosyada tuttuğuna göre bu, düz bir "chmod
+          # çalışmadı" değil. Kesin mekanizma henüz bilinmiyor; dizin modu
+          # bu yüzden teşhis olarak izlenmeye devam ediyor (iddia değil).
           stat -c '%n mod=%a sahip=%U:%G' \
             /etc/skel/.config /etc/skel/.config/navigator /etc/skel/.config/navigator/env 2>&1 || true
           stat -c '%n mod=%a sahip=%U:%G' \
             /usr/etc/skel/.config/navigator /usr/etc/skel/.config/navigator/env 2>&1 \
             || echo "(/usr/etc/skel yok)"
 
-          echo "=== TEŞHİS: yeni hesabın kopyası izinleri koruyor mu? ==="
-          # Bunun belgelenmiş bir garantisi YOK: /etc/skel'in kopyalandığını
-          # ölçtük (bir önceki adım), ama bootc-image-builder'ın kopyalarken
-          # dosya MODUNU da koruduğunu ölçmedik. Mod korunmasa bile kullanıcı
-          # çıkmaza girmez: dosyaya anahtarını yazdığında asistan "chmod 600"
-          # demesini söyler.
+          echo "=== İDDİA: yeni hesabın kopyası dosya modunu korumalı ==="
+          # Belgelenmiş bir garanti değildi, bu yüzden önce teşhis olarak
+          # ölçüldü (run 30895377833) ve kesin cevap alındı: navtest'in
+          # kopyası 600. Ölçüm kesin olduğuna göre artık iddia — bib veya
+          # taban imaj bu davranışı değiştirir de kopya 644'e düşerse,
+          # kullanıcının kimlik bilgisi dosyası ilk açılışta cloud-bridge
+          # tarafından reddedilir; bunu sessizce öğrenmek istemiyoruz.
           ls -la /var/home/navtest/.config/navigator/ 2>&1 || echo "(navtest'te navigator dizini yok)"
-          if [ -e /var/home/navtest/.config/navigator/env ]; then
-            NAVTEST_MODE=$(stat -c '%a' /var/home/navtest/.config/navigator/env)
-            echo "TEŞHİS-SONUÇ: navtest kopyasının modu = ${NAVTEST_MODE} (beklenen 600)"
-          else
-            echo "TEŞHİS-SONUÇ: navtest kopyası YOK"
-          fi
+          [ -e /var/home/navtest/.config/navigator/env ] || {
+            echo "HATA: navtest'in ev dizininde .config/navigator/env yok — şablon yeni hesaplara ulaşmıyor."; exit 1; }
+          NAVTEST_MODE=$(stat -c '%a' /var/home/navtest/.config/navigator/env)
+          [ "${NAVTEST_MODE}" = "600" ] || {
+            echo "HATA: navtest kopyasının modu ${NAVTEST_MODE}, 600 bekleniyordu."; exit 1; }
+          echo "OK: yeni hesabın kopyası da 0600 — kullanıcı chmod'a mecbur kalmıyor."
 
           echo "=== İDDİA: şablon DOSYASI sahibine kapalı olmalı ==="
           # Sırrı koruyan şey dosyanın modu; cloud-bridge de dizine değil

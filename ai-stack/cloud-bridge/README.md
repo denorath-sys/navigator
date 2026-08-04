@@ -69,14 +69,29 @@ bir dosya (0600) yerleştiriyor — yani her yeni hesap dosyayı yerinde
 bulur, yolu tahmin etmesi gerekmez, ve imaj güncellemeleri onu ezmez
 (`/etc/skel` sadece hesap oluşturma anında okunur).
 
-Dosyanın 0600'ü deploy edilmiş imajda gerçekten tutuyor (boot testinde
-ölçüldü ve iddiaya çevrildi). Dizin için hedeflenen 0700 ise **tutmuyor**:
-`/etc/skel/.config/navigator` 755 olarak geliyor (run 30893404648).
-Etkisi sınırlı — başkası dizini listeleyip `env` dosyasının varlığını
-görebilir ama içeriğini okuyamaz; sırrı koruyan şey dosyanın modu ve
-`cloud-bridge` de dizine değil dosyaya bakıyor. Bu yüzden dizin modu
-CI'da iddia değil teşhis olarak izleniyor; mekanizmanın ostree'nin
-`/etc` merge'ü mü yoksa katman kaybı mı olduğu henüz ayırt edilmedi.
+Dosyanın 0600'ü deploy edilmiş imajda gerçekten tutuyor, **ve
+`bootc-image-builder`'ın oluşturduğu hesabın kopyasında da tutuyor** —
+ikisi de boot testinde ölçülüp iddiaya çevrildi ([run
+30895377833](https://github.com/denorath-sys/navigator/actions/runs/30895377833)):
+
+```
+/etc/skel/.config/navigator/env  mod=600
+TEŞHİS-SONUÇ: navtest kopyasının modu = 600
+```
+
+Yani kullanıcı `chmod`'a mecbur kalmıyor; anahtarını yazması yetiyor.
+
+Dizin için hedeflenen 0700 ise **tutmuyor**: `/etc/skel/.config/navigator`
+755 olarak geliyor. Aynı run mekanizmayı da daralttı — `/usr/etc`'de de
+755, yani kayıp ostree'nin deployment sırasındaki `/etc` merge'ünde
+değil, imaj katmanı/commit aşamasında oluyor; aynı `RUN`'daki
+`chmod 600` dosyada tuttuğuna göre bu düz bir "chmod çalışmadı" da
+değil. Kesin mekanizma henüz bilinmiyor, bu yüzden dizin modu CI'da
+iddia değil teşhis olarak izleniyor.
+
+Etkisi sınırlı: başkası dizini listeleyip `env` dosyasının varlığını
+görebilir ama içeriğini okuyamaz — sırrı koruyan şey dosyanın modu ve
+`cloud-bridge` de dizine değil dosyaya bakıyor.
 
 ### İzinler: gevşekse dosya BİLEREK yok sayılır
 
