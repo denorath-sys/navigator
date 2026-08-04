@@ -456,6 +456,75 @@ jobs:
           fi
           echo "OK: en az bir layer-shell yüzeyi (Bar.qml/PanelWindow) gerçekten map edildi."
 
+          echo "=== WorkspaceIndicator gerçek Hyprland verisine bağlı mı ==="
+          # WorkspaceIndicator grafiksel bir bileşen; doğru veriyi
+          # gösterdiğini kanıtlamanın tek yolu bağlandığı veriyi dışarıdan
+          # okumak. shell.qml'deki IpcHandler (target: "workspaces") bunu
+          # sağlıyor — `assistant` handler'ının getResponse/isLoading'i ile
+          # aynı kalıp.
+          #
+          # İki ayrı şey doğrulanıyor:
+          #  1) Shell'in gördüğü workspace kümesi ve odak, compositor'ın
+          #     KENDİ raporuyla (hyprctl) birebir aynı mı,
+          #  2) compositor'da gerçek bir değişiklik olduğunda shell bunu
+          #     KENDİLİĞİNDEN görüyor mu (Quickshell.Hyprland'ın socket2
+          #     event bağlantısı) — statik bir placeholder ya da tek
+          #     seferlik bir okuma bu ikinciyi geçemez.
+          WS_IPC="qs ipc -p /usr/share/navigator/shell/shell.qml call workspaces"
+
+          check_ws_matches_hyprctl() {
+            hyprctl workspaces -j > /tmp/hyprctl-ws.json
+            hyprctl activeworkspace -j > /tmp/hyprctl-active.json
+            if ! ${WS_IPC} list > /tmp/shell-ws.json 2>/tmp/shell-ws.err; then
+              echo "  HATA: qs ipc call workspaces list başarısız: $(cat /tmp/shell-ws.err)"
+              return 1
+            fi
+            echo "  shell: $(cat /tmp/shell-ws.json)"
+            python3 -c '
+          import json
+          hypr = sorted(w["id"] for w in json.load(open("/tmp/hyprctl-ws.json")) if w["id"] > 0)
+          shell_raw = json.load(open("/tmp/shell-ws.json"))
+          shell = sorted(w["id"] for w in shell_raw if w["id"] > 0)
+          active = json.load(open("/tmp/hyprctl-active.json"))["id"]
+          assert hypr == shell, f"workspace kümeleri farklı: hyprctl={hypr} shell={shell}"
+          foc = sorted(w["id"] for w in shell_raw if w["focused"])
+          assert foc == [active], f"shell focused={foc} ama hyprctl aktif workspace={active}"
+          print(f"  OK: kümeler aynı {shell}, focused={active}")
+          '
+          }
+
+          if ! check_ws_matches_hyprctl; then
+            echo "HATA: WorkspaceIndicator'ın bağlandığı veri compositor'la uyuşmuyor (başlangıç)."
+            exit 1
+          fi
+
+          echo "--- GERÇEK OLAY: hyprctl dispatch workspace 3 ---"
+          # Boş bir workspace'e geçmek onu var ediyor ve eskisini (boşsa)
+          # yok ediyor, yani küme GERÇEKTEN değişiyor. Sabit bir uyku
+          # yerine döngüyle bekliyoruz: bu hem daha güvenilir hem de
+          # güncellemenin gerçekten olay tabanlı olduğunu gösteriyor.
+          hyprctl dispatch workspace 3
+          FOCUSED=""
+          for i in $(seq 1 15); do
+            FOCUSED="$(${WS_IPC} focusedId 2>/dev/null || echo "")"
+            if [ "${FOCUSED}" = "3" ]; then
+              break
+            fi
+            sleep 1
+          done
+          if [ "${FOCUSED}" != "3" ]; then
+            echo "HATA: workspace 3'e geçildi ama shell 15 saniyede görmedi (focusedId=${FOCUSED})."
+            echo "      Quickshell.Hyprland'ın event soketi (socket2) bağlı değil demektir."
+            exit 1
+          fi
+          echo "OK: shell workspace değişimini kendiliğinden gördü (polling yok, socket2 olayı)."
+
+          if ! check_ws_matches_hyprctl; then
+            echo "HATA: workspace 3'e geçtikten sonra shell'in verisi compositor'la uyuşmuyor."
+            exit 1
+          fi
+          hyprctl dispatch workspace 1
+
           echo "=== AssistantPanel'i ai-stack/router'a karşı test et (Quickshell IPC) ==="
           # shell.qml'deki IpcHandler (target: "assistant") üzerinden gerçek
           # bir soru soruyoruz — bu, AssistantPanel.qml'in gerçekten

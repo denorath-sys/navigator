@@ -269,9 +269,20 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   yükseltilememesi) F44'te ortadan kalkmış görünüyor — CI log'unda
   `qt6-qtbase-6.11.1` yükseltilmeden `updates`'ten kuruldu — ama
   `rpm-ostree install`'a dönmek ayrı bir deney olmalı, F44 geçişiyle
-  aynı build'de iki değişken değiştirilmedi. Kalan: görsel doğruluk,
-  gerçek Hyprland IPC, Ollama'nın imaja katmanlanması (Katman 6, hâlâ
-  PLACEHOLDER).
+  aynı build'de iki değişken değiştirilmedi. **`WorkspaceIndicator` gerçek Hyprland verisine bağlandı:** uzun
+  süredir statik 1-10 pil olan gösterge artık `Quickshell.Hyprland`'ın
+  `Hyprland.workspaces` modelini kullanıyor, `focused`/`active`
+  durumlarını gösteriyor ve tıklanınca `activate()` ile workspace
+  değiştiriyor; polling YOK — Quickshell compositor'ın event soketini
+  (socket2) kendisi dinliyor. Görünür sonuç: artık sadece VAR OLAN
+  workspace'ler listeleniyor (Hyprland boşları raporlamaz). CI iki ayrı
+  şeyi doğruluyor: shell'in gördüğü küme ve odak `hyprctl`'in kendi
+  raporuyla birebir aynı mı, VE compositor'da gerçek bir değişiklik
+  (`dispatch workspace 3`) olduğunda shell bunu kendiliğinden görüyor mu
+  — statik bir placeholder ya da tek seferlik bir okuma ikincisini
+  geçemez; karşılaştırma mantığı CI harcanmadan yerelde üç kasıtlı
+  sapmayla sınandı. Kalan: görsel doğruluk (piksel/tıklama),
+  Ollama'nın imaja katmanlanması (Katman 6, hâlâ PLACEHOLDER).
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
 

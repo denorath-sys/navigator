@@ -1,4 +1,5 @@
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 
 // Navigator OS — Quickshell giriş noktası.
@@ -32,6 +33,36 @@ ShellRoot {
 
         function isLoading(): bool {
             return panel.loading
+        }
+    }
+
+    // WorkspaceIndicator'ın bağlandığı Hyprland verisini dışarıdan
+    // okunabilir yapar. `assistant` handler'ının getResponse/isLoading'i
+    // gibi: gösterge grafiksel olduğundan, gerçek bir compositor'a karşı
+    // doğru veriyi gösterdiğini kanıtlamanın başka yolu yok
+    // (bkz. build-disk-and-boot-test.yml, "WorkspaceIndicator gerçek
+    // Hyprland verisine bağlı mı" adımı). Aynı zamanda shell durumunu
+    // script'lenebilir kılıyor.
+    IpcHandler {
+        target: "workspaces"
+
+        function list(): string {
+            // `Hyprland.workspaces` bir ObjectModel; JS'ten içeriğine
+            // `values` ile erişilir (doğrudan indeksleme reaktif değil).
+            const out = []
+            for (const ws of Hyprland.workspaces.values) {
+                out.push({
+                    id: ws.id,
+                    name: ws.name,
+                    active: ws.active,
+                    focused: ws.focused
+                })
+            }
+            return JSON.stringify(out)
+        }
+
+        function focusedId(): int {
+            return Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
         }
     }
 

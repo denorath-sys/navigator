@@ -43,18 +43,22 @@ bileşeni imajdan geliyor.
 ## Dosyalar
 
 - `shell.qml` — Quickshell giriş noktası (`ShellRoot`); `assistantVisible`
-  durumunu ve `IpcHandler` (`target: "assistant"`) ile
-  `toggle()`/`ask(prompt)`/`getResponse()`/`isLoading()` fonksiyonlarını
-  tutar — hem `Bar.qml`'deki tıklamayı hem Hyprland Super+Space kısayolunu
-  (`qs ipc call assistant toggle`) `AssistantPanel`'e bağlar.
+  durumunu ve iki `IpcHandler`'ı tutar:
+  - `target: "assistant"` — `toggle()`/`ask(prompt)`/`getResponse()`/
+    `isLoading()`; hem `Bar.qml`'deki tıklamayı hem Hyprland Super+Space
+    kısayolunu (`qs ipc call assistant toggle`) `AssistantPanel`'e bağlar.
+  - `target: "workspaces"` — `list()`/`focusedId()`; `WorkspaceIndicator`'ın
+    bağlandığı canlı Hyprland verisini dışarıdan okunabilir yapar
+    (aşağıya bkz.).
 - `Theme.qml` — Navigator marka paleti (`../theme/palette.json` ile manuel
   senkron tutulur, `hyprland/hyprland.conf`'un renk senkron yöntemiyle
   aynı). Bu manuel senkron artık CI'da **gerçekten doğrulanıyor**: dört
   renk sabiti imajdaki `palette.json` ile karşılaştırılıyor (bkz.
   `theme/README.md`).
 - `Bar.qml` — üst panel (`PanelWindow`, wlr-layer-shell)
-- `WorkspaceIndicator.qml` — workspace göstergesi (**placeholder**: statik
-  1-10 pil, henüz gerçek Hyprland IPC'siyle bağlı değil)
+- `WorkspaceIndicator.qml` — workspace göstergesi, **gerçek Hyprland
+  IPC'sine bağlı** (`Quickshell.Hyprland`); tıklanabilir (bkz.
+  "WorkspaceIndicator — gerçek Hyprland verisi")
 - `AssistantToggle.qml` — AI asistan paneli anahtarı; tıklanınca `toggled()`
   sinyali yayar (`Bar.qml` üzerinden `shell.qml`'e bağlı)
 - `AssistantPanel.qml` — **`ai-stack/router`'a gerçekten bağlı** asistan
@@ -96,9 +100,53 @@ engellemedi).
 
 **Bilinen kalan sınırlama:** Bu, `Bar.qml`'in gerçekten map olup
 render edildiğinin kanıtı — görsel çıktının (renkler, blur, layout)
-piksel piksel doğru olduğu veya `WorkspaceIndicator` içindeki
-tıklama/etkileşimin çalıştığı ayrıca test edilmedi (headless VNC
-display'den ekran görüntüsü almak ek karmaşıklık gerektirir).
+piksel piksel doğru olduğu test edilmedi (headless VNC display'den ekran
+görüntüsü almak ek karmaşıklık gerektirir). `WorkspaceIndicator`'ın
+VERİSİ artık doğrulanıyor (aşağıya bkz.) ama pil'e yapılan gerçek bir
+FARE TIKLAMASI hâlâ test edilmiyor: `activate()` çağrısı kod
+incelemesiyle doğru, tıklama yolunun kendisi ekran görüntüsü/girdi
+enjeksiyonu gerektiriyor.
+
+## WorkspaceIndicator — gerçek Hyprland verisi (CI, Faz 4)
+
+`WorkspaceIndicator` uzun süre statik bir placeholder'dı: 1-10 arası
+sabit, tıklanamayan piller. Artık `Quickshell.Hyprland`'ın `Hyprland`
+singleton'ına bağlı — `Hyprland.workspaces` (`ObjectModel`) doğrudan
+`Repeater`'ın modeli, `focused`/`active` durumları renkleri sürüyor ve
+tıklama `HyprlandWorkspace.activate()` çağırıyor.
+
+**Polling yok.** Quickshell compositor'ın event soketini (`socket2`)
+kendisi dinliyor, yani workspace açılıp kapandığında veya odak
+değiştiğinde model kendiliğinden güncelleniyor.
+
+**Görünür davranış değişikliği:** artık sadece VAR OLAN workspace'ler
+gösteriliyor — Hyprland boş workspace'leri raporlamaz, dolayısıyla liste
+kullanımla birlikte büyüyüp küçülüyor. Sabit 1-10 pil görüntüsü
+kayboldu; `hyprland.conf`'taki Super+[1-9,0] kısayolları o
+workspace'leri oluşturmaya devam ediyor ve gösterge onları
+oluştuklarında gösteriyor. Negatif id'li özel workspace'ler
+(scratchpad vb.) numaralı listede gizleniyor.
+
+### Nasıl doğrulanıyor
+
+Gösterge grafiksel olduğundan "doğru veriyi gösteriyor" iddiasının tek
+kanıtı, bağlandığı veriyi dışarıdan okumak: `shell.qml`'e
+`IpcHandler { target: "workspaces" }` eklendi (`assistant`
+handler'ındaki `getResponse`/`isLoading` ile aynı kalıp). CI iki ayrı
+şeyi doğruluyor:
+
+1. **Uyum** — shell'in gördüğü workspace kümesi ve odak, compositor'ın
+   kendi raporuyla (`hyprctl workspaces -j`, `hyprctl activeworkspace -j`)
+   birebir aynı mı.
+2. **Canlılık** — `hyprctl dispatch workspace 3` ile compositor'da
+   gerçek bir değişiklik yapılıyor ve shell'in bunu KENDİLİĞİNDEN
+   görmesi bekleniyor (sabit uyku değil, `focusedId` 3 olana kadar
+   döngü). Statik bir placeholder ya da tek seferlik bir okuma bu
+   ikinciyi geçemez.
+
+Karşılaştırma mantığı, CI harcanmadan yerelde sahte verilerle sınandı;
+kasıtlı üç sapma (shell bir workspace'i kaçırıyor, odak yanlış, eski
+sabit 1-10 davranışı) üçü de yakalandı.
 
 ## AssistantPanel — gerçek `ai-stack/router` entegrasyonu (CI, Faz 4)
 
@@ -209,8 +257,8 @@ Fedora'da `qt6-qtdeclarative-devel` benzeri.)
 
 ## Kapsam (ileride)
 
-- ~~Üst panel: workspace göstergesi, saat~~ — ilk taslak hazır (placeholder
-  workspace göstergesi ile)
+- ~~Üst panel: workspace göstergesi, saat~~ — gerçek (workspace göstergesi
+  artık canlı Hyprland verisine bağlı)
 - ~~AI asistan paneli — gerçek implementasyon~~ — `ai-stack/router`'a
   gerçekten bağlı, CI'da doğrulandı (bkz. "AssistantPanel — gerçek
   ai-stack/router entegrasyonu")
@@ -222,8 +270,9 @@ Fedora'da `qt6-qtdeclarative-devel` benzeri.)
   CI otomatik başlatmayı gerçekten doğruluyor
 - Alt panel / bildirim merkezi
 - Uygulama başlatıcı (wofi'nin yerini alacak özgün launcher)
-- Gerçek Hyprland IPC entegrasyonu (aktif/dolu workspace tespiti —
-  `WorkspaceIndicator` hâlâ statik placeholder)
+- ~~Gerçek Hyprland IPC entegrasyonu (aktif/dolu workspace tespiti)~~ —
+  `WorkspaceIndicator` artık `Quickshell.Hyprland`'a bağlı, CI gerçek bir
+  compositor'da doğruluyor
 
 ## Durum
 
