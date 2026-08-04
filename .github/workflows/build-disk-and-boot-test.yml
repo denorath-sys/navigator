@@ -335,14 +335,54 @@ jobs:
           #
           # Doğrusu compositor'a doğrudan sormak. `hyprctl configerrors`
           # hata yoksa "no errors" döner.
-          CONFIG_ERRORS="$(hyprctl configerrors 2>&1 || true)"
-          echo "${CONFIG_ERRORS}"
-          if ! echo "${CONFIG_ERRORS}" | grep -qi "no errors"; then
-            echo "HATA: Hyprland config hatası bildiriyor (yukarıda)."
+          # `configerrors`'ın TEMİZ durumdaki çıktı biçimi ölçülmeden
+          # iddiaya çevrilmişti ve bu bir CI turuna mal oldu: "no errors"
+          # bekleniyordu, Hyprland 0.51 ise hiçbir şey basmıyor (boş).
+          # Artık kural ölçüme dayanıyor: boş VEYA "no errors" = temiz.
+          config_errors() { hyprctl configerrors 2>&1 || true; }
+          is_clean() {
+            local out="$1"
+            [ -z "$(printf '%s' "${out}" | tr -d '[:space:]')" ] && return 0
+            echo "${out}" | grep -qi "no errors"
+          }
+
+          CLEAN_OUT="$(config_errors)"
+          echo "[temiz durum] configerrors çıktısı: '${CLEAN_OUT}'"
+
+          # Kontrolün BOŞ YEŞİL olmadığını aynı run'da kanıtla: bilerek
+          # var olmayan bir seçenek ekleyip reload et, configerrors'ın
+          # gerçekten konuştuğunu gör, sonra geri al. Bu olmadan "boş
+          # çıktı = temiz" kuralı, komut hiç çalışmasa bile yeşil kalırdı.
+          cp /root/.config/hypr/hyprland.conf /root/hyprland.conf.bak
+          echo 'navigator_bilerek_bozuk_secenek = 1' >> /root/.config/hypr/hyprland.conf
+          hyprctl reload >/dev/null 2>&1 || true
+          sleep 1
+          BROKEN_OUT="$(config_errors)"
+          echo "[bilerek bozuk] configerrors çıktısı: '${BROKEN_OUT}'"
+
+          cp /root/hyprland.conf.bak /root/.config/hypr/hyprland.conf
+          hyprctl reload >/dev/null 2>&1 || true
+          sleep 1
+          RESTORED_OUT="$(config_errors)"
+          echo "[geri alındı] configerrors çıktısı: '${RESTORED_OUT}'"
+
+          if is_clean "${BROKEN_OUT}"; then
+            echo "HATA: bilerek bozuk bir seçenek eklendiği hâlde configerrors sustu."
+            echo "      Bu kontrol hiçbir şey doğrulamıyor demektir; onarılmadan güvenilmemeli."
+            exit 1
+          fi
+          echo "OK: kontrol boş yeşil değil — bozuk config gerçekten yakalanıyor."
+
+          if ! is_clean "${CLEAN_OUT}"; then
+            echo "HATA: Hyprland config hatası bildiriyor (yukarıdaki [temiz durum] çıktısı)."
             echo "      Bu, kullanıcının masaüstünde kırmızı bir hata afişi demek."
             exit 1
           fi
-          echo "OK: compositor hiç config hatası bildirmiyor."
+          if ! is_clean "${RESTORED_OUT}"; then
+            echo "HATA: config geri alındıktan sonra hâlâ hata var — testin kendisi ekranı kirletmiş olabilir."
+            exit 1
+          fi
+          echo "OK: compositor hiç config hatası bildirmiyor (ve geri alma temiz)."
 
           CONFIG_OK=1
           check_option() {

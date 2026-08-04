@@ -119,7 +119,20 @@ kaldı" diye doğru çalıştığını göstermez.
 Düzeltme iki parçalı: config'te yeni sözdizimi
 (`gesture = 3, horizontal, workspace`), ve CI'daki işe yaramaz log
 grep'i yerine compositor'a doğrudan soran gerçek bir iddia
-(`hyprctl configerrors`, "no errors" bekleniyor).
+(`hyprctl configerrors`).
+
+**Ve o iddia ilk denemede yanlış yazıldı** — aynı hataya bir kez daha
+düşerek: çıktı biçimi ÖLÇÜLMEDEN "no errors" dizgesi bekleniyordu.
+Hyprland 0.51 temiz durumda hiçbir şey basmıyor (boş çıktı), dolayısıyla
+config düzeltilmiş olmasına rağmen kontrol kırmızı yandı. Kural artık
+ölçüme dayanıyor: **boş VEYA "no errors" = temiz.**
+
+Bu sefer kontrolün boş yeşil olmadığı da aynı run içinde kanıtlanıyor:
+config'e bilerek var olmayan bir seçenek eklenip `hyprctl reload`
+yapılıyor, `configerrors`'ın gerçekten konuştuğu doğrulanıyor, sonra
+geri alınıp temizliği yeniden kontrol ediliyor. "Boş çıktı = temiz"
+kuralı bu kendi kendini sınama olmadan, komut hiç çalışmasa bile yeşil
+kalırdı.
 
 **Açık bir not:** `mouse_down`/`mouse_up` ile workspace geçişi `e+1`/`e-1`
 kullanıyor (satır 184-185) — bu, "sıradaki workspace" değil "bir sonraki/
