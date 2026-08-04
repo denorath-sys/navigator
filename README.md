@@ -225,7 +225,36 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   (`denorath-sys/hyprlandRPM`, `navigator-f44` dalı; yazım biçimi
   `__cpp_lib_format`'tan seçiliyor, yani aynı kaynak F43'te de derlenir
   — upstream bu çağrıları 0.51.1'den sonra kaldırdığı için sürüm
-  yükseltmesinde düşürülmeli). `solopasha/hyprland` Containerfile'da
+  yükseltmesinde düşürülmeli). **Asistan artık gerçek bir makinede
+  yapılandırılabilir:** bugüne kadar `cloud-bridge` kimlik bilgisini
+  sadece ortam değişkeninden okuyordu ve bu, gerçek imajda işlemeyen bir
+  yoldu — `/usr` salt-okunur olduğu için yanına bir `.env.local`
+  konamıyor, kimlik bilgisi imaja gömülemiyor (imaj herkese açık), ve
+  paneli çalıştıran zincir (Hyprland `exec-once` → Quickshell →
+  `Process` → router → cloud-bridge) ortamı compositor'ın başlatıldığı
+  ortamdan miras aldığı için greeter/TTY login üzerinden açılan bir
+  oturuma değişken koymanın taşınabilir bir yolu yok. Çözüm kimlik
+  bilgisini **zincirin ucunda** okumak: `~/.config/navigator/env`
+  (`cloud_bridge/config.py`), `HOME`'a göreli çözüldüğü için Quickshell'in
+  ortamı bomboş olsa bile çalışıyor. Ortam değişkeni öncelikli kalıyor
+  (geliştirme akışı ve CI bozulmasın diye). Dosya bir sırrı taşıdığından
+  sahibi dışına açıksa **bilerek yok sayılıyor** (ssh'ın özel anahtar
+  davranışı) ve sebep ayırt edilebilir oluyor —
+  `credentials_file_insecure` vs `credentials_not_configured`; panel bu
+  slug'ları ilk kez kullanıcıya bir şey ifade eden cümlelere çeviriyor
+  (`explainReason()`, "chmod 600 ..." tavsiyesi dahil). Katman 4 artık
+  `/etc/skel/.config/navigator/env` altına yorumlanmış, **boş** bir şablon
+  (0600, dizini 0700) koyuyor, yani her yeni hesap yolu tahmin etmek
+  zorunda kalmadan yerinde buluyor. Gerçek bir API key'le uçtan uca
+  doğrulandı: ortamda hiçbir `ANTHROPIC_*` yokken hem doğrudan CLI hem
+  `router → cloud-bridge` zinciri sadece dosyadan çözülen kimlik
+  bilgisiyle gerçek bir Claude yanıtı üretti, `chmod 644` yapılınca da
+  gerçekten reddedildi. CI'da (sır olmadan, sahte bir anahtarla) imajın
+  içindeki çözümleme, izin reddi ve şablonun modu doğrulanıyor; kontrolün
+  boş yeşil olmadığı üç kasıtlı sapma enjekte edilerek gösterildi — biri
+  gerçek bir kusur da yakaladı: iddiaların sırası yanlışken reddetme
+  mantığı bozulursa CI sahte anahtarla gerçekten API'ye çıkıyordu, sıra
+  düzeltildi. `solopasha/hyprland` Containerfile'da
   **bilerek etkinleştirilmiyor**: ikisi birden açık olsaydı onların
   kopyalanmış `0.51.1-3.fc43`'ü bizim `0.51.1-1.fc44`'ümüzü yenerdi
   (rpm önce release'i karşılaştırıyor) ve imaj sessizce bozuk paketlere

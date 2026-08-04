@@ -1,0 +1,35 @@
+# Navigator OS — kimlik bilgisi / ortam yapılandırması
+#
+# Bu dosya Navigator AI asistanının Claude API kimlik bilgisini okuduğu
+# yerdir. Yeni bir kullanıcı hesabı açıldığında /etc/skel'den kopyalanır;
+# imaj güncellemeleri bu dosyayı EZMEZ, içeriği tamamen size aittir.
+#
+# Kullanmak için: aşağıdaki satırlardan birinin başındaki # işaretini
+# kaldırıp değeri yazın, sonra asistanı yeniden sorgulayın (yeniden
+# başlatmaya gerek yok — dosya her istekte yeniden okunur).
+#
+#   ANTHROPIC_API_KEY=sk-ant-...
+#
+# API key yerine bir OAuth token kullanıyorsanız:
+#
+#   ANTHROPIC_AUTH_TOKEN=...
+#
+# İkisi birden tanımlıysa ANTHROPIC_API_KEY kazanır. Ortam değişkeni
+# olarak tanımladıysanız o her zaman bu dosyanın önüne geçer.
+#
+# İZİNLER: bu dosya bir sırrı barındırır. Sahibi dışında kimseye açık
+# olmamalı, aksi halde asistan dosyayı bilerek YOK SAYAR ve size
+# "chmod 600" demesini söyler:
+#
+#   chmod 600 ~/.config/navigator/env
+#
+# BİÇİM: her satır KEY=VALUE. `#` ile başlayan satırlar yorumdur, ama
+# satır İÇİNDE yorum yoktur — `=`'den sonrası (kırpılmış, gerekirse
+# tırnakları soyulmuş haliyle) değerin tamamıdır. Bu bir shell değildir:
+# $DEĞİŞKEN genişletmesi ve komut ikamesi yapılmaz. Yine de biçim
+# bilinçli olarak shell'e uyumlu tutuldu, istersen bir terminalde
+# şöyle de kullanabilirsin:
+#
+#   set -a && source ~/.config/navigator/env && set +a
+#
+# Ayrıntı: ai-stack/cloud-bridge/cloud_bridge/config.py

@@ -719,6 +719,120 @@ jobs:
           fi
           echo "OK: bootc-image-builder'ın oluşturduğu hesap /etc/skel'i aldı — Katman 4 yeni kullanıcılara gerçekten ulaşıyor."
 
+      - name: Kimlik bilgisi yolu — /etc/skel şablonu ve imajda GERÇEK çözümleme
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          SCP="scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -P 2222"
+
+          # 1) Şablon imajda repodakiyle birebir aynı mı (imaj bayatsa yakalanır).
+          ${SCP} root@127.0.0.1:/etc/skel/.config/navigator/env image-navigator-env
+          if ! cmp -s image-navigator-env image/skel/.config/navigator/env; then
+            echo "HATA: imajdaki /etc/skel/.config/navigator/env repodakiyle aynı değil."
+            diff -u image/skel/.config/navigator/env image-navigator-env || true
+            exit 1
+          fi
+          echo "OK: kimlik bilgisi şablonu imajda ve repodakiyle birebir aynı."
+
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 'bash -s' <<'CHECK'
+          set -u
+
+          echo "=== İZİNLER: şablon bir sır dosyası olacak, sahibine kapalı olmalı ==="
+          stat -c '%n mod=%a sahip=%U:%G' /etc/skel/.config/navigator /etc/skel/.config/navigator/env
+          # git dosya modunu saklamadığı için COPY 0644 bırakırdı; Containerfile
+          # Katman 4 bunu chmod ile düzeltiyor. Bu iddia, o chmod düşerse
+          # (veya bir COPY yeniden sırayı bozarsa) kırılsın diye var:
+          # cloud-bridge sahibi dışına açık bir dosyayı BİLEREK reddediyor,
+          # yani yanlış mod sessiz değil ama kullanıcıyı doğrudan engeller.
+          [ "$(stat -c '%a' /etc/skel/.config/navigator/env)" = "600" ] || {
+            echo "HATA: /etc/skel/.config/navigator/env modu 600 değil."; exit 1; }
+          [ "$(stat -c '%a' /etc/skel/.config/navigator)" = "700" ] || {
+            echo "HATA: /etc/skel/.config/navigator dizin modu 700 değil."; exit 1; }
+          echo "OK: şablon 0600, dizini 0700."
+
+          echo "=== TEŞHİS: yeni hesabın kopyası izinleri koruyor mu? ==="
+          # Bunun belgelenmiş bir garantisi YOK: /etc/skel'in kopyalandığını
+          # ölçtük (bir önceki adım), ama bootc-image-builder'ın kopyalarken
+          # dosya MODUNU da koruduğunu ölçmedik. Bu yüzden job'ı düşürmeyen
+          # teşhis olarak soruluyor — proje kuralı: önce ölç, sonra iddiaya
+          # çevir. Mod korunmasa bile kullanıcı çıkmaza girmez: dosyaya
+          # anahtarını yazdığında asistan "chmod 600" demesini söyler.
+          ls -la /var/home/navtest/.config/navigator/ 2>&1 || echo "(navtest'te navigator dizini yok)"
+          if [ -e /var/home/navtest/.config/navigator/env ]; then
+            NAVTEST_MODE=$(stat -c '%a' /var/home/navtest/.config/navigator/env)
+            echo "TEŞHİS-SONUÇ: navtest kopyasının modu = ${NAVTEST_MODE} (beklenen 600)"
+          else
+            echo "TEŞHİS-SONUÇ: navtest kopyası YOK"
+          fi
+
+          echo "=== GERÇEK ÇÖZÜMLEME: imajdaki cloud-bridge dosyayı okuyor mu? ==="
+          # Sahte bir anahtar yeter: burada test edilen şey kimlik bilgisinin
+          # ÇÖZÜMLENMESİ, Claude API'ye gitmek değil (CI'da sır yok ve
+          # olmamalı). Ortamdaki her ANTHROPIC_* bilerek siliniyor ki tek
+          # olası kaynak dosya olsun — bu, masaüstündeki gerçek yolun aynısı
+          # (Quickshell'in ortamında bu değişkenler yok).
+          TMPHOME=$(mktemp -d)
+          mkdir -p "${TMPHOME}/.config/navigator"
+          printf 'ANTHROPIC_API_KEY=sk-ant-ci-sahte\n' > "${TMPHOME}/.config/navigator/env"
+          chmod 600 "${TMPHOME}/.config/navigator/env"
+          cd /usr/share/navigator/ai-stack/cloud-bridge
+          RUN_CB="env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u XDG_CONFIG_HOME HOME=${TMPHOME} python3 -m cloud_bridge"
+
+          OUT=$(${RUN_CB}) || { echo "HATA: cloud_bridge çalışmadı"; exit 1; }
+          echo "${OUT}"
+          if echo "${OUT}" | grep -q 'sk-ant-ci-sahte'; then
+            echo "HATA: kimlik bilgisinin KENDİSİ durum raporuna sızdı."; exit 1
+          fi
+          echo "${OUT}" | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          assert d["credentials_configured"] is True, d
+          assert d["credentials_source"] == "file", d
+          assert d["credentials_file"].endswith("/.config/navigator/env"), d
+          assert d["credentials_file_problem"] is None, d
+          print("OK: kimlik bilgisi ~/.config/navigator/env dosyasından çözüldü.")
+          ' || exit 1
+
+          echo "=== İzinler gevşetilirse dosya REDDEDİLİYOR mu? ==="
+          chmod 644 "${TMPHOME}/.config/navigator/env"
+          # Önce ağ gerektirmeyen durum raporu: reddetme mantığı bozulmuşsa
+          # burada kırılır. Sıra önemli — bu iddia sonra gelseydi, bozuk bir
+          # sürümde CI sahte anahtarla api.anthropic.com'a GERÇEK bir istek
+          # atardı (yerel sapma denemesinde tam olarak bu görüldü: 401).
+          OUT=$(${RUN_CB}) || { echo "HATA: cloud_bridge çalışmadı"; exit 1; }
+          echo "${OUT}"
+          echo "${OUT}" | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          assert d["credentials_configured"] is False, d
+          assert d["credentials_source"] is None, d
+          assert d["credentials_file_problem"] == "insecure_permissions", d
+          print("OK: dünyaya okunabilir kimlik bilgisi dosyası reddedildi (sessizce okunmadı).")
+          ' || exit 1
+          # Ve kullanıcının panelde göreceği sebep dizgesi de doğru olmalı.
+          OUT=$(${RUN_CB} --prompt "merhaba") || { echo "HATA: cloud_bridge çalışmadı"; exit 1; }
+          echo "${OUT}"
+          echo "${OUT}" | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          assert d["status"] == "unavailable", d
+          assert d["reason"] == "credentials_file_insecure", d
+          print("OK: reason=credentials_file_insecure (AssistantPanel bunu çeviriyor).")
+          ' || exit 1
+
+          echo "=== Dosya yokken graceful mi? ==="
+          rm -f "${TMPHOME}/.config/navigator/env"
+          OUT=$(${RUN_CB} --prompt "merhaba") || { echo "HATA: cloud_bridge çalışmadı"; exit 1; }
+          echo "${OUT}" | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          assert d["status"] == "unavailable", d
+          assert d["reason"] == "credentials_not_configured", d
+          print("OK: dosya yokken graceful unavailable.")
+          ' || exit 1
+          rm -rf "${TMPHOME}"
+          CHECK
+
       - name: Test betiğini VM'e kopyala
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"

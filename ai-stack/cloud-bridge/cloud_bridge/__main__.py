@@ -49,10 +49,11 @@ def main() -> int:
     if args.converse:
         payload = json.load(sys.stdin)
         client = AnthropicClient()
-        if not client.is_available():
+        resolution = client.resolve_credentials()
+        if not resolution.values:
             print(
                 json.dumps(
-                    {"status": "unavailable", "reason": "credentials_not_configured"},
+                    {"status": "unavailable", "reason": resolution.unavailable_reason},
                     ensure_ascii=False,
                 )
             )
@@ -84,9 +85,13 @@ def main() -> int:
         "prompt_preview": args.prompt[:80],
     }
 
-    if not client.is_available():
+    resolution = client.resolve_credentials()
+    if not resolution.values:
         report["status"] = "unavailable"
-        report["reason"] = "credentials_not_configured"
+        # Sadece "yapılandırılmamış" değil: dosya yanlış izinlerle
+        # REDDEDİLMİŞ de olabilir. Bu dizge AssistantPanel'de kullanıcıya
+        # görünüyor, bu yüzden ayırt edici olması gerçek bir fark yaratıyor.
+        report["reason"] = resolution.unavailable_reason
         print(json.dumps(report, indent=indent, ensure_ascii=False))
         return 0
 

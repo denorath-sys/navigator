@@ -1,9 +1,16 @@
 import json
+import os
+import tempfile
 import unittest
 import urllib.error
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from cloud_bridge.client import AnthropicClient, AnthropicError, DEFAULT_MODEL
+
+# Var olmayan bir HOME: içinde .config/navigator/env bulunamaz, yani
+# "kimlik bilgisi yok" testleri gerçekten kimlik bilgisiz çalışır.
+_EMPTY_HOME = os.path.join(tempfile.gettempdir(), "navigator-test-empty-home")
 
 
 def _fake_response(payload):
@@ -39,7 +46,10 @@ class TestAuthHeaders(unittest.TestCase):
         self.assertIn("x-api-key", headers)
         self.assertNotIn("Authorization", headers)
 
-    @patch.dict("os.environ", {}, clear=True)
+    # HOME geçici bir dizine çekiliyor: kimlik bilgisi artık ortam
+    # değişkeni yoksa ~/.config/navigator/env'den de okunuyor, testin
+    # sonucu geliştiricinin kendi makinesindeki dosyaya bağlı olmamalı.
+    @patch.dict("os.environ", {"HOME": _EMPTY_HOME}, clear=True)
     def test_no_credentials_raises(self):
         with self.assertRaises(AnthropicError):
             self.client._auth_headers()
@@ -50,9 +60,21 @@ class TestIsAvailable(unittest.TestCase):
     def test_true_when_api_key_set(self):
         self.assertTrue(AnthropicClient().is_available())
 
-    @patch.dict("os.environ", {}, clear=True)
+    @patch.dict("os.environ", {"HOME": _EMPTY_HOME}, clear=True)
     def test_false_when_no_credentials(self):
         self.assertFalse(AnthropicClient().is_available())
+
+    @patch.dict("os.environ", {"HOME": _EMPTY_HOME}, clear=True)
+    def test_true_when_only_config_file_has_key(self):
+        """Ortamda hiçbir şey yokken kimlik bilgisi dosyadan gelir — bu,
+        Quickshell'in ortamına değişken koyamayan gerçek masaüstü yolu."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "env"
+            path.write_text("ANTHROPIC_API_KEY=sk-ant-file\n", encoding="utf-8")
+            os.chmod(path, 0o600)
+            client = AnthropicClient(credentials_path=path)
+            self.assertTrue(client.is_available())
+            self.assertEqual(client._auth_headers(), {"x-api-key": "sk-ant-file"})
 
     @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}, clear=True)
     @patch("cloud_bridge.client.urllib.request.urlopen")

@@ -6,13 +6,16 @@ otomatik yapar ve önerilen yoldur. Burada diğer ai-stack modülleriyle aynı
 stdlib-only ilkesi korunmak istendiği için (Navigator OS'un rpm-ostree/
 Containerfile paketleme modeliyle uyumlu — bkz. README "Neden resmi SDK
 değil") ham HTTP kullanıldı. Sadece ANTHROPIC_API_KEY ve
-ANTHROPIC_AUTH_TOKEN ortam değişkenleri destekleniyor; OAuth profili/WIF
+ANTHROPIC_AUTH_TOKEN destekleniyor (ortam değişkeni veya
+`~/.config/navigator/env` — bkz. `config.py`); OAuth profili/WIF
 çözümlemesi YOK — bu bilinen bir sınırlama.
 """
 import json
-import os
 import urllib.error
 import urllib.request
+from pathlib import Path
+
+from .config import CredentialResolution, resolve_credentials
 
 API_BASE_URL = "https://api.anthropic.com"
 API_VERSION = "2023-06-01"
@@ -26,16 +29,36 @@ class AnthropicError(Exception):
 
 
 class AnthropicClient:
-    def __init__(self, base_url: str = API_BASE_URL, timeout: float = 30.0):
+    def __init__(
+        self,
+        base_url: str = API_BASE_URL,
+        timeout: float = 30.0,
+        credentials_path: Path | None = None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        # Sadece testler için: normalde yol os.environ'dan (HOME/
+        # XDG_CONFIG_HOME) çözülür — bkz. config.config_path().
+        self.credentials_path = credentials_path
+
+    def resolve_credentials(self) -> CredentialResolution:
+        """Kimlik bilgisini HER ÇAĞRIDA yeniden çözer (önbelleklenmez).
+
+        Böylece uzun ömürlü bir istemci nesnesi, kullanıcı dosyayı
+        oluşturduktan/düzelttikten sonra yeniden başlatmaya gerek kalmadan
+        onu görür; maliyet, çağrı başına birkaç yüz baytlık bir dosya
+        okuması (dosya yoksa tek bir stat).
+        """
+        return resolve_credentials(path=self.credentials_path)
 
     def _auth_headers(self) -> dict:
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        values = self.resolve_credentials().values
+
+        api_key = values.get("ANTHROPIC_API_KEY")
         if api_key:
             return {"x-api-key": api_key}
 
-        auth_token = os.environ.get("ANTHROPIC_AUTH_TOKEN")
+        auth_token = values.get("ANTHROPIC_AUTH_TOKEN")
         if auth_token:
             # OAuth token'lar Authorization: Bearer ile gönderilir (x-api-key
             # ile DEĞİL) ve anthropic-beta: oauth-2025-04-20 header'ı gerekir.
@@ -46,20 +69,18 @@ class AnthropicClient:
 
         raise AnthropicError(
             "Kimlik bilgisi yok: ANTHROPIC_API_KEY veya ANTHROPIC_AUTH_TOKEN "
-            "ortam değişkenlerinden biri gerekli."
+            "ortam değişkeni ya da ~/.config/navigator/env dosyası gerekli."
         )
 
     def is_available(self) -> bool:
-        """Bir kimlik bilgisi ortam değişkeninin ayarlı olup olmadığını
-        kontrol eder — GERÇEK BİR API ÇAĞRISI YAPMAZ. Ollama istemcisinin
+        """Bir kimlik bilgisinin çözülüp çözülmediğini kontrol eder —
+        GERÇEK BİR API ÇAĞRISI YAPMAZ. Ollama istemcisinin
         is_available()'ından farklı olarak (bkz. local-runtime/client.py):
         Anthropic API'sinde ücretsiz bir "ping" uç noktası olmadığından,
-        gereksiz/anlamsız bir ağ çağrısı yapmak yerine sadece ortam
-        değişkeni varlığı kontrol ediliyor.
+        gereksiz/anlamsız bir ağ çağrısı yapmak yerine sadece kimlik
+        bilgisinin varlığı kontrol ediliyor.
         """
-        return bool(
-            os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
-        )
+        return bool(self.resolve_credentials().values)
 
     def generate(
         self,

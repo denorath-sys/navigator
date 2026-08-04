@@ -141,6 +141,23 @@ COPY theme/palette.json /usr/share/navigator/theme/palette.json
 # dosyasını kullanıyor.
 COPY hyprland/hyprland.conf /etc/skel/.config/hypr/hyprland.conf
 
+# Kimlik bilgisi yapılandırma dosyası — İÇİ BOŞ bir şablon (hiçbir sır
+# imaja girmez, girmesi de mümkün değil: imaj herkese açık).
+#
+# Neden imajda bir şablon var: /usr salt-okunur olduğu için cloud-bridge'in
+# kimlik bilgisini kullanıcı ev dizininden okuması gerekiyor
+# (~/.config/navigator/env — bkz. cloud_bridge/config.py). Var olmayan bir
+# dosyanın yolunu kullanıcının tahmin etmesi yerine, hesap açılırken
+# yorumlanmış ve açıklamalı olarak yerine konuyor.
+#
+# chmod 600 zorunlu ve BURADA yapılıyor: git dosya modunu (exec biti
+# dışında) saklamaz, dolayısıyla COPY 0644 bırakırdı — ve cloud-bridge
+# sahibi dışına açık bir kimlik bilgisi dosyasını bilerek reddediyor.
+# Dizin de 0700: içine sır yazılacak.
+COPY image/skel/.config/navigator/env /etc/skel/.config/navigator/env
+RUN chmod 700 /etc/skel/.config/navigator \
+    && chmod 600 /etc/skel/.config/navigator/env
+
 # ---------------------------------------------------------------------------
 # Katman 5: Navigator AI stack (ai-stack/ — altı Python modülü)
 # ---------------------------------------------------------------------------
@@ -163,9 +180,10 @@ COPY hyprland/hyprland.conf /etc/skel/.config/hypr/hyprland.conf
 # Sadece çalışma zamanında gerekli olanlar kopyalanıyor: paket dizini +
 # pyproject.toml (metadata/entry point tanımı). `tests/` kasıtlı olarak
 # imaja girmiyor; `.env.local` (gerçek API key, gitignore'lı) da öyle —
-# kimlik bilgisi imaja gömülmez, çalışma zamanında ortam değişkeni olarak
-# gelir (bkz. ai-stack/cloud-bridge/README.md; kod dosyadan değil sadece
-# ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN ortam değişkenlerinden okuyor).
+# kimlik bilgisi imaja gömülmez. Çalışma zamanında iki kaynaktan gelir:
+# ortam değişkeni (ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN) ya da
+# kullanıcının kendi ~/.config/navigator/env dosyası (şablonu Katman 4'te
+# /etc/skel altına konuyor — bkz. cloud_bridge/config.py).
 #
 # Altı modülün hiçbirinin üçüncü parti bağımlılığı yok (hepsinde
 # `dependencies = []`, stdlib-only) — bu yüzden bu katmanda pip/venv

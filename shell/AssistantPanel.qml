@@ -36,6 +36,28 @@ PanelWindow {
 
     Theme { id: theme }
 
+    // ai-stack'in makine-okunur `reason` dizgelerini kullanıcıya bir şey
+    // ifade eden cümlelere çevirir. Bilinmeyen sebepler OLDUĞU GİBİ
+    // gösteriliyor — burada eşleşmeyen bir sebebi "bilinmeyen hata"ya
+    // yuvarlamak, teşhis için gereken tek bilgiyi silmek olurdu.
+    // Kimlik bilgisi yolu için bkz. ai-stack/cloud-bridge/cloud_bridge/config.py.
+    function explainReason(reason) {
+        switch (reason) {
+        case "credentials_not_configured":
+            return "Claude kimlik bilgisi yok — ~/.config/navigator/env dosyasına "
+                 + "ANTHROPIC_API_KEY=... yazıp dosyayı chmod 600 yapın."
+        case "credentials_file_insecure":
+            return "~/.config/navigator/env başkaları tarafından okunabilir, bu yüzden "
+                 + "yok sayıldı — chmod 600 ~/.config/navigator/env çalıştırın."
+        case "credentials_file_unreadable":
+            return "~/.config/navigator/env okunamadı (izin veya bozuk metin?)."
+        case "credentials_file_malformed":
+            return "~/.config/navigator/env ayrıştırılamadı — her satır KEY=VALUE olmalı."
+        default:
+            return reason
+        }
+    }
+
     function ask(promptText) {
         const trimmed = promptText.trim()
         if (trimmed.length === 0 || panel.loading)
@@ -78,7 +100,7 @@ PanelWindow {
                         panel.responseText = result.content
                     } else if (result) {
                         panel.responseText = "[" + parsed.route + "] " + (result.status || "hata") + ": "
-                            + (result.reason || result.error || "bilinmeyen")
+                            + panel.explainReason(result.reason || result.error || "bilinmeyen")
                     } else {
                         panel.responseText = "Beklenmeyen yanıt: " + out
                     }

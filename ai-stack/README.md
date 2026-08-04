@@ -60,7 +60,8 @@ denemesinde tam olarak bu yaşandı (`hardware-probe` kopyalanmamıştı,
 
 İmaja **sadece çalışma zamanı kodu** giriyor: paket dizini +
 `pyproject.toml`. `tests/` girmiyor. `.env.local` de girmiyor — kimlik
-bilgisi imaja gömülmez (aşağıya bkz.). Altı modülün hiçbirinin üçüncü
+bilgisinin KENDİSİ imaja hiç gömülmez; imaja sadece Katman 4'ün
+`/etc/skel` altına koyduğu BOŞ şablon giriyor (aşağıya bkz.). Altı modülün hiçbirinin üçüncü
 parti bağımlılığı olmadığı için (`dependencies = []`, stdlib-only) bu
 katman pip/venv kurmuyor; tek çalışma zamanı bağımlılığı python3 ≥ 3.11
 ve bu build sırasında iddia ediliyor.
@@ -139,20 +140,38 @@ AssistantPanel yanıtı: [cloud] unavailable: credentials_not_configured
 (Son satır beklenen doğru davranış: CI'da ne Ollama ne Claude kimlik
 bilgisi var — graceful hata yolu, mock değil.)
 
-### Kimlik bilgisi (bilinen sınırlama)
+### Kimlik bilgisi
 
-`cloud-bridge` kimlik bilgisini **sadece** `ANTHROPIC_API_KEY` /
-`ANTHROPIC_AUTH_TOKEN` ortam değişkenlerinden okuyor (koda gömülü
-dosya okuma yok — `cloud_bridge/client.py`). Geliştirmede kullanılan
-`.env.local` yalnızca elle `source` edilen bir kolaylık ve imaja
-girmiyor. Sonuç: gerçek imajda kullanıcının kimlik bilgisini kendi
-oturum ortamına koyması gerekiyor; `/usr` salt-okunur olduğu için
-`/usr/share/navigator/ai-stack/cloud-bridge/.env.local` gibi bir dosya
-oluşturulamaz da. Kullanıcı seviyesinde bir yapılandırma yolu (ör.
-`~/.config/navigator/env` okuyan bir katman) henüz tasarlanmadı —
-`shell/AssistantPanel.qml`'in başlattığı `Process` Quickshell'in
-ortamını miras aldığından, o ortamda değişken yoksa yanıt
-`[cloud] unavailable: credentials_not_configured` olur.
+`cloud-bridge` kimlik bilgisini iki kaynaktan çözüyor, bu öncelikle
+(`cloud_bridge/config.py`): önce `ANTHROPIC_API_KEY` /
+`ANTHROPIC_AUTH_TOKEN` ortam değişkenleri, yoksa kullanıcının kendi
+**`~/.config/navigator/env`** dosyası.
+
+Dosya yolu bir kolaylık değil, zorunluluktu: gerçek imajda `/usr`
+salt-okunur olduğundan `/usr/share/navigator/ai-stack/cloud-bridge/
+.env.local` gibi bir dosya oluşturulamıyor, kimlik bilgisi imaja da
+gömülemiyor. Geriye kalan "kullanıcı kendi oturum ortamına koysun"
+seçeneği ise gerçekte işlemiyordu: `shell/AssistantPanel.qml`'in
+başlattığı `Process` Quickshell'in ortamını miras alıyor, Quickshell'i
+de Hyprland `exec-once` başlatıyor — grafik oturumu bir greeter'dan ya
+da TTY login'den açıldığında o ortama değişken koymanın taşınabilir bir
+yolu yok. Çözüm, kimlik bilgisini **zincirin ucunda** okumak: dosya
+`HOME`'a göreli çözüldüğü için Quickshell'in ortamı boş olsa bile
+çalışıyor.
+
+Şablon imajda: `image/Containerfile` Katman 4,
+`/etc/skel/.config/navigator/env` altına yorumlanmış ve **boş** bir dosya
+(0600, dizini 0700) koyuyor, yani her yeni hesap yolu yerinde bulur.
+Dosya sahibi dışına açıksa BİLEREK yok sayılıyor (ssh'ın özel anahtar
+davranışı) ve sebep ayırt edilebilir oluyor —
+`credentials_file_insecure` vs `credentials_not_configured`;
+`AssistantPanel` bunları kullanıcıya Türkçe cümleye çeviriyor. Ayrıntı:
+`ai-stack/cloud-bridge/README.md` "Kimlik bilgisi nereden geliyor".
+
+CI'da kimlik bilgisi hâlâ yok (ve olmayacak), dolayısıyla yukarıdaki
+`[cloud] unavailable: credentials_not_configured` çıktısı doğru davranış
+olarak kalıyor; ama kimlik bilgisi YOLU boot testinde sahte bir anahtarla
+gerçekten doğrulanıyor.
 
 ### Ollama (Katman 6, hâlâ PLACEHOLDER)
 
@@ -186,7 +205,10 @@ Altı modülün tamamı gerçek ve bu makinede gerçek verilerle test edildi
   araçları), 88 test.
 - **`cloud-bridge/`** — gerçek bir Claude API key bağlandı (`.env.local`,
   gitignore'lı); Faz 4'te çok turlu mesaj + tool-use desteği eklendi
-  (`send_messages()`, `--converse`), 20 test.
+  (`send_messages()`, `--converse`). Ayrıca **kullanıcı seviyesinde
+  kimlik bilgisi yolu** (`~/.config/navigator/env`) — gerçek bir
+  masaüstünde asistanı kullanılabilir yapan eksik parça (aşağıya bkz.).
+  50 test.
 - **`assistant/`** — Faz 4'ün ilk adımı: yukarıdaki beşini birleştiren
   gerçek bir konuşma döngüsü. **Hem cloud hem local yolu artık gerçek bir
   tool-use döngüsüyle çalışıyor** — örn. "bu makinede kaç çekirdek var?"
@@ -204,7 +226,8 @@ Altı modülün tamamı ayrıca **gerçek Navigator imajının içinde** ve o
 imajdan çalıştırılıyor (Containerfile Katman 5; `/usr` salt-okunur
 haldeyken CI'da doğrulanıyor — bkz. yukarıdaki "İmajdaki kurulum yolu").
 
-Toplam ~225 test, ai-stack genelinde. Gerçek entegrasyon testlerinin
+Toplam ~255 test, ai-stack genelinde. Gerçek entegrasyon testlerinin
 büyük kısmı gerçek subprocess/TCP/dosya sistemi/Ollama/Claude API
-üzerinden çalışıyor; kimlik bilgisi gerektirenler `.env.local` yoksa
-(CI dahil) otomatik `skip` olacak şekilde tasarlandı.
+üzerinden çalışıyor; kimlik bilgisi gerektirenler hiçbir kaynakta kimlik
+bilgisi bulunamadığında (CI dahil) otomatik `skip` olacak şekilde
+tasarlandı.

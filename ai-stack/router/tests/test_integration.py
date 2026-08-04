@@ -1,7 +1,29 @@
 import json
 import os
 import subprocess
+import tempfile
 import unittest
+
+
+def _cloud_credentials_available() -> bool:
+    """Kimlik bilgisi var mı — cloud-bridge'in KENDİ çözümlemesine sorarak.
+
+    Burada ortam değişkenlerine bakmak yetmez: kaynak
+    `~/.config/navigator/env` de olabilir. Kuralı kopyalamak yerine
+    gerçek uygulamaya soruyoruz, böylece iki yer ayrışamaz.
+    """
+    cloud_bridge_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "cloud-bridge",
+    )
+    try:
+        result = subprocess.run(
+            ["python3", "-m", "cloud_bridge"],
+            cwd=cloud_bridge_dir, capture_output=True, text=True, timeout=30,
+        )
+        return bool(json.loads(result.stdout).get("credentials_configured"))
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
 
 
 class TestRouterIntegration(unittest.TestCase):
@@ -18,6 +40,12 @@ class TestRouterIntegration(unittest.TestCase):
     def _run_router(self, prompt: str, extra_args: list[str] | None = None) -> dict:
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         env = {k: v for k, v in os.environ.items() if not k.startswith("ANTHROPIC_")}
+        # ANTHROPIC_* yetmiyor: cloud-bridge kimlik bilgisini
+        # ~/.config/navigator/env'den de okuyor (bkz. cloud_bridge/config.py),
+        # dolayısıyla "kimlik bilgisi yok" iddiası ancak HOME de boş bir
+        # dizine bakarken doğru. Zincirin bu ucunda HOME'a başka ihtiyaç yok.
+        env["HOME"] = os.path.join(tempfile.gettempdir(), "navigator-test-empty-home")
+        env.pop("XDG_CONFIG_HOME", None)
         result = subprocess.run(
             ["python3", "-m", "router", "--prompt", prompt, *(extra_args or [])],
             cwd=here,
@@ -76,21 +104,17 @@ class TestRouterIntegration(unittest.TestCase):
         self.assertEqual(report["cloud_bridge"]["reason"], "credentials_not_configured")
 
 
-HAS_CLOUD_CREDENTIALS = bool(
-    os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
-)
+HAS_CLOUD_CREDENTIALS = _cloud_credentials_available()
 
 
 class TestRouterCloudCredentialedIntegration(unittest.TestCase):
-    """Claude API kimlik bilgisi mevcutsa (örn. cloud-bridge/.env.local
-    source edilmişse) router -> cloud-bridge zincirinin GERÇEK bir Claude
-    API çağrısıyla uçtan uca çalıştığını doğrular. Kimlik bilgisi yoksa
-    (CI dahil, .env.local hiçbir yerde commit edilmediğinden) atlanır —
-    bkz. cloud-bridge/README.md "Neden .env.local"."""
+    """Claude API kimlik bilgisi mevcutsa (cloud-bridge/.env.local source
+    edilmişse ya da ~/.config/navigator/env varsa) router -> cloud-bridge
+    zincirinin GERÇEK bir Claude API çağrısıyla uçtan uca çalıştığını
+    doğrular. Kimlik bilgisi yoksa (CI dahil, hiçbiri commit edilmediğinden)
+    atlanır — bkz. cloud-bridge/README.md."""
 
-    @unittest.skipUnless(
-        HAS_CLOUD_CREDENTIALS, "ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN ayarlı değil"
-    )
+    @unittest.skipUnless(HAS_CLOUD_CREDENTIALS, "Claude kimlik bilgisi yok")
     def test_complex_prompt_routes_cloud_with_real_generation(self):
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         long_prompt = "Tek kelimeyle cevap ver: Türkiye'nin başkenti neresi? " + " ".join(

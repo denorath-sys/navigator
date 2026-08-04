@@ -129,6 +129,17 @@ dönüyor — mock değil, gerçek bir uçtan uca hata yolu):
 AssistantPanel yanıtı: [cloud] unavailable: credentials_not_configured
 ```
 
+**Sebep dizgeleri artık kullanıcıya çevriliyor** (`explainReason()`):
+`credentials_not_configured` gibi makine-okunur bir slug bir masaüstü
+kullanıcısına hiçbir şey anlatmıyordu. Panel artık bilinen sebepler için
+ne yapılacağını söylüyor — ör. "Claude kimlik bilgisi yok —
+`~/.config/navigator/env` dosyasına `ANTHROPIC_API_KEY=...` yazıp dosyayı
+`chmod 600` yapın", ya da izinler gevşekse "başkaları tarafından
+okunabilir, bu yüzden yok sayıldı". Bilinmeyen sebepler OLDUĞU GİBİ
+gösteriliyor: eşleşmeyen bir sebebi "bilinmeyen hata"ya yuvarlamak,
+teşhis için gereken tek bilgiyi silmek olurdu. Kimlik bilgisi yolunun
+kendisi için bkz. `ai-stack/cloud-bridge/README.md`.
+
 **Yol boyunca bulunup düzeltilen gerçek sorunlar:**
 - `qs ipc call`, `-p`/`--path`'i `ipc` alt komutunun kendisine kayıtlı
   bekliyor (`call`'a değil) — kaynağında (`launch/parsecommand.cpp`)

@@ -14,6 +14,8 @@ on:
     branches: [main]
     paths:
       - "image/Containerfile"
+      # Katman 4'ün /etc/skel şablonları (kimlik bilgisi dosyası).
+      - "image/skel/**"
       # theme/palette.json (Katman 3) ve hyprland/hyprland.conf (Katman 4)
       # artık imaja gerçekten kopyalanıyor.
       - "theme/**"
