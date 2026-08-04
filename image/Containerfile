@@ -153,7 +153,16 @@ COPY hyprland/hyprland.conf /etc/skel/.config/hypr/hyprland.conf
 # chmod 600 zorunlu ve BURADA yapılıyor: git dosya modunu (exec biti
 # dışında) saklamaz, dolayısıyla COPY 0644 bırakırdı — ve cloud-bridge
 # sahibi dışına açık bir kimlik bilgisi dosyasını bilerek reddediyor.
-# Dizin de 0700: içine sır yazılacak.
+# Dosya modunun deploy edilmiş imajda gerçekten tuttuğu ölçüldü
+# (boot testi, "İDDİA: şablon DOSYASI sahibine kapalı olmalı").
+#
+# Dizinin 0700'ü ise TUTMUYOR: aynı ölçümde /etc/skel/.config/navigator
+# 755 olarak geldi (run 30893404648). chmod satırı yine de duruyor —
+# niyet doğru ve container katmanında etkili — ama buna dayanılmıyor:
+# sırrı koruyan şey dosyanın modu, cloud-bridge de dizine değil dosyaya
+# bakıyor. Dizin modu boot testinde iddia değil TEŞHİS olarak izleniyor;
+# mekanizma (ostree /etc merge'ü mü, katmanda mı kayboluyor) henüz
+# ayırt edilmedi.
 COPY image/skel/.config/navigator/env /etc/skel/.config/navigator/env
 RUN chmod 700 /etc/skel/.config/navigator \
     && chmod 600 /etc/skel/.config/navigator/env

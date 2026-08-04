@@ -161,7 +161,9 @@ yolu yok. Çözüm, kimlik bilgisini **zincirin ucunda** okumak: dosya
 
 Şablon imajda: `image/Containerfile` Katman 4,
 `/etc/skel/.config/navigator/env` altına yorumlanmış ve **boş** bir dosya
-(0600, dizini 0700) koyuyor, yani her yeni hesap yolu yerinde bulur.
+(0600) koyuyor, yani her yeni hesap yolu yerinde bulur. (Dizin için
+hedeflenen 0700 deploy edilmiş imajda tutmuyor — 755 geliyor; sırrı
+koruyan dosya modu, ayrıntı cloud-bridge README'sinde.)
 Dosya sahibi dışına açıksa BİLEREK yok sayılıyor (ssh'ın özel anahtar
 davranışı) ve sebep ayırt edilebilir oluyor —
 `credentials_file_insecure` vs `credentials_not_configured`;

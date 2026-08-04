@@ -244,8 +244,8 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   slug'ları ilk kez kullanıcıya bir şey ifade eden cümlelere çeviriyor
   (`explainReason()`, "chmod 600 ..." tavsiyesi dahil). Katman 4 artık
   `/etc/skel/.config/navigator/env` altına yorumlanmış, **boş** bir şablon
-  (0600, dizini 0700) koyuyor, yani her yeni hesap yolu tahmin etmek
-  zorunda kalmadan yerinde buluyor. Gerçek bir API key'le uçtan uca
+  (0600) koyuyor, yani her yeni hesap yolu tahmin etmek zorunda kalmadan
+  yerinde buluyor. Gerçek bir API key'le uçtan uca
   doğrulandı: ortamda hiçbir `ANTHROPIC_*` yokken hem doğrudan CLI hem
   `router → cloud-bridge` zinciri sadece dosyadan çözülen kimlik
   bilgisiyle gerçek bir Claude yanıtı üretti, `chmod 644` yapılınca da

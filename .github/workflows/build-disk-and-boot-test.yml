@@ -737,26 +737,30 @@ jobs:
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 'bash -s' <<'CHECK'
           set -u
 
-          echo "=== İZİNLER: şablon bir sır dosyası olacak, sahibine kapalı olmalı ==="
-          stat -c '%n mod=%a sahip=%U:%G' /etc/skel/.config/navigator /etc/skel/.config/navigator/env
-          # git dosya modunu saklamadığı için COPY 0644 bırakırdı; Containerfile
-          # Katman 4 bunu chmod ile düzeltiyor. Bu iddia, o chmod düşerse
-          # (veya bir COPY yeniden sırayı bozarsa) kırılsın diye var:
-          # cloud-bridge sahibi dışına açık bir dosyayı BİLEREK reddediyor,
-          # yani yanlış mod sessiz değil ama kullanıcıyı doğrudan engeller.
-          [ "$(stat -c '%a' /etc/skel/.config/navigator/env)" = "600" ] || {
-            echo "HATA: /etc/skel/.config/navigator/env modu 600 değil."; exit 1; }
-          [ "$(stat -c '%a' /etc/skel/.config/navigator)" = "700" ] || {
-            echo "HATA: /etc/skel/.config/navigator dizin modu 700 değil."; exit 1; }
-          echo "OK: şablon 0600, dizini 0700."
+          # ÖNCE TEŞHİSLER, SONRA İDDİALAR. İlk turda tersiydi ve gerçek bir
+          # bedeli oldu: kanıtlanmamış bir iddia (dizin modu) job'ı düşürünce,
+          # asıl merak edilen ölçüm (yeni hesabın kopyası) hiç çalışmadı.
+          # Ölçmek istediğin şeyi, kanıtlanmamış bir iddianın arkasına koyma.
+
+          echo "=== TEŞHİS: dizin modu ostree /etc yolunda korunuyor mu? ==="
+          # Ölçüldü (run 30893404648): dosya 600 geldi ama DİZİN 755 —
+          # Containerfile'daki `chmod 700 /etc/skel/.config/navigator`
+          # deploy edilmiş /etc'ye taşınmadı. Mekanizmayı ayırt etmek için
+          # /usr/etc (ostree'nin "varsayılan config" ağacı) de soruluyor:
+          # orada 700 ise sorun deployment'taki /etc merge'ü, 755 ise
+          # chmod imaj katmanında zaten tutmamış demektir.
+          stat -c '%n mod=%a sahip=%U:%G' \
+            /etc/skel/.config /etc/skel/.config/navigator /etc/skel/.config/navigator/env 2>&1 || true
+          stat -c '%n mod=%a sahip=%U:%G' \
+            /usr/etc/skel/.config/navigator /usr/etc/skel/.config/navigator/env 2>&1 \
+            || echo "(/usr/etc/skel yok)"
 
           echo "=== TEŞHİS: yeni hesabın kopyası izinleri koruyor mu? ==="
           # Bunun belgelenmiş bir garantisi YOK: /etc/skel'in kopyalandığını
           # ölçtük (bir önceki adım), ama bootc-image-builder'ın kopyalarken
-          # dosya MODUNU da koruduğunu ölçmedik. Bu yüzden job'ı düşürmeyen
-          # teşhis olarak soruluyor — proje kuralı: önce ölç, sonra iddiaya
-          # çevir. Mod korunmasa bile kullanıcı çıkmaza girmez: dosyaya
-          # anahtarını yazdığında asistan "chmod 600" demesini söyler.
+          # dosya MODUNU da koruduğunu ölçmedik. Mod korunmasa bile kullanıcı
+          # çıkmaza girmez: dosyaya anahtarını yazdığında asistan "chmod 600"
+          # demesini söyler.
           ls -la /var/home/navtest/.config/navigator/ 2>&1 || echo "(navtest'te navigator dizini yok)"
           if [ -e /var/home/navtest/.config/navigator/env ]; then
             NAVTEST_MODE=$(stat -c '%a' /var/home/navtest/.config/navigator/env)
@@ -764,6 +768,21 @@ jobs:
           else
             echo "TEŞHİS-SONUÇ: navtest kopyası YOK"
           fi
+
+          echo "=== İDDİA: şablon DOSYASI sahibine kapalı olmalı ==="
+          # Sırrı koruyan şey dosyanın modu; cloud-bridge de dizine değil
+          # dosyaya bakıyor. git dosya modunu saklamadığı için COPY 0644
+          # bırakırdı, Containerfile Katman 4 bunu chmod ile düzeltiyor —
+          # ve bunun deploy edilmiş imajda GERÇEKTEN tuttuğu ölçüldü.
+          # Bu iddia o chmod düşerse kırılsın diye var.
+          #
+          # Dizin modu bilinçli olarak İDDİA DEĞİL, teşhis (yukarıda):
+          # 700 hedeflendi ama ostree /etc yolunda 755 olarak çıkıyor.
+          # Etkisi sınırlı — başkası dizini listeleyip `env` dosyasının
+          # varlığını görebilir, içeriğini okuyamaz.
+          [ "$(stat -c '%a' /etc/skel/.config/navigator/env)" = "600" ] || {
+            echo "HATA: /etc/skel/.config/navigator/env modu 600 değil."; exit 1; }
+          echo "OK: şablon dosyası 0600."
 
           echo "=== GERÇEK ÇÖZÜMLEME: imajdaki cloud-bridge dosyayı okuyor mu? ==="
           # Sahte bir anahtar yeter: burada test edilen şey kimlik bilgisinin

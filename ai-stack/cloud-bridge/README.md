@@ -65,9 +65,18 @@ ortam değişkeni plumbing'i, hiçbir shell profili gerekmiyor.
 
 Şablonu imaj kendisi koyuyor: `image/Containerfile` Katman 4
 `/etc/skel/.config/navigator/env` altına yorumlanmış, açıklamalı ve **boş**
-bir dosya (0600, dizini 0700) yerleştiriyor — yani her yeni hesap dosyayı
-yerinde bulur, yolu tahmin etmesi gerekmez, ve imaj güncellemeleri onu
-ezmez (`/etc/skel` sadece hesap oluşturma anında okunur).
+bir dosya (0600) yerleştiriyor — yani her yeni hesap dosyayı yerinde
+bulur, yolu tahmin etmesi gerekmez, ve imaj güncellemeleri onu ezmez
+(`/etc/skel` sadece hesap oluşturma anında okunur).
+
+Dosyanın 0600'ü deploy edilmiş imajda gerçekten tutuyor (boot testinde
+ölçüldü ve iddiaya çevrildi). Dizin için hedeflenen 0700 ise **tutmuyor**:
+`/etc/skel/.config/navigator` 755 olarak geliyor (run 30893404648).
+Etkisi sınırlı — başkası dizini listeleyip `env` dosyasının varlığını
+görebilir ama içeriğini okuyamaz; sırrı koruyan şey dosyanın modu ve
+`cloud-bridge` de dizine değil dosyaya bakıyor. Bu yüzden dizin modu
+CI'da iddia değil teşhis olarak izleniyor; mekanizmanın ostree'nin
+`/etc` merge'ü mü yoksa katman kaybı mı olduğu henüz ayırt edilmedi.
 
 ### İzinler: gevşekse dosya BİLEREK yok sayılır
 
