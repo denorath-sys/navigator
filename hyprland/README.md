@@ -47,10 +47,10 @@ yazılı:
 kullanıcı duvar kâğıdını değiştirebiliyor ve seçimi imaj
 güncellemelerinde ezilmiyor.
 
-Görselin kendisi depoda YOK, build sırasında üretiliyor
-(`theme/generate-wallpaper.py` → `/usr/share/navigator/theme/wallpaper.png`,
-Katman 3). Gerekçesi ve marka renklerinin `palette.json`'dan okunması
-için bkz. `theme/README.md`, "Duvar kâğıdı — üretilen, taşınan değil".
+Görsel `theme/wallpaper.png` (marka görseli, Katman 3 ile
+`/usr/share/navigator/theme/wallpaper.png`). Ayrıntı ve ekranda
+gerçekten göründüğünün nasıl doğrulandığı için bkz. `theme/README.md`,
+"Duvar kâğıdı".
 
 `wallpaper = , <yol>` satırındaki boş monitör alanı "tüm monitörler"
 demek; monitör adı yazmak taşınabilir olmazdı (CI'daki QEMU VM'inde
@@ -58,9 +58,9 @@ monitör adı `Virtual-1`, gerçek donanımda başka).
 
 CI iki ayrı şeyi doğruluyor: hyprpaper süreci gerçekten ayakta mı ve
 `hyprctl hyprpaper listloaded` Navigator'ın duvar kâğıdını bildiriyor mu.
-Asıl kanıt ise görsel — ekran görüntüsündeki masaüstü bandının
-parlaklığı ölçülüyor (bkz. `theme/README.md`); hyprpaper hiç başlamazsa
-stok Hyprland görseli geri gelir ve o iddia düşer.
+Asıl kanıt ise görsel — ekran görüntüsü `theme/wallpaper.png` ile blok
+bazında karşılaştırılıyor (bkz. `theme/README.md`); hyprpaper hiç
+başlamazsa ya da başka bir görsel gösterilirse o iddia düşer.
 
 ### `exec-once` hedefleri CI'da doğrulanıyor
 

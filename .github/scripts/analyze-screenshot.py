@@ -11,28 +11,49 @@ kılıyor — ve gömülü python'un YAML girinti tuzağını tamamen ortadan
 kaldırıyor.
 
 Kullanım:
-    analyze-screenshot.py <girdi.ppm> <çıktı.png> [--bar-height N]
+    analyze-screenshot.py <girdi.ppm> <çıktı.png> [--bar-height=N]
+                          [--reference=<duvar-kagidi.png>]
 
 İDDİA ETTİKLERİ (bu tur bilinçli olarak dar tutuldu):
   - dosya geçerli bir P6 PPM ve boyutları pozitif,
   - görüntü tek renk DEĞİL (yani ekranda gerçekten bir şey render edildi;
-    Hyprland hiç çizmezse tamamen siyah bir kare gelirdi).
+    Hyprland hiç çizmezse tamamen siyah bir kare gelirdi),
+  - `--reference` verilirse: masaüstü GERÇEKTEN o duvar kâğıdını
+    gösteriyor (blok bazlı karşılaştırma, bkz. MAX_BLOCK_DISTANCE).
 Geri kalan her şey TEŞHİS: gerçek sayılar okunmadan iddiaya çevrilmez
 (proje kuralı — önce ölç, sonra sertleştir).
 """
+import math
 import struct
 import sys
 import zlib
 from collections import Counter
 
+# Ekrandaki masaüstünün, olması gereken duvar kâğıdıyla ne kadar
+# örtüştüğü. Blok bazlı ortalama renk farkının MEDYANI kullanılıyor;
+# medyan, üst bar ve asistan paneli gibi kaplayan pencerelere karşı
+# dayanıklı (onlar blokların azınlığını bozar).
+#
+# Eşik tahmin değil, gerçek ölçüm: aynı duvar kâğıdının gerçek bir
+# ekran görüntüsüyle karşılaştırması medyan 0.1 verdi; farklı duvar
+# kâğıtlarında 43.9 ve 68.7 çıktı. 15 ikisinin arasında, her iki yana
+# da yüz katın üzerinde pay bırakıyor.
+#
+# NEDEN PARLAKLIK DEĞİL: önceki sürüm "masaüstü koyu mu" diye
+# soruyordu (stok Hyprland 85.3, o zamanki üretilmiş duvar kâğıdı 21.6).
+# Gerçek marka duvar kâğıdı gelince o ölçü çöktü — ortasında parlak bir
+# dalga var ve aynı bandın luma'sı 73.0, yani stok'un 85.3'üne komşu.
+# Parlaklık duvar kâğıdının KİMLİĞİNİ değil sadece bir özetini ölçüyordu.
+MAX_BLOCK_DISTANCE = 15.0
+
+# Karşılaştırma ızgarası. Kaba olması kasıtlı: hyprpaper'ın ölçekleme
+# algoritmasını taklit etmeye çalışmıyoruz, kompozisyonun aynı olup
+# olmadığına bakıyoruz.
+GRID_X, GRID_Y = 24, 15
+
 # theme/palette.json ile aynı marka renkleri. Burada sadece TEŞHİS için
 # aranıyorlar: "bu renk ekranda kaç piksel" sorusunun cevabı okunmadan
-# hiçbir renk iddiaya çevrilmemeli (blur/alpha/kompozisyon değerleri
-# kaydırabilir).
-# Masaüstü bandı için üst parlaklık sınırı. Ölçülmüş iki değerin
-# ortasında: stok Hyprland duvar kâğıdı 85.3, Navigator'ınki 21.6.
-MAX_DESKTOP_LUMA = 55.0
-
+# hiçbir renk iddiaya çevrilmemeli (blur/alpha/kompozisyon kaydırabilir).
 BRAND = {
     "teal": (0x4F, 0xD1, 0xC5),
     "purple": (0x8B, 0x7C, 0xF6),
@@ -82,6 +103,93 @@ def read_ppm(path: str) -> tuple[int, int, bytes]:
     return width, height, pixels
 
 
+def read_png(path: str) -> tuple[int, int, bytearray]:
+    """8-bit RGB PNG okur (filtreleri çözerek). Referans duvar kâğıdı için."""
+    data = open(path, "rb").read()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise PpmError(f"PNG değil: {path}")
+    width, height, depth, ctype = struct.unpack(">IIBB", data[16:26])
+    if depth != 8 or ctype != 2:
+        raise PpmError(f"sadece 8-bit RGB PNG destekleniyor (depth={depth}, type={ctype})")
+    idat = b""
+    i = 8
+    while i < len(data):
+        length = struct.unpack(">I", data[i : i + 4])[0]
+        if data[i + 4 : i + 8] == b"IDAT":
+            idat += data[i + 8 : i + 8 + length]
+        i += 12 + length
+    raw = zlib.decompress(idat)
+
+    out = bytearray(width * height * 3)
+    prev = bytearray(width * 3)
+    pos = 0
+    for y in range(height):
+        ftype = raw[pos]
+        pos += 1
+        line = bytearray(raw[pos : pos + width * 3])
+        pos += width * 3
+        if ftype == 1:
+            for x in range(3, len(line)):
+                line[x] = (line[x] + line[x - 3]) & 255
+        elif ftype == 2:
+            for x in range(len(line)):
+                line[x] = (line[x] + prev[x]) & 255
+        elif ftype == 3:
+            for x in range(len(line)):
+                a = line[x - 3] if x >= 3 else 0
+                line[x] = (line[x] + ((a + prev[x]) >> 1)) & 255
+        elif ftype == 4:
+            for x in range(len(line)):
+                a = line[x - 3] if x >= 3 else 0
+                b = prev[x]
+                c = prev[x - 3] if x >= 3 else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                line[x] = (line[x] + pr) & 255
+        out[y * width * 3 : (y + 1) * width * 3] = line
+        prev = line
+    return width, height, out
+
+
+def block_means(width, height, pixels, win=(0.0, 1.0, 0.0, 1.0)) -> list:
+    """Verilen alt-dikdörtgeni GRID_X×GRID_Y bloğa bölüp ortalama renkleri verir."""
+    x0, x1, y0, y1 = win
+    bx0, bx1 = int(width * x0), int(width * x1)
+    by0, by1 = int(height * y0), int(height * y1)
+    bw, bh = (bx1 - bx0) / GRID_X, (by1 - by0) / GRID_Y
+    result = []
+    for gy in range(GRID_Y):
+        for gx in range(GRID_X):
+            xs, xe = int(bx0 + gx * bw), int(bx0 + (gx + 1) * bw)
+            ys, ye = int(by0 + gy * bh), int(by0 + (gy + 1) * bh)
+            r = g = b = n = 0
+            for y in range(ys, ye, max(1, (ye - ys) // 6)):
+                for x in range(xs, xe, max(1, (xe - xs) // 6)):
+                    j = (y * width + x) * 3
+                    r += pixels[j]
+                    g += pixels[j + 1]
+                    b += pixels[j + 2]
+                    n += 1
+            result.append((r / n, g / n, b / n))
+    return result
+
+
+def cover_window(sw: int, sh: int, rw: int, rh: int) -> tuple:
+    """hyprpaper'ın 'cover' ölçeklemesinde referansın GÖRÜNEN alt-dikdörtgeni.
+
+    Ekranla referansın en-boy oranı farklıysa taşan kenarlar kırpılır;
+    karşılaştırmanın anlamlı olması için aynı kırpmayı burada da yapmak
+    gerekiyor.
+    """
+    screen_aspect, ref_aspect = sw / sh, rw / rh
+    if ref_aspect > screen_aspect:  # referans daha geniş → yanlar kırpılır
+        f = screen_aspect / ref_aspect
+        return ((1 - f) / 2, (1 + f) / 2, 0.0, 1.0)
+    f = ref_aspect / screen_aspect  # referans daha dar → alt/üst kırpılır
+    return (0.0, 1.0, (1 - f) / 2, (1 + f) / 2)
+
+
 def write_png(path: str, width: int, height: int, pixels: bytes) -> None:
     """Bağımlılıksız minimal PNG yazıcı (8-bit RGB, filtre yok)."""
     raw = b"".join(
@@ -128,9 +236,12 @@ def main() -> int:
         return 2
     ppm_path, png_path = args
     bar_height = 32
+    reference = None
     for a in sys.argv[1:]:
-        if a.startswith("--bar-height"):
-            bar_height = int(a.split("=", 1)[1]) if "=" in a else bar_height
+        if a.startswith("--bar-height="):
+            bar_height = int(a.split("=", 1)[1])
+        elif a.startswith("--reference="):
+            reference = a.split("=", 1)[1]
 
     try:
         width, height, pixels = read_ppm(ppm_path)
@@ -177,27 +288,40 @@ def main() -> int:
         n = all_colors.get(rgb, 0)
         print(f"  {name:7s} {hexs(rgb)}: {n} piksel")
 
-    # --- İDDİA: masaüstü Navigator'ın duvar kâğıdını gösteriyor ---
-    # Sayılar tahmin değil, ölçüm:
-    #   stok Hyprland duvar kâğıdı (CI'da ölçüldü)     : luma 85.3
-    #   Navigator duvar kâğıdı (üreticiden hesaplandı) : luma 21.6
-    # Eşik ikisinin ortasında, her iki yana da geniş pay bırakacak
-    # şekilde 55. hyprpaper hiç başlamazsa ya da duvar kâğıdı
-    # yüklenemezse stok görsel geri gelir ve bu iddia düşer.
-    # Bant, üst bar ile asistan panelinin dışında kalacak şekilde seçildi.
     band_y0, band_y1 = int(height * 0.45), int(height * 0.70)
     band = Counter()
     for y in range(band_y0, band_y1):
         band.update(row_colors(width, pixels, y))
-    desktop_luma = mean_luma(band)
-    print(f"\nmasaüstü bandı (y={band_y0}..{band_y1}) ortalama luma: {desktop_luma:.1f}")
-    if desktop_luma > MAX_DESKTOP_LUMA:
-        print(
-            f"HATA: masaüstü çok parlak ({desktop_luma:.1f} > {MAX_DESKTOP_LUMA}) — "
-            "Navigator duvar kâğıdı yüklenmemiş olabilir (stok Hyprland görseli ~85)."
+    print(f"\nmasaüstü bandı (y={band_y0}..{band_y1}) ortalama luma: {mean_luma(band):.1f} (teşhis)")
+
+    # --- İDDİA: ekrandaki masaüstü GERÇEKTEN Navigator duvar kâğıdı mı ---
+    if reference:
+        try:
+            rw, rh, rpix = read_png(reference)
+        except (PpmError, OSError, zlib.error) as e:
+            print(f"HATA: referans duvar kâğıdı okunamadı ({reference}): {e}")
+            return 1
+        win = cover_window(width, height, rw, rh)
+        shot_blocks = block_means(width, height, pixels)
+        ref_blocks = block_means(rw, rh, rpix, win)
+        dists = sorted(
+            math.dist(shot_blocks[i], ref_blocks[i]) for i in range(len(shot_blocks))
         )
-        return 1
-    print(f"OK: masaüstü koyu ({desktop_luma:.1f} <= {MAX_DESKTOP_LUMA}) — Navigator duvar kâğıdı yüklü.")
+        median = dists[len(dists) // 2]
+        print(f"\nreferans duvar kâğıdı: {reference} ({rw}x{rh})")
+        print(f"  görünen alan (cover kırpması): x %{win[0]*100:.1f}..%{win[1]*100:.1f}, "
+              f"y %{win[2]*100:.1f}..%{win[3]*100:.1f}")
+        print(f"  blok farkı — medyan={median:.1f}  ortalama={sum(dists)/len(dists):.1f}  "
+              f"max={dists[-1]:.1f}")
+        if median > MAX_BLOCK_DISTANCE:
+            print(
+                f"HATA: masaüstü referans duvar kâğıdıyla örtüşmüyor "
+                f"({median:.1f} > {MAX_BLOCK_DISTANCE}) — hyprpaper duvar kâğıdını "
+                "yüklememiş ya da başka bir görsel gösteriliyor olabilir."
+            )
+            return 1
+        print(f"  OK: masaüstü referans duvar kâğıdıyla örtüşüyor "
+              f"({median:.1f} <= {MAX_BLOCK_DISTANCE}).")
 
     print("\n--- TEŞHİS: bar bölgesi ile masaüstü ortası farklı mı ---")
     bar_rows = Counter()

@@ -666,7 +666,6 @@ jobs:
           OVMF_VARS_SRC="$(find /usr/share/OVMF -iname 'OVMF_VARS*.fd' | grep -vi secboot | sort | head -n1)"
           echo "OVMF_CODE=${OVMF_CODE}"
           cp "${OVMF_VARS_SRC}" ./OVMF_VARS.fd
-          # hyprwm/aquamarine#109'da (Kasım-Aralık 2024) tam olarak bu
           # -monitor unix:... : QEMU'nun HMP monitörü. Görsel doğruluk
           # testi bunun üzerinden `screendump` çağırıp ekranın o anki
           # içeriğini HOST'a ham PPM olarak yazdırıyor — VNC istemcisi
@@ -750,6 +749,8 @@ jobs:
           echo "=== Katman 4: /etc/skel/.config/hypr/ ==="
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "ls -la /etc/skel/.config/hypr/"
           ${SCP} root@127.0.0.1:/etc/skel/.config/hypr/hyprland.conf image-hyprland.conf
+          ${SCP} root@127.0.0.1:/etc/skel/.config/hypr/hyprpaper.conf image-hyprpaper.conf
+          ${SCP} root@127.0.0.1:/usr/share/navigator/theme/wallpaper.png image-wallpaper.png
 
           echo "=== Katman 7: /usr/share/navigator/shell/ ==="
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "ls -la /usr/share/navigator/shell/"
@@ -760,6 +761,19 @@ jobs:
           if ! cmp -s image-palette.json theme/palette.json; then
             echo "HATA: imajdaki palette.json repodakinden farklı:"
             diff -u theme/palette.json image-palette.json | head -20
+            exit 1
+          fi
+          # Duvar kâğıdı ekran görüntüsü karşılaştırmasının REFERANSI; bu
+          # kontrol olmadan "ekran repodaki görsele benziyor" iddiası
+          # imajdaki görselin bayat olması durumunda anlamsızlaşırdı.
+          if ! cmp -s image-wallpaper.png theme/wallpaper.png; then
+            echo "HATA: imajdaki wallpaper.png repodakinden farklı (imaj bayat?)."
+            ls -l image-wallpaper.png theme/wallpaper.png
+            exit 1
+          fi
+          if ! cmp -s image-hyprpaper.conf hyprland/hyprpaper.conf; then
+            echo "HATA: imajdaki hyprpaper.conf repodakinden farklı:"
+            diff -u hyprland/hyprpaper.conf image-hyprpaper.conf | head -20
             exit 1
           fi
           if ! cmp -s image-hyprland.conf hyprland/hyprland.conf; then
@@ -783,7 +797,7 @@ jobs:
               exit 1
             fi
           done
-          echo "OK: palette.json, hyprland.conf ve ${IMAGE_QML_COUNT} .qml dosyası repodakilerle birebir aynı (imaj bayat değil)."
+          echo "OK: palette.json, wallpaper.png, hyprland.conf, hyprpaper.conf ve ${IMAGE_QML_COUNT} .qml dosyası repodakilerle birebir aynı (imaj bayat değil)."
 
           echo "=== hyprland.conf'taki exec-once hedefleri imajda var mı ==="
           # Yanlış yazılmış ya da paket değişimiyle kaybolmuş bir exec-once,
@@ -1162,8 +1176,13 @@ jobs:
           # kendisi duruyor.
           python3 .github/scripts/qemu-screendump.py \
             "$(pwd)/qemu-monitor.sock" "$(pwd)/navigator-screen.ppm"
+          # --reference: ekrandaki masaüstünün GERÇEKTEN Navigator duvar
+          # kâğıdı olduğunu doğrular. Repodaki dosyayı veriyoruz; imajdaki
+          # kopyanın repodakiyle aynı olduğunu "Katman 3/4/7" adımı ayrıca
+          # kontrol ediyor, dolayısıyla zincir kapalı.
           python3 .github/scripts/analyze-screenshot.py \
-            "$(pwd)/navigator-screen.ppm" "$(pwd)/navigator-screen.png"
+            "$(pwd)/navigator-screen.ppm" "$(pwd)/navigator-screen.png" \
+            --reference=theme/wallpaper.png
 
       - name: Ekran görüntüsünü artifact olarak yükle
         if: always()

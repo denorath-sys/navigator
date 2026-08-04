@@ -314,17 +314,21 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   panelin sağını kapatıyordu; paket Fedora'da hiç yok (dist-git'te bile),
   bu yüzden çalışma zamanı bağımlılığı `hyprland-qt-support` ile birlikte
   kendi COPR'umuza eklenip fedora-44'e karşı derlendi. (2) Masaüstü stok
-  Hyprland duvar kâğıdını gösteriyordu; artık Navigator'ın kendi duvar
-  kâğıdı var — ve bu bir depo varlığı değil, **üretilen** bir görsel:
-  `theme/generate-wallpaper.py` gece göğü gradyanını, yıldız alanını,
-  Orion'u ve Kuzey Yıldızı'nı prosedürel olarak çiziyor, marka renklerini
-  `palette.json`'dan OKUYARAK (elle tekrar yok, dolayısıyla sapma riski
-  de yok) ve deterministik olarak (sabit tohum → tekrarlanabilir build).
-  `hyprpaper` config'iyle birlikte `exec-once`'a girdi. Doğrulama yine
-  ölçüme dayanıyor: masaüstü bandının parlaklığı stok görselde 85.3'tü,
-  Navigator'ınkinde 21.6; CI 55 eşiğiyle ikisini ayırt ediyor ve
-  kontrolün iş gördüğü parlaklaştırılmış sahte bir görüntüyle
-  doğrulandı. Kalan: gerçek fare tıklaması (girdi enjeksiyonu),
+  Hyprland duvar kâğıdını gösteriyordu; artık `theme/wallpaper.png`
+  Navigator'ın marka görselini taşıyor ve `hyprpaper` config'iyle
+  birlikte `exec-once`'a girdi.
+  **Doğrulama yöntemi bu sırada bir kez değişti ve bu öğreticiydi:**
+  ilk sürüm "masaüstü koyu mu" diye soruyordu (stok 85.3, o zamanki
+  prosedürel duvar kâğıdı 21.6). Gerçek marka görseli gelince o ölçü
+  çöktü — ortasındaki parlak dalga yüzünden aynı bandın luma'sı 73.0,
+  yani stok'un 85.3'üne komşu. Parlaklık duvar kâğıdının KİMLİĞİNİ değil
+  yalnızca bir özetini ölçüyordu. Yerine ekran görüntüsünü referans
+  görselle **blok bazında** karşılaştıran bir ölçü kondu (24x15 blok,
+  farkların medyanı — medyan, ekranı kaplayan pencerelere dayanıklı;
+  hyprpaper'ın "cover" kırpması da hesaba katılıyor). Eşik yine ölçümden:
+  aynı duvar kâğıdı 0.1, yanlış Navigator duvar kâğıdı 37.9, stok
+  Hyprland 68.7 → eşik 15, her iki yana da yüz katın üzerinde payla.
+  Kalan: gerçek fare tıklaması (girdi enjeksiyonu),
   Ollama'nın imaja katmanlanması (Katman 6, hâlâ PLACEHOLDER).
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.

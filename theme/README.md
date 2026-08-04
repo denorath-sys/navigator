@@ -46,51 +46,70 @@ OK: palette.json <-> hyprland.conf (imajdan) <-> shell/Theme.qml senkron.
     teal=4fd1c5 purple=8b7cf6 gold=e8d9a8 navy=0b0f1a, gradyan açısı=45deg
 ```
 
-## Duvar kâğıdı — üretilen, taşınan değil
+## Duvar kâğıdı
 
-`generate-wallpaper.py` Navigator'ın duvar kâğıdını **prosedürel olarak
-üretiyor**: gece göğü gradyanı, yıldız alanı, Orion takımyıldızı ve
-Kuzey Yıldızı — `palette.json`'daki nautical/gökyüzü kimliğinin doğrudan
-görsel karşılığı. Bağımlılık yok (stdlib; PNG yazıcısı da betiğin
-içinde).
+`wallpaper.png` (1672x941) Navigator'ın marka görseli: gece göğü,
+takımyıldız, dağ siluetleri ve teal-yeşil bir dalga; sağ kenarda
+"Navigator OS" logotipi. `palette.json`'daki nautical/gökyüzü kimliğinin
+görsel karşılığı.
 
-Depoda ikili bir görsel taşımak yerine üreticiyi taşımanın üç somut
-faydası var:
-
-1. **Renkler tek kaynaktan.** Betik marka renklerini `palette.json`'dan
-   OKUYOR. `hyprland.conf` ve `shell/Theme.qml` hex'leri elle tekrar
-   ediyor (bu yüzden CI onları karşılaştırmak zorunda); duvar kâğıdında
-   o sapma riski hiç doğmuyor — palet değişirse görsel de değişir.
-2. **Deterministik.** Sabit tohumlu PRNG; aynı girdi aynı baytları
-   üretiyor, yani imaj build'i tekrarlanabilir kalıyor (yerelde iki
-   üretimin byte-identik olduğu doğrulandı).
-3. **Çözünürlükten bağımsız.** `--width`/`--height` ile istenen boyutta
-   üretiliyor; imajda 2560x1440 üretiliyor.
-
-İmajda: `image/Containerfile` **Katman 3** betiği kopyalayıp build
-sırasında çalıştırıyor → `/usr/share/navigator/theme/wallpaper.png`.
+İmajda: `image/Containerfile` **Katman 3** dosyayı
+`/usr/share/navigator/theme/wallpaper.png` altına koyuyor.
 `hyprland/hyprpaper.conf` (Katman 4, `/etc/skel` üzerinden) onu
-yüklüyor ve `hyprland.conf`'a eklenen `exec-once = hyprpaper` hyprpaper'ı
+yüklüyor, `hyprland.conf`'a eklenen `exec-once = hyprpaper` hyprpaper'ı
 başlatıyor.
 
-**Neden şimdi:** Navigator bu ana kadar **stok Hyprland duvar kâğıdını**
-gösteriyordu (varsayılan görsel + "A day without Hyprland is a day
-wasted"), yani masaüstü markasız görünüyordu. Bunu hiçbir metinsel test
-göremezdi; ilk gerçek ekran görüntüsü alınınca ortaya çıktı (bkz.
-`shell/README.md`, "İlk ekran görüntüsü ne buldu").
+**Neden gerekti:** Navigator bu ana kadar **stok Hyprland duvar
+kâğıdını** gösteriyordu ("A day without Hyprland is a day wasted"), yani
+masaüstü markasız görünüyordu. Bunu hiçbir metinsel test göremezdi; ilk
+gerçek ekran görüntüsü alınınca ortaya çıktı.
 
-Duvar kâğıdı bilinçli olarak **koyu ve sakin**: üstünde bar, pencereler
-ve asistan paneli okunacak, onlarla yarışmamalı. Ölçüldü — orta bant
-ortalama parlaklığı (luma) **21.6**; stok Hyprland görselinde aynı ölçüm
-CI'da **85.3** çıkmıştı. CI bu farkı gerçek bir iddiaya çeviriyor:
-ekran görüntüsündeki masaüstü bandının luma'sı 55'i aşarsa job düşüyor
-(hyprpaper hiç başlamazsa stok görsel geri gelir ve iddia yakalar).
-Kontrolün iş gördüğü, parlaklığı stok seviyesine çekilmiş sahte bir
-görüntü enjekte edilerek doğrulandı.
+### Kısa süre prosedürel bir üretici vardı
+
+Marka görseli gelmeden önce duvar kâğıdı `generate-wallpaper.py` ile
+prosedürel olarak üretiliyordu (gece göğü gradyanı + Orion + Kuzey
+Yıldızı, renkleri `palette.json`'dan okuyarak, deterministik).
+Gerçek marka görseli sağlanınca üretici **kaldırıldı** — iki ayrı
+"duvar kâğıdı kaynağı" tutmak yanıltıcı olurdu. Git geçmişinde duruyor
+(commit `0a3c4fd`), geri istenirse tek revert.
+
+### Ekranda gerçekten göründüğü nasıl doğrulanıyor
+
+Duvar kâğıdının yüklendiğini iddia etmek yetmez; CI **ekran
+görüntüsünü** bu dosyayla karşılaştırıyor
+(`.github/scripts/analyze-screenshot.py --reference=theme/wallpaper.png`).
+Yöntem: her iki görüntü 24x15 bloğa bölünüp blok ortalama renkleri
+karşılaştırılıyor ve farkların **medyanı** alınıyor. Medyan, üst bar ve
+asistan paneli gibi ekranı kaplayan pencerelere karşı dayanıklı; onlar
+blokların azınlığını bozuyor. hyprpaper'ın "cover" kırpması da hesaba
+katılıyor (ekran 16:10, görsel 16:9 → yanlardan %5 kırpılıyor).
+
+Eşik (15) tahmin değil, üç gerçek ölçümden geliyor:
+
+| senaryo | medyan blok farkı |
+|---|---|
+| aynı duvar kâğıdı (gerçek ekran görüntüsü vs kaynağı) | **0.1** |
+| yanlış Navigator duvar kâğıdı | 37.9 |
+| stok Hyprland duvar kâğıdı | 68.7 |
+
+**Neden parlaklık değil:** ilk sürüm "masaüstü koyu mu" diye soruyordu
+(stok 85.3, üretilmiş duvar kâğıdı 21.6). Gerçek marka görseli gelince o
+ölçü çöktü — ortasındaki parlak dalga yüzünden aynı bandın luma'sı 73.0,
+yani stok'un 85.3'üne komşu. Parlaklık duvar kâğıdının KİMLİĞİNİ değil
+yalnızca bir özetini ölçüyordu; blok karşılaştırması kimliği ölçüyor.
+
+### Bilinen sınırlama: geniş olmayan ekranlarda logotip kırpılıyor
+
+Görsel 16:9 (1672x941, oran 1.777). hyprpaper "cover" ile ölçeklediği
+için **16:10 ekranda yanlardan %5 kırpılıyor** ve "Navigator OS"
+logotipi x≈%92-97 aralığında olduğundan sağ kısmı kesiliyor (CI'daki
+1280x800 VM tam olarak bu durumda). 16:9 ekranlarda sorun yok.
+Çözüm istenirse: logotipi biraz sola almak ya da kenarda daha fazla
+güvenli alan bırakan bir sürüm.
 
 ## Durum
 
 Faz 1 — palet tanımı gerçek ve artık imajda; duvar kâğıdı da gerçek
-(üretilen, imajda, CI'da görsel olarak doğrulanan). `gtk/`, `qt/` hâlâ
+(marka görseli, imajda, ekran görüntüsüyle doğrulanan). `gtk/`, `qt/` hâlâ
 boş iskelet. Gerçek GTK/Qt tema üretimi (ikon seti, cursor teması, GTK
 CSS, Qt Kvantum/QQC2 stili) Faz 2 kapsamında ele alınacak.

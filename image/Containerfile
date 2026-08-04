@@ -137,17 +137,16 @@ RUN dnf5 -y copr enable errornointernet/quickshell \
 # adımı).
 COPY theme/palette.json /usr/share/navigator/theme/palette.json
 
-# Duvar kâğıdı bir depo varlığı DEĞİL, burada üretiliyor. Gerekçe:
-# üreticiyi taşımak ikili bir görsel taşımaktan iyi — palet değişirse
-# duvar kâğıdı da değişir, çünkü betik renkleri yukarıdaki palette.json'un
-# TA KENDİSİNDEN okuyor (hyprland.conf ve Theme.qml'in aksine burada elle
-# tekrar edilen bir hex yok, dolayısıyla sapma riski hiç doğmuyor).
-# Çıktı deterministik (sabit tohumlu PRNG), yani build tekrarlanabilir.
-COPY theme/generate-wallpaper.py /usr/share/navigator/theme/generate-wallpaper.py
-RUN python3 /usr/share/navigator/theme/generate-wallpaper.py \
-        /usr/share/navigator/theme/wallpaper.png \
-    && test -s /usr/share/navigator/theme/wallpaper.png \
-    && ostree container commit
+# Duvar kâğıdı: Navigator'ın marka görseli (1672x941). Bir ara prosedürel
+# olarak üretiliyordu (theme/generate-wallpaper.py); proje sahibi gerçek
+# marka görselini sağlayınca o üretici düştü — iki ayrı "duvar kâğıdı
+# kaynağı" tutmak yanıltıcı olurdu.
+#
+# CI bunun ekranda GERÇEKTEN göründüğünü doğruluyor: boot testi ekran
+# görüntüsünü bu dosyayla blok bazında karşılaştırıyor (bkz.
+# .github/scripts/analyze-screenshot.py). Yani "hyprpaper çalıştı mı"
+# değil, "kullanıcı bu görseli mi görüyor" sorusu yanıtlanıyor.
+COPY theme/wallpaper.png /usr/share/navigator/theme/wallpaper.png
 
 # ---------------------------------------------------------------------------
 # Katman 4: Navigator sistem config'leri
