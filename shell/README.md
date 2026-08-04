@@ -99,13 +99,49 @@ screen` (virtio-gpu'nun yazılım-only olması bekleniyor, render'ı
 engellemedi).
 
 **Bilinen kalan sınırlama:** Bu, `Bar.qml`'in gerçekten map olup
-render edildiğinin kanıtı — görsel çıktının (renkler, blur, layout)
-piksel piksel doğru olduğu test edilmedi (headless VNC display'den ekran
-görüntüsü almak ek karmaşıklık gerektirir). `WorkspaceIndicator`'ın
-VERİSİ artık doğrulanıyor (aşağıya bkz.) ama pil'e yapılan gerçek bir
-FARE TIKLAMASI hâlâ test edilmiyor: `activate()` çağrısı kod
-incelemesiyle doğru, tıklama yolunun kendisi ekran görüntüsü/girdi
-enjeksiyonu gerektiriyor.
+render edildiğinin kanıtı. `WorkspaceIndicator`'ın VERİSİ ayrıca
+doğrulanıyor (aşağıya bkz.). Pil'e yapılan gerçek bir FARE TIKLAMASI
+hâlâ test edilmiyor: `activate()` çağrısı kod incelemesiyle doğru ama
+tıklama yolunun kendisi girdi enjeksiyonu gerektiriyor.
+
+## Görsel doğruluk — ekranın gerçek görüntüsü (CI)
+
+Buraya kadarki her doğrulama METİNSELDİ: `hyprctl` çıktıları, IPC
+yanıtları, süreç durumları. Masaüstünün gerçekten doğru GÖRÜNDÜĞÜ hiç
+ölçülmemişti.
+
+Artık boot testi ekranın o anki içeriğini gerçekten yakalıyor. Yöntem
+bilinçli olarak hafif: **QEMU'nun kendi HMP monitörü** (`-monitor
+unix:...`) üzerinden `screendump` çağrılıyor ve QEMU ham PPM'i doğrudan
+HOST'a yazıyor. VNC istemcisi kurmak, misafirin içinde bir ekran
+görüntüsü aracı çalıştırmak veya imaja paket eklemek gerekmiyor — ve
+görüntü misafirden bağımsız olduğu için tam olarak "kullanıcının
+gördüğü" şey.
+
+İki küçük stdlib-only betik, workflow'un `run:` bloğuna gömülmek yerine
+repoda duruyor (yerelde sınanabilsinler diye):
+
+- `.github/scripts/qemu-screendump.py` — monitor soketine bağlanır,
+  `screendump` çalıştırır, dosya sabitlenene kadar bekler. Sahte bir HMP
+  sunucusuyla yerelde dört yol da sınandı: normal, monitör hatası, dosya
+  hiç yazılmıyor, soket yok.
+- `.github/scripts/analyze-screenshot.py` — PPM'i ayrıştırır, teşhis
+  basar ve bağımlılıksız bir PNG yazar (artifact olarak yüklenir, yani
+  **ekran görüntüsüne gerçekten gözle bakılabilir**).
+
+**Bu tur bilinçli olarak sadece iki şey İDDİA ediliyor:** dosya geçerli
+bir P6 PPM ve görüntü tek renk değil (Hyprland hiç render etmezse ya da
+Quickshell çökerse düz siyah bir kare gelirdi — bu sessizce yeşil
+kalmamalı). Bar yüksekliği, marka renklerinin piksel sayısı ve satır
+bazlı parlaklık şimdilik TEŞHİS: gerçek sayılar okunmadan iddiaya
+çevrilmiyor (proje kuralı — önce ölç, sonra sertleştir; bu kuralın
+ihlali bu projede daha önce bir CI turuna mal oldu).
+
+Analiz mantığı CI harcanmadan yerelde sınandı: sahte bir Navigator
+ekranı (koyu bar + teal pil + gradyan masaüstü) üretilip doğru teşhisi
+verdiği, tamamen siyah bir ekranın ve bozuk bir dosyanın ise
+reddedildiği doğrulandı; üretilen PNG'nin geçerliliği de ayrıca kontrol
+edildi.
 
 ## WorkspaceIndicator — gerçek Hyprland verisi (CI, Faz 4)
 

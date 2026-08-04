@@ -281,7 +281,22 @@ Detaylı mimari doküman: [`docs/architecture.md`](docs/architecture.md).
   (`dispatch workspace 3`) olduğunda shell bunu kendiliğinden görüyor mu
   — statik bir placeholder ya da tek seferlik bir okuma ikincisini
   geçemez; karşılaştırma mantığı CI harcanmadan yerelde üç kasıtlı
-  sapmayla sınandı. Kalan: görsel doğruluk (piksel/tıklama),
+  sapmayla sınandı. **Görsel doğruluk testi başladı:** buraya kadarki her doğrulama
+  metinseldi (`hyprctl` çıktıları, IPC yanıtları, süreç durumları) —
+  masaüstünün gerçekten doğru GÖRÜNDÜĞÜ hiç ölçülmemişti. Boot testi
+  artık ekranın o anki içeriğini yakalıyor: **QEMU'nun kendi HMP
+  monitörü** üzerinden `screendump`, ham PPM doğrudan host'a. VNC
+  istemcisi, misafir içinde ekran görüntüsü aracı ya da imaja ek paket
+  GEREKMİYOR, ve görüntü misafirden bağımsız olduğu için tam olarak
+  kullanıcının gördüğü şey. İki stdlib-only betik (`.github/scripts/`,
+  workflow'a gömülmek yerine repoda — yerelde sınanabilsinler diye)
+  görüntüyü alıyor, analiz ediyor ve bağımlılıksız bir PNG üretip
+  artifact olarak yüklüyor: ekran görüntüsüne artık gerçekten gözle
+  bakılabiliyor. Bu tur sadece iki şey İDDİA ediliyor (geçerli PPM ve
+  görüntünün tek renk olmaması — düz siyah bir ekran sessizce yeşil
+  kalmamalı); bar yüksekliği, marka renklerinin piksel sayısı ve satır
+  parlaklıkları şimdilik TEŞHİS, gerçek sayılar okunmadan iddiaya
+  çevrilmeyecek. Kalan: gerçek fare tıklaması (girdi enjeksiyonu),
   Ollama'nın imaja katmanlanması (Katman 6, hâlâ PLACEHOLDER).
 - **Faz 5 — Kullanıcı testi & yayın hazırlığı:** Gerçek donanımda kurulum
   testleri, dokümantasyon, ilk topluluk sürümü.
