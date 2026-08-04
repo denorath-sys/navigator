@@ -148,6 +148,24 @@ Karşılaştırma mantığı, CI harcanmadan yerelde sahte verilerle sınandı;
 kasıtlı üç sapma (shell bir workspace'i kaçırıyor, odak yanlış, eski
 sabit 1-10 davranışı) üçü de yakalandı.
 
+**Gerçek CI kanıtı** ([run
+30898836059](https://github.com/denorath-sys/navigator/actions/runs/30898836059)):
+
+```
+=== WorkspaceIndicator gerçek Hyprland verisine bağlı mı ===
+  shell: [{"id":1,"name":"1","active":true,"focused":true}]
+  OK: kümeler aynı [1], focused=1
+--- GERÇEK OLAY: hyprctl dispatch workspace 3 ---
+OK: shell workspace değişimini kendiliğinden gördü (polling yok, socket2 olayı).
+  shell: [{"id":3,"name":"3","active":true,"focused":true}]
+  OK: kümeler aynı [3], focused=3
+```
+
+Kümenin `[1]`'den `[3]`'e dönmesi tesadüf değil, tam olarak beklenen
+davranış: workspace 1 boş kaldığı için Hyprland onu yok etti, 3 ise
+aktif olduğu için var oldu. Eski statik placeholder her iki okumada da
+`[1..10]` derdi ve ilk kontrolü bile geçemezdi.
+
 ## AssistantPanel — gerçek `ai-stack/router` entegrasyonu (CI, Faz 4)
 
 `AssistantToggle` artık sadece bir konsol logu yazmıyor — `AssistantPanel`'i
