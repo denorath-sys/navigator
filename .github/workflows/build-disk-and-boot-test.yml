@@ -209,7 +209,7 @@ jobs:
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 navtest@127.0.0.1 \
             "cat /etc/os-release && echo --- && systemctl --failed --no-legend"
 
-      - name: VM'i temizle
+      - name: Clean up the VM
         if: always()
         run: |
           if [ -f qemu.pid ]; then
@@ -1154,6 +1154,71 @@ jobs:
           echo "OK: ai-stack runs from its real path in the image."
           CHECK
 
+      - name: Layer 6 — is Ollama really in the image and running
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 'bash -s' <<'CHECK'
+          set -uo pipefail
+
+          # ASSERTIONS: these are facts about the package's contents, taken
+          # from the Fedora 44 repository metadata before Layer 6 was written.
+          # If a future ollama package stops shipping them, the assumptions
+          # this layer rests on have changed and we want to know loudly.
+          echo "=== ASSERTION: the package's three files are in the image ==="
+          FAIL=0
+          for f in /usr/bin/ollama \
+                   /usr/lib/systemd/system/ollama.service \
+                   /usr/lib/sysusers.d/ollama.conf; do
+            if [ -e "$f" ]; then
+              echo "  OK  $f"
+            else
+              echo "  MISSING  $f"; FAIL=1
+            fi
+          done
+          [ -x /usr/bin/ollama ] || { echo "  /usr/bin/ollama is not executable"; FAIL=1; }
+          [ "$FAIL" -eq 0 ] || exit 1
+          echo "ollama version: $(ollama --version 2>&1 | head -n1)"
+
+          # DIAGNOSTICS, on purpose. Everything below is being measured for the
+          # first time: whether `systemctl enable` at container-build time
+          # survives into an ostree deployment, whether systemd-sysusers really
+          # creates the `ollama` user at boot (/var is empty until then), and
+          # where the daemon decides to keep models. None of that is a
+          # documented guarantee, so it is NOT asserted on this round — the
+          # rule in this repository is measure first, harden second, and
+          # breaking it has cost a CI round more than once.
+          #
+          # Promote these to assertions once the real output has been read.
+          echo
+          echo "--- DIAGNOSTIC: unit state ---"
+          systemctl is-enabled ollama.service 2>&1 || true
+          systemctl is-active  ollama.service 2>&1 || true
+          systemctl show ollama.service -p Environment -p ExecStart -p User 2>&1 || true
+
+          echo
+          echo "--- DIAGNOSTIC: did sysusers create the user, and where does state live ---"
+          id ollama 2>&1 || echo "(no ollama user)"
+          ls -ld /var/lib/ollama /usr/share/ollama 2>&1 || true
+
+          echo
+          echo "--- DIAGNOSTIC: does the API answer (up to 30s for first start) ---"
+          for i in $(seq 1 15); do
+            OUT="$(curl -fsS --max-time 2 http://127.0.0.1:11434/api/version 2>&1)" && { echo "  api/version -> ${OUT}"; break; }
+            sleep 2
+          done
+          [ -n "${OUT:-}" ] || echo "  (no answer from 127.0.0.1:11434)"
+
+          echo
+          echo "--- DIAGNOSTIC: what local-runtime makes of it ---"
+          # This is the reading that actually matters: ollama_available should
+          # become true, while model_ready stays false because Layer 6
+          # deliberately ships no model weights. The router then keeps falling
+          # through to the cloud, exactly as it did before this layer.
+          cd /usr/share/navigator/ai-stack/local-runtime
+          python3 -m local_runtime --pretty 2>&1 | head -n 20
+          CHECK
+
       - name: List DRM/GPU devices inside the VM (for diagnostics)
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
@@ -1206,7 +1271,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: VM'i temizle
+      - name: Clean up the VM
         if: always()
         run: |
           if [ -f qemu.pid ]; then

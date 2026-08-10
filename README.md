@@ -37,9 +37,10 @@ Detailed architecture document: [`docs/architecture.md`](docs/architecture.md).
 
 > **Status warning:** Navigator is in **Phase 4**. The desktop comes up, the
 > shell runs, and every revision is boot-tested in a real VM in CI — but
-> this is **not a daily-driver distribution**. The local model layer
-> (Layer 6 / Ollama) is still a PLACEHOLDER: with no local model the
-> assistant falls through to the cloud, which requires your own API key.
+> this is **not a daily-driver distribution**. The Ollama runtime now ships
+> in the image (Layer 6), but **no model weights do** — which model belongs
+> on your machine is your call. Until you run `ollama pull`, the assistant
+> falls through to the cloud, which requires your own API key.
 > Try it in a VM before putting it on your main machine.
 
 **On an existing Fedora Atomic (bootc) system:**
@@ -61,6 +62,15 @@ Download it and boot it with UEFI (OVMF) firmware — CI itself does exactly
 that, so the QEMU step in
 [`build-disk-and-boot-test.yml`](.github/workflows/build-disk-and-boot-test.yml)
 doubles as a working command line.
+
+**To run a model locally,** pull one — the Ollama runtime already ships in
+the image (Layer 6) and its service is enabled, but no weights do:
+
+```sh
+ollama pull llama3.2:3b   # hardware-probe's recommendation for a "low" tier
+```
+
+Until then `model_ready` is false and the router routes to the cloud.
 
 **To give the assistant cloud access,** put your own key in
 `~/.config/navigator/env` (the file ships via `/etc/skel`, so image updates
@@ -384,8 +394,15 @@ Details: [`ai-stack/cloud-bridge/`](ai-stack/cloud-bridge/).
   hyprpaper's "cover" cropping is accounted for). The threshold again comes
   from measurement: the same wallpaper 0.1, a wrong Navigator wallpaper
   37.9, stock Hyprland 68.7 → threshold 15, with over a hundredfold margin
-  on both sides. Remaining: real mouse clicks (input injection), and
-  layering Ollama into the image (Layer 6, still a PLACEHOLDER).
+  on both sides. Remaining: real mouse clicks (input injection).
+  **Layer 6 (Ollama) is no longer a placeholder:** the runtime now ships in
+  the image from the official Fedora repository. The sizes were measured
+  before the decision — ollama 55 MB compressed / 987 MB installed, plus
+  rocblas 289 MB / 1021 MB arriving as a hard dependency — and the
+  alternatives turned out to be worse, upstream's own tarballs for the same
+  release being 1047 MB (rocm) and 1421 MB (default, now bundling CUDA). So
+  the Fedora RPM is the smallest option, not just the tidiest. Model weights
+  are still deliberately not shipped.
 - **Phase 5 — User testing & release preparation:** installation tests on
   real hardware, documentation, first community release.
 
@@ -395,8 +412,10 @@ This project is developed over a metered/roaming connection. That directly
 explains many decisions in the repository, so it is not hidden:
 
 - Downloads over 200 MB (packages, ISOs, model files, container images) are
-  not made without approval. **This is why Layer 6 (Ollama) is still a
-  PLACEHOLDER.**
+  not made without approval. This is why **model weights are not shipped in
+  the image** — the Ollama runtime itself is layered in (Layer 6), since that
+  download happens on GitHub's runners rather than on the maintainer's
+  connection, but a model is the user's choice and another ~2 GB.
 - Heavy operations (`rpm-ostree compose`, real ISO builds, model pulls) are
   not run locally; the necessary scripts, configs and CI pipeline files are
   written instead.

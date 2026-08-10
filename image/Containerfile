@@ -256,13 +256,49 @@ RUN python3 -c "import sys; assert sys.version_info >= (3, 11), f'ai-stack requi
     && ostree container commit
 
 # ---------------------------------------------------------------------------
-# Layer 6: local model runtime (Ollama) — PLACEHOLDER
+# Layer 6: local model runtime (Ollama)
 # ---------------------------------------------------------------------------
-# Large binaries such as llama.cpp / Ollama are still not layered, because of
-# the size constraint. `local-runtime` in Layer 5 does not require this runtime
-# to be PRESENT: with no Ollama it returns `model_ready: false` and the router
-# routes the request to the cloud (a path genuinely verified in CI). Once
-# Ollama is layered, the local path engages on its own.
+# Ollama is in the OFFICIAL Fedora 44 repository (0.12.11-4.fc44), so no COPR
+# is involved here. That was checked rather than assumed, and it is the reason
+# this layer is a plain `rpm-ostree install`.
+#
+# The package is well suited to an immutable image, which was also checked
+# rather than assumed — it ships exactly three things that matter:
+#   /usr/bin/ollama
+#   /usr/lib/systemd/system/ollama.service
+#   /usr/lib/sysusers.d/ollama.conf
+# The sysusers file is the important one: the `ollama` user is declared rather
+# than created by an RPM scriptlet, so systemd-sysusers creates it at boot.
+# That is what an ostree deployment needs, since /var is empty until then.
+#
+# SIZE, measured before writing this (the numbers drive the decision):
+#   ollama   55 MB compressed / 987 MB installed
+#   rocblas 289 MB compressed / 1021 MB installed  <- pulled in, see below
+#   Navigator before this layer: 3.26 GB compressed
+# So roughly +345 MB compressed (+11%) and about +2 GB installed.
+#
+# The rocblas half is AMD GPU (ROCm) acceleration, arriving as a HARD
+# dependency: ollama requires libhipblas.so.3, so it cannot be excluded
+# without breaking the package. That looks like waste on a machine with no
+# AMD card — but the alternatives were measured too, and they are worse:
+# upstream's own tarballs for this release are 1047 MB (rocm) and 1421 MB
+# (the default, which now bundles CUDA). The Fedora RPM is the SMALLEST
+# option available, not merely the most convenient one.
+#
+# MODEL WEIGHTS ARE DELIBERATELY NOT SHIPPED. A model is another ~2 GB, and
+# which model belongs on a machine is the user's decision, not the image's —
+# `local-runtime` already maps a hardware tier to a recommendation
+# (llama3.2:3b on a "low" tier, see local-runtime/models.py). Until the user
+# runs `ollama pull`, the reported state is `model_ready: false` and the
+# router falls through to the cloud, which is a path that has been verified
+# in CI since long before this layer existed.
+#
+# The service is enabled so the desktop works without the user first learning
+# that a daemon exists. Idle Ollama with no model loaded costs very little;
+# it loads weights on demand.
+RUN rpm-ostree install ollama \
+    && systemctl enable ollama.service \
+    && ostree container commit
 
 # ---------------------------------------------------------------------------
 # Layer 7: Navigator shell (Quickshell QML — see shell/README.md)

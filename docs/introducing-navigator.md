@@ -47,10 +47,10 @@ image.
 
 This section exists on purpose, and it is not a footnote.
 
-- **The local model layer is still a placeholder in the image.** Navigator is
-  developed over a metered connection, and Ollama's binaries have not been
-  layered in yet. Without a local model the assistant falls through to the
-  cloud, which needs your key.
+- **No model weights ship in the image.** The Ollama runtime does, but which
+  model belongs on your machine is your call — and a model is another ~2 GB.
+  Until you run `ollama pull`, the assistant falls through to the cloud,
+  which needs your key.
 - **The GTK and Qt themes are empty skeletons.** The palette is real and
   verified; the theme assets are not built.
 - **The small local model is not fully reliable at tool use.** A 3B model
@@ -152,6 +152,14 @@ sudo systemctl reboot
 
 `sudo bootc rollback` puts you back. The immutable base means that is lossless.
 
+To run a model locally, pull one — the runtime is already there and running:
+
+```sh
+ollama pull llama3.2:3b   # what hardware-probe recommends for a "low" tier
+```
+
+Until you do, `model_ready` stays false and the router routes to the cloud.
+
 To give the assistant cloud access, put your own key in
 `~/.config/navigator/env` — the file ships as an empty, commented template and
 image updates never overwrite it. It is ignored unless it is `chmod 600`, on
@@ -161,9 +169,10 @@ out it was exposed.
 ## Where it's going
 
 Phase 5 is real-hardware installation testing and a first community release.
-Before that: layering Ollama into the image, building the GTK/Qt theme assets,
-and adding real input injection to the visual test so clicks can be verified,
-not just rendering.
+Before that: building the GTK/Qt theme assets, and adding real input injection
+to the visual test so clicks can be verified, not just rendering. Layering
+Ollama in is done — the runtime ships in the image; the weights are still
+yours to choose.
 
 ## Contributing
 

@@ -180,13 +180,31 @@ There are still no credentials in CI (and there never will be), so the
 correct behaviour; but the credential PATH is genuinely verified in the boot
 test using a fake key.
 
-### Ollama (Layer 6, still a PLACEHOLDER)
+### Ollama (Layer 6)
 
-The local model runtime itself (the Ollama/llama.cpp binaries) still does
-not go into the image, because of the download-size constraint.
-`local-runtime` does not require it: with no Ollama it returns
-`model_ready: false` and `router` routes the request to the cloud — a path
-genuinely verified in CI.
+The Ollama runtime **does** ship in the image, installed from the official
+Fedora 44 repository (`0.12.11-4.fc44` — no COPR involved). The package suits
+an immutable image: it declares the `ollama` user through
+`/usr/lib/sysusers.d/`, so systemd creates it at boot rather than in an RPM
+scriptlet, which is what an ostree deployment needs since `/var` is empty
+until then. The service is enabled, so the daemon is up without the user
+having to learn it exists.
+
+**Model weights are deliberately not shipped.** A model is another ~2 GB, and
+which one belongs on a machine is the user's decision — `local-runtime`
+already maps a hardware tier to a recommendation (see `models.py`). Until
+`ollama pull` is run the state is `model_ready: false` and `router` routes to
+the cloud, which is the path this stack has had verified in CI since long
+before Layer 6 existed.
+
+The size was measured before the layer was written: ollama 55 MB compressed /
+987 MB installed, plus rocblas 289 MB / 1021 MB pulled in as a hard
+dependency (ollama requires `libhipblas.so.3`, so ROCm cannot be excluded
+without breaking the package). That is roughly +345 MB compressed on a
+3.26 GB image. It looks wasteful on a machine with no AMD card, but the
+alternatives were measured too and are worse: upstream's own tarballs for the
+same release are 1047 MB (rocm) and 1421 MB (default, which now bundles
+CUDA).
 
 ## Status
 
