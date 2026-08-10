@@ -115,7 +115,7 @@ class TestRouterCloudCredentialedIntegration(unittest.TestCase):
     Skipped when there are no credentials (including in CI, since none are
     committed) — see cloud-bridge/README.md."""
 
-    @unittest.skipUnless(HAS_CLOUD_CREDENTIALS, "Claude kimlik bilgisi yok")
+    @unittest.skipUnless(HAS_CLOUD_CREDENTIALS, "no Claude credentials")
     def test_complex_prompt_routes_cloud_with_real_generation(self):
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         long_prompt = "Answer in one word: what is the capital of Turkey? " + " ".join(

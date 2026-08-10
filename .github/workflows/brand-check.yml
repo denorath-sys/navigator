@@ -1,0 +1,67 @@
+# Navigator OS — Brand asset check
+#
+# theme/palette.json is the single source of the brand colours, and several
+# files repeat those hexes by hand. The compositor and shell copies are
+# verified inside a booted VM by build-disk-and-boot-test.yml, because there
+# the point is to check what the *image* ships. The logos cannot be checked
+# there: they are deliberately not in the image, since nothing at runtime
+# needs them.
+#
+# So they get this instead — a plain checkout, no VM, a few seconds. It is a
+# separate workflow rather than a job in build-image.yml because a logo change
+# must not drag a full image build along with it, and because this check is
+# useful on its own.
+#
+# The script lives in .github/scripts/ so its failure paths can be exercised
+# locally without spending a CI round. They were: a drifted palette, a
+# hand-picked colour in a logo, and a missing asset all exit 1; the clean
+# state exits 0.
+
+name: Brand Check
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "theme/**"
+      - ".github/scripts/check-brand-colors.py"
+      - ".github/workflows/brand-check.yml"
+  pull_request:
+    paths:
+      - "theme/**"
+      - ".github/scripts/check-brand-colors.py"
+      - ".github/workflows/brand-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  brand-colors:
+    name: Brand assets match the palette
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: palette.json <-> logo.svg / logo-wordmark.svg
+        run: python3 .github/scripts/check-brand-colors.py
+
+      - name: Prove the check is not vacuously green
+        # A check that has never been seen to fail is not evidence. This
+        # injects a deliberate deviation into a throwaway copy and requires
+        # the script to reject it — so if the check ever stops doing real
+        # work (a bad regex, an early return), this step goes red rather than
+        # the whole job staying quietly green.
+        run: |
+          set -euo pipefail
+          TMP="$(mktemp -d)"
+          cp -r theme "${TMP}/"
+          sed -i 's/#8b7cf6/#ff00aa/' "${TMP}/theme/logo.svg"
+          if (cd "${TMP}" && python3 "${GITHUB_WORKSPACE}/.github/scripts/check-brand-colors.py") ; then
+            echo "ERROR: the check passed a logo with a hand-picked colour — it verifies nothing."
+            exit 1
+          fi
+          echo "OK: a deliberate deviation is genuinely rejected."

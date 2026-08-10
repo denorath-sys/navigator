@@ -35,9 +35,30 @@ the bezel and the gold north point still read, which is enough to recognise
 it in a tab or a launcher.
 
 The colours are repeated here by hand, exactly as they are in
-`hyprland/hyprland.conf` and `shell/Theme.qml`. Unlike those two, the logo is
-**not** yet part of the CI colour-sync check — if the palette changes, this
-file has to be updated by hand.
+`hyprland/hyprland.conf` and `shell/Theme.qml` — and, like those two, that
+duplication **is verified in CI**.
+
+The logos are checked separately from the compositor and shell copies, because
+they are deliberately not in the image (nothing at runtime needs a logo), so
+the in-VM check cannot see them.
+[`.github/workflows/brand-check.yml`](../.github/workflows/brand-check.yml)
+runs [`check-brand-colors.py`](../.github/scripts/check-brand-colors.py) on a
+plain checkout in seconds. It asserts two things:
+
+- every palette colour still appears in each logo, and
+- each logo contains **no colour that is neither in the palette nor listed as
+  a documented derivation**. The second half is what stops the palette
+  quietly ceasing to be the source of truth — a hand-picked hex is caught even
+  though nothing is "missing".
+
+The derivations it does allow are named in the script with a reason: the lit
+and shaded halves of the gold north point, and the lighter stop of the sky
+gradient. Those are logo-internal shading the palette does not claim to own.
+
+As the repository's convention requires, the check was proven to fail before
+it was trusted: a drifted palette, a hand-picked colour in a logo and a
+missing asset all exit 1, and CI re-proves this on every run by injecting a
+deliberate deviation into a throwaway copy and requiring rejection.
 
 `logo-wordmark.svg` keeps its text as live text rather than outlines, so it
 stays diffable in the repository. That means it renders with whatever

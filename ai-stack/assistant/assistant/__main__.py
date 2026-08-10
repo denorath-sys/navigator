@@ -2,11 +2,11 @@
 `python3 -m assistant` (the default: an interactive REPL, human-readable output).
 
 Conversation history:
-- REPL'de otomatik olarak bellekte tutulur (oturum boyunca), `/reset` ile
-  temizlenir.
+- in the REPL it is kept in memory automatically (for the session), and
+  cleared with `/reset`.
 - if `--history-file <path>` is given, the history is kept persistently in a
-  tutulur — hem tek seferlik hem REPL modunda; her turdan sonra dosyaya
-  after every turn (so that a crash does not lose the history).
+  JSON file — in both one-shot and REPL mode, written to the file after every
+  turn (so that a crash does not lose the history).
 """
 import argparse
 import json

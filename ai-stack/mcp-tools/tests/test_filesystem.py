@@ -71,9 +71,9 @@ class TestReadFile(unittest.TestCase):
             read_file("../../../etc/passwd", root=self.root)
 
     def test_directory_path_raises(self):
-        os.makedirs(os.path.join(self.root, "adir"))
+        os.makedirs(os.path.join(self.root, "a-directory"))
         with self.assertRaises(FilesystemError):
-            read_file("adir", root=self.root)
+            read_file("a-directory", root=self.root)
 
     def test_too_large_file_raises(self):
         with open(os.path.join(self.root, "big.txt"), "w") as f:
@@ -120,12 +120,12 @@ class TestWriteFile(unittest.TestCase):
 
     def test_path_traversal_raises(self):
         with self.assertRaises(FilesystemError):
-            write_file("../../../tmp/kotu.txt", "x", root=self.root)
+            write_file("../../../tmp/evil.txt", "x", root=self.root)
 
     def test_directory_path_raises(self):
-        os.makedirs(os.path.join(self.root, "adir"))
+        os.makedirs(os.path.join(self.root, "a-directory"))
         with self.assertRaises(FilesystemError):
-            write_file("adir", "x", root=self.root)
+            write_file("a-directory", "x", root=self.root)
 
     def test_missing_parent_directory_raises(self):
         with self.assertRaises(FilesystemError):
@@ -165,9 +165,9 @@ class TestDeleteFile(unittest.TestCase):
             delete_file("yok.txt", confirm=True, root=self.root)
 
     def test_directory_path_raises(self):
-        os.makedirs(os.path.join(self.root, "adir"))
+        os.makedirs(os.path.join(self.root, "a-directory"))
         with self.assertRaises(FilesystemError):
-            delete_file("adir", confirm=True, root=self.root)
+            delete_file("a-directory", confirm=True, root=self.root)
 
     def test_path_traversal_raises(self):
         with self.assertRaises(FilesystemError):
@@ -178,18 +178,18 @@ class TestRenameFile(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = self.tmp.name
-        with open(os.path.join(self.root, "kaynak.txt"), "w") as f:
+        with open(os.path.join(self.root, "source.txt"), "w") as f:
             f.write("content")
-        with open(os.path.join(self.root, "hedef-var.txt"), "w") as f:
+        with open(os.path.join(self.root, "existing-target.txt"), "w") as f:
             f.write("eski hedef")
 
     def tearDown(self):
         self.tmp.cleanup()
 
     def test_renames_file(self):
-        rename_file("kaynak.txt", "yeni-ad.txt", root=self.root)
-        self.assertFalse(os.path.exists(os.path.join(self.root, "kaynak.txt")))
-        with open(os.path.join(self.root, "yeni-ad.txt"), encoding="utf-8") as f:
+        rename_file("source.txt", "new-name.txt", root=self.root)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "source.txt")))
+        with open(os.path.join(self.root, "new-name.txt"), encoding="utf-8") as f:
             self.assertEqual(f.read(), "content")
 
     def test_missing_source_raises(self):
@@ -198,13 +198,13 @@ class TestRenameFile(unittest.TestCase):
 
     def test_existing_target_without_overwrite_raises(self):
         with self.assertRaises(FilesystemError):
-            rename_file("kaynak.txt", "hedef-var.txt", root=self.root)
-        self.assertTrue(os.path.exists(os.path.join(self.root, "kaynak.txt")))
+            rename_file("source.txt", "existing-target.txt", root=self.root)
+        self.assertTrue(os.path.exists(os.path.join(self.root, "source.txt")))
 
     def test_existing_target_with_overwrite_succeeds(self):
-        rename_file("kaynak.txt", "hedef-var.txt", overwrite=True, root=self.root)
-        self.assertFalse(os.path.exists(os.path.join(self.root, "kaynak.txt")))
-        with open(os.path.join(self.root, "hedef-var.txt"), encoding="utf-8") as f:
+        rename_file("source.txt", "existing-target.txt", overwrite=True, root=self.root)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "source.txt")))
+        with open(os.path.join(self.root, "existing-target.txt"), encoding="utf-8") as f:
             self.assertEqual(f.read(), "content")
 
     def test_source_path_traversal_raises(self):
@@ -213,16 +213,16 @@ class TestRenameFile(unittest.TestCase):
 
     def test_target_path_traversal_raises(self):
         with self.assertRaises(FilesystemError):
-            rename_file("kaynak.txt", "../../../tmp/kotu.txt", root=self.root)
+            rename_file("source.txt", "../../../tmp/evil.txt", root=self.root)
 
     def test_target_missing_parent_directory_raises(self):
         with self.assertRaises(FilesystemError):
-            rename_file("kaynak.txt", "yok/yeni.txt", root=self.root)
+            rename_file("source.txt", "missing/new.txt", root=self.root)
 
     def test_target_directory_raises(self):
-        os.makedirs(os.path.join(self.root, "adir"))
+        os.makedirs(os.path.join(self.root, "a-directory"))
         with self.assertRaises(FilesystemError):
-            rename_file("kaynak.txt", "adir", root=self.root)
+            rename_file("source.txt", "a-directory", root=self.root)
 
 
 class TestListDirectory(unittest.TestCase):

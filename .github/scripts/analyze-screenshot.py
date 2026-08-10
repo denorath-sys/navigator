@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Analyse the screenshot from the Navigator boot test (stdlib-only).
 
-QEMU'nun HMP `screendump` komutu ham PPM (P6) yazar. Bu betik onu
+QEMU's HMP `screendump` command writes a raw PPM (P6). This script
 parses it, prints diagnostics and converts it to PNG (so it can be uploaded
 as an artifact and genuinely LOOKED AT).
 
@@ -96,7 +96,7 @@ def read_ppm(path: str) -> tuple[int, int, bytes]:
         raise PpmError(f"Not a P6 PPM (first bytes: {data[:8]!r})")
     (width, height, maxval), pos = _tokens(data, 2, 3)
     if maxval != 255:
-        raise PpmError(f"sadece maxval=255 destekleniyor, bulunan: {maxval}")
+        raise PpmError(f"only maxval=255 is supported, found: {maxval}")
     pos += 1  # the SINGLE whitespace byte after the header
     expected = width * height * 3
     pixels = data[pos : pos + expected]

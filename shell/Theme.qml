@@ -1,7 +1,8 @@
 import QtQuick
 
-// Navigator marka paleti — ../theme/palette.json ile manuel senkron tutulur
-// (the same method by which hyprland/hyprland.conf keeps its colour values in sync).
+// The Navigator brand palette — kept in manual sync with
+// ../theme/palette.json (the same method by which hyprland/hyprland.conf
+// keeps its colour values in sync).
 //
 // For simple constants each component currently creates its own Theme {}
 // instance (see Bar.qml, Clock.qml and so on). As the shell grows, a real

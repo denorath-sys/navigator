@@ -296,8 +296,8 @@ jobs:
           echo "=== starting Hyprland ==="
           # In real testing Hyprland deliberately refused to run as root:
           # "[ ERROR ] Hyprland was launched with superuser privileges,
-          # but the privileges check is not omitted." — kaynak kodda
-          # the exact flag verified in its source (src/main.cpp): --i-am-really-stupid.
+          # but the privileges check is not omitted." — the exact flag,
+          # verified in its source (src/main.cpp): --i-am-really-stupid.
           setsid nohup Hyprland --i-am-really-stupid > /root/hyprland.log 2>&1 < /dev/null &
           disown
           sleep 10
@@ -306,7 +306,7 @@ jobs:
           cat /root/hyprland.log || true
 
           echo "=== hypr instance dizini ==="
-          ls -la "$XDG_RUNTIME_DIR/hypr/" 2>&1 || echo "(hypr dizini yok)"
+          ls -la "$XDG_RUNTIME_DIR/hypr/" 2>&1 || echo "(no hypr directory)"
 
           HYPR_SIG="$(ls "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)"
           if [ -z "$HYPR_SIG" ]; then
@@ -320,8 +320,9 @@ jobs:
           hyprctl monitors || { echo "ERROR: hyprctl monitors failed"; exit 1; }
 
           echo "=== verify that hyprland.conf was genuinely loaded ==="
-          # Bu repodaki hyprland/hyprland.conf, "mcp-tools kodunu... kopyala"
-          # step to /root/.config/hypr/hyprland.conf — where Hyprland looks by
+          # This repository's hyprland/hyprland.conf was copied by the "copy
+          # the test script to the VM" step to /root/.config/hypr/hyprland.conf
+          # — where Hyprland looks by
           # default. Until now this file had only been reviewed statically (see
           # hyprland/README.md); here we verify with hyprctl getoption that the
           # real compositor parses and applies it — not merely that it "did not
@@ -540,7 +541,7 @@ jobs:
           echo "=== is WorkspaceIndicator bound to real Hyprland data ==="
           # WorkspaceIndicator is a graphical component; the only way to prove it
           # shows the right data is to read the data it binds to from outside,
-          # okumak. shell.qml'deki IpcHandler (target: "workspaces") bunu
+          # which the IpcHandler in shell.qml (target: "workspaces")
           # provides — the same pattern as getResponse/isLoading in the
           # `assistant` handler.
           #
@@ -617,8 +618,8 @@ jobs:
           # this is a real end-to-end failure path test, not a mock.
 
           #
-          # -p buraya ("ipc" alt komutundan hemen sonra) gerekiyor: Quickshell
-          # verified in its source (launch/parsecommand.cpp) — the Config
+          # -p is needed HERE (immediately after the "ipc" subcommand), as
+          # verified in Quickshell's source (launch/parsecommand.cpp) — the Config
           # Selection option group is registered on the "ipc" subcommand, not on
           # "call". A call without -p looks for a config named "default" (ours is
           # /usr/share/navigator/shell/shell.qml) ve "Could not find default config..."
@@ -826,12 +827,13 @@ jobs:
             fi
           done
 
-          echo "=== marka renkleri senkron mu (palette.json tek kaynak) ==="
-          # palette.json makine-okunur tek kaynak ama hem hyprland.conf hem
-          # shell/Theme.qml repeats the same hexes BY HAND (both note this in
-          # yorumunda "manuel senkron" diyor). Bu, sessizce sapabilecek bir
-          # duplication — verified for real here. Since Layer 7 ALL THREE
-          # (palette.json, hyprland.conf, Theme.qml) are read from the image.
+          echo "=== are the brand colours in sync (palette.json is the single source) ==="
+          # palette.json is the machine-readable single source, but both
+          # hyprland.conf and shell/Theme.qml repeat the same hexes BY HAND
+          # (each says so in its own comment). That is a duplication which
+          # could drift silently — verified for real here. Since Layer 7 ALL
+          # THREE (palette.json, hyprland.conf, Theme.qml) are read from the
+          # image.
           python3 - <<'PY'
           import json, re, sys
 
@@ -882,8 +884,8 @@ jobs:
           # this via useradd/skel is NOT a documented guarantee. It was therefore
           # measured as a diagnostic on the first round (run 30664668160) and a
           # real answer came back: navtest's home directory is /var/home/navtest
-          # .bashrc/.bash_profile hem .config/hypr/hyprland.conf var — yani skel
-          # is genuinely applied. Since the measurement was conclusive it is now
+          # and it contains .config/hypr/hyprland.conf alongside
+          # .bashrc/.bash_profile — so skel is genuinely applied. Since the measurement was conclusive it is now
           # an assertion: if bib or the base image changes this behaviour (if
           # Layer 4 stops reaching new users), the test should break.
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
@@ -1183,8 +1185,8 @@ jobs:
         run: |
           set -euo pipefail
           # Hyprland and Quickshell survive the test script as well (they were
-          # started with setsid nohup), so the desktop is still on screen
-          # kendisi duruyor.
+          # started with setsid nohup), so the desktop is still on screen at
+          # this point.
           python3 .github/scripts/qemu-screendump.py \
             "$(pwd)/qemu-monitor.sock" "$(pwd)/navigator-screen.ppm"
           # --reference: verifies that the on-screen desktop GENUINELY is the

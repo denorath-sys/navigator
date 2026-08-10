@@ -9,7 +9,7 @@ from cloud_bridge.config import resolve_credentials
 
 class TestPromptCLI(unittest.TestCase):
     """Tests the `python3 -m cloud_bridge --prompt ...` path with a real subprocess
-    (kimlik bilgisi yok -> graceful "unavailable" durumu, exit 0)."""
+    (no credentials -> a graceful "unavailable" state, exit 0)."""
 
     def test_prompt_without_credentials_is_graceful(self):
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

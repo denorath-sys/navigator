@@ -41,7 +41,7 @@ class TestParseEnvText(unittest.TestCase):
 
     def test_export_prefix_and_comments_and_blank_lines(self):
         text = (
-            "# Navigator kimlik bilgisi\n"
+            "# Navigator credentials\n"
             "\n"
             "export ANTHROPIC_API_KEY=sk-ant-2\n"
             "   # girintili yorum\n"
