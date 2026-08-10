@@ -271,11 +271,19 @@ RUN python3 -c "import sys; assert sys.version_info >= (3, 11), f'ai-stack requi
 # than created by an RPM scriptlet, so systemd-sysusers creates it at boot.
 # That is what an ostree deployment needs, since /var is empty until then.
 #
-# SIZE, measured before writing this (the numbers drive the decision):
-#   ollama   55 MB compressed / 987 MB installed
-#   rocblas 289 MB compressed / 1021 MB installed  <- pulled in, see below
-#   Navigator before this layer: 3.26 GB compressed
-# So roughly +345 MB compressed (+11%) and about +2 GB installed.
+# SIZE. The first version of this comment predicted "+345 MB compressed
+# (+11%)" and was WRONG by a factor of seven. That prediction used Fedora's
+# package-size, which is the compressed RPM *download*; an OCI layer carries
+# the *installed* files, and rocblas is GPU kernel blobs that barely compress.
+# The real, measured result of building this layer:
+#
+#   Navigator before: 3.26 GB compressed (281 layers)
+#   Navigator after:  5.62 GB compressed (282 layers)
+#   the new layer:    2364 MB — i.e. +72% on the whole image
+#
+# Kept as a lesson rather than quietly corrected: a size from package metadata
+# is not a layer size, and this repository's own rule — measure, don't predict
+# — applies to whoever is writing the rule down as much as to anyone else.
 #
 # The rocblas half is AMD GPU (ROCm) acceleration, arriving as a HARD
 # dependency: ollama requires libhipblas.so.3, so it cannot be excluded

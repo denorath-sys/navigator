@@ -396,13 +396,17 @@ Details: [`ai-stack/cloud-bridge/`](ai-stack/cloud-bridge/).
   37.9, stock Hyprland 68.7 → threshold 15, with over a hundredfold margin
   on both sides. Remaining: real mouse clicks (input injection).
   **Layer 6 (Ollama) is no longer a placeholder:** the runtime now ships in
-  the image from the official Fedora repository. The sizes were measured
-  before the decision — ollama 55 MB compressed / 987 MB installed, plus
-  rocblas 289 MB / 1021 MB arriving as a hard dependency — and the
-  alternatives turned out to be worse, upstream's own tarballs for the same
-  release being 1047 MB (rocm) and 1421 MB (default, now bundling CUDA). So
-  the Fedora RPM is the smallest option, not just the tidiest. Model weights
-  are still deliberately not shipped.
+  the image, from the official Fedora repository (no COPR needed). It is not
+  cheap — measured from the real build, the image went from **3.26 GB to
+  5.62 GB compressed (+72%)**, in a single 2364 MB layer. Most of that is
+  rocblas, ROCm's GPU kernels, which arrive as a hard dependency (ollama
+  requires `libhipblas.so.3`) and cannot be excluded without breaking the
+  package. The alternatives were measured and are worse: upstream's own
+  tarballs for the same release are 1047 MB (rocm) and 1421 MB (default, now
+  bundling CUDA). Model weights are still deliberately not shipped. A
+  prediction of "+345 MB" was made before the build and was wrong by seven
+  times, because package metadata reports the compressed *download* rather
+  than the layer — the correction is kept in the Containerfile as a lesson.
 - **Phase 5 — User testing & release preparation:** installation tests on
   real hardware, documentation, first community release.
 

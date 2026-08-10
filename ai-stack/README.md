@@ -197,14 +197,21 @@ already maps a hardware tier to a recommendation (see `models.py`). Until
 the cloud, which is the path this stack has had verified in CI since long
 before Layer 6 existed.
 
-The size was measured before the layer was written: ollama 55 MB compressed /
-987 MB installed, plus rocblas 289 MB / 1021 MB pulled in as a hard
-dependency (ollama requires `libhipblas.so.3`, so ROCm cannot be excluded
-without breaking the package). That is roughly +345 MB compressed on a
-3.26 GB image. It looks wasteful on a machine with no AMD card, but the
-alternatives were measured too and are worse: upstream's own tarballs for the
-same release are 1047 MB (rocm) and 1421 MB (default, which now bundles
-CUDA).
+**The size is real and it is not small.** Measured from the actual build
+rather than predicted: the image went from 3.26 GB to **5.62 GB compressed
+(+72%)**, in a single 2364 MB layer. Most of it is rocblas — ROCm's GPU
+kernels — which arrives as a hard dependency, since ollama requires
+`libhipblas.so.3` and it cannot be excluded without breaking the package. On
+a machine with no AMD card that is dead weight, but the alternatives were
+measured too and are worse: upstream's own tarballs for the same release are
+1047 MB (rocm) and 1421 MB (default, which now bundles CUDA).
+
+An earlier version of this paragraph said "+345 MB", predicted from Fedora's
+package metadata before the build. It was wrong by a factor of seven:
+`package-size` is the compressed RPM *download*, while a layer carries the
+*installed* files, and rocblas's contents barely compress. The mistake is
+recorded rather than quietly fixed — it is the same "measure, don't predict"
+rule this repository applies to everything else.
 
 ## Status
 
