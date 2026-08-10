@@ -34,7 +34,7 @@ def run_stdio(server: MCPServer) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Navigator OS mcp-tools — MCP sunucusu (varsayılan: stdio, isteğe bağlı: HTTP+SSE)."
+        description="Navigator OS mcp-tools — MCP server (default: stdio, optional: HTTP+SSE)."
     )
     parser.add_argument("--http", action="store_true", help="stdio yerine HTTP+SSE transport kullan")
     parser.add_argument("--host", default="127.0.0.1", help="HTTP modunda dinlenecek adres")
@@ -43,8 +43,8 @@ def main() -> int:
         "--token",
         default=None,
         help=(
-            "HTTP+SSE için Bearer token (verilmezse "
-            f"{TOKEN_ENV_VAR} ortam değişkeni, o da yoksa otomatik üretilip stderr'e yazdırılır)"
+            "Bearer token for HTTP+SSE (if not given, the "
+            f"{TOKEN_ENV_VAR} environment variable is used; failing that one is generated automatically and printed to stderr)"
         ),
     )
     args = parser.parse_args()

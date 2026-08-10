@@ -2,8 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 
-// Navigator üst paneli: workspace göstergesi, asistan paneli anahtarı, saat.
-// wlr-layer-shell protokolü üzerinden Wayland'da panel katmanına yerleşir
+// The Navigator top panel: workspace indicator, assistant panel toggle, clock.
+// It places itself on the panel layer in Wayland via the wlr-layer-shell protocol
 // (bkz. Quickshell PanelWindow: https://quickshell.outfoxxed.me/docs/types/quickshell/panelwindow/).
 PanelWindow {
     id: bar

@@ -6,11 +6,11 @@ import unittest
 
 
 def _cloud_credentials_available() -> bool:
-    """Kimlik bilgisi var mı — cloud-bridge'in KENDİ çözümlemesine sorarak.
+    """Are there credentials — by asking cloud-bridge's OWN resolution.
 
-    Burada ortam değişkenlerine bakmak yetmez: kaynak
-    `~/.config/navigator/env` de olabilir. Kuralı kopyalamak yerine
-    gerçek uygulamaya soruyoruz, böylece iki yer ayrışamaz.
+    Looking at environment variables is not enough here: the source may also be
+    `~/.config/navigator/env`. Rather than duplicating the rule, we ask the
+    real implementation, so the two places cannot diverge.
     """
     cloud_bridge_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -27,23 +27,23 @@ def _cloud_credentials_available() -> bool:
 
 
 class TestRouterIntegration(unittest.TestCase):
-    """router -> local-runtime -> hardware-probe VE router -> cloud-bridge
-    zincirlerinin GERÇEK subprocess'lerle uçtan uca çalıştığını doğrular.
+    """Verifies that the router -> local-runtime -> hardware-probe AND
+    router -> cloud-bridge chains work end to end with REAL subprocesses.
 
-    Bu makinede Ollama kurulu, çalışıyor ve önerilen model (llama3.2:3b)
-    indirildi (model_ready: true) — basit istekler artık gerçekten yerelde
-    üretiliyor. Karmaşık istekler ise (tier="low" düşük kapasiteli
-    sayıldığından) yine cloud-bridge'e düşüyor; Claude API kimlik bilgisi
-    olmadığından o yol "unavailable" raporluyor.
+    On this machine Ollama is installed and running and the recommended model
+    (llama3.2:3b) has been pulled (model_ready: true) — simple requests are now
+    genuinely generated locally. Complex requests still fall through to
+    cloud-bridge (since tier="low" counts as low capacity); with no Claude API
+    credential, that path reports "unavailable".
     """
 
     def _run_router(self, prompt: str, extra_args: list[str] | None = None) -> dict:
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         env = {k: v for k, v in os.environ.items() if not k.startswith("ANTHROPIC_")}
-        # ANTHROPIC_* yetmiyor: cloud-bridge kimlik bilgisini
-        # ~/.config/navigator/env'den de okuyor (bkz. cloud_bridge/config.py),
-        # dolayısıyla "kimlik bilgisi yok" iddiası ancak HOME de boş bir
-        # dizine bakarken doğru. Zincirin bu ucunda HOME'a başka ihtiyaç yok.
+        # Clearing ANTHROPIC_* is not enough: cloud-bridge also reads the
+        # credential from ~/.config/navigator/env (see cloud_bridge/config.py),
+        # so the "no credentials" claim only holds when HOME points at an empty
+        # directory too. Nothing else at this end of the chain needs HOME.
         env["HOME"] = os.path.join(tempfile.gettempdir(), "navigator-test-empty-home")
         env.pop("XDG_CONFIG_HOME", None)
         result = subprocess.run(
@@ -58,27 +58,27 @@ class TestRouterIntegration(unittest.TestCase):
         return json.loads(result.stdout)
 
     def test_decide_only_returns_decision_without_generating(self):
-        report = self._run_router("Sadece 'merhaba' kelimesiyle cevap ver.", ["--decide-only"])
+        report = self._run_router("Sadece 'hello' kelimesiyle cevap ver.", ["--decide-only"])
         self.assertIn(report["hardware_tier"], ("minimal", "low", "mid", "high"))
         self.assertEqual(report["route"], "local")
         self.assertNotIn("local_runtime", report)
         self.assertNotIn("cloud_bridge", report)
 
     def test_short_tool_prompt_decide_only_routes_cloud_on_this_low_tier_machine(self):
-        """Bu makinede tier="low" — kısa ama araç gerektiren bir istek
-        (ör. donanım sorusu) artık sadece kelime sayısına değil,
-        mentions_tool_keywords()'e göre de 'complex' sayılıp buluta
-        yönlendiriliyor (bkz. ai-stack/assistant/README.md 'Yerel
-        tool-use' — küçük yerel modelin tool-use güvenilirlik sorunu)."""
+        """On this machine tier="low" — a short but tool-requiring request
+        (e.g. a hardware question) is now counted as 'complex' not only by word
+        count but also by mentions_tool_keywords(), and is routed to the cloud
+        (see 'Local tool-use' in ai-stack/assistant/README.md — the small local
+        model's tool-use reliability problem)."""
         report = self._run_router(
-            "Bu makinede kaç CPU çekirdeği var?", ["--decide-only"]
+            "How many CPU cores does this machine have?", ["--decide-only"]
         )
         self.assertEqual(report["hardware_tier"], "low")
         self.assertEqual(report["complexity"], "complex")
         self.assertEqual(report["route"], "cloud")
 
     def test_simple_prompt_routes_local_with_real_generation(self):
-        report = self._run_router("Sadece 'merhaba' kelimesiyle cevap ver.")
+        report = self._run_router("Sadece 'hello' kelimesiyle cevap ver.")
         self.assertIn(report["hardware_tier"], ("minimal", "low", "mid", "high"))
         self.assertTrue(report["model_ready"])
         self.assertEqual(report["route"], "local")
@@ -91,8 +91,9 @@ class TestRouterIntegration(unittest.TestCase):
         self.assertGreater(len(report["local_runtime"]["content"]), 0)
 
     def test_complex_prompt_routes_cloud(self):
-        # tier="low" bu makinede "düşük kapasiteli" sayıldığından, model
-        # hazır olsa bile karmaşık (uzun) istekler cloud-bridge'e düşer.
+        # Because tier="low" counts as "low capacity" on this machine, complex
+        # (long) requests fall through to cloud-bridge even when the model is
+        # ready.
         long_prompt = " ".join(["kelime"] * 50)
         report = self._run_router(long_prompt)
         self.assertEqual(report["complexity"], "complex")
@@ -108,17 +109,17 @@ HAS_CLOUD_CREDENTIALS = _cloud_credentials_available()
 
 
 class TestRouterCloudCredentialedIntegration(unittest.TestCase):
-    """Claude API kimlik bilgisi mevcutsa (cloud-bridge/.env.local source
-    edilmişse ya da ~/.config/navigator/env varsa) router -> cloud-bridge
-    zincirinin GERÇEK bir Claude API çağrısıyla uçtan uca çalıştığını
-    doğrular. Kimlik bilgisi yoksa (CI dahil, hiçbiri commit edilmediğinden)
-    atlanır — bkz. cloud-bridge/README.md."""
+    """If a Claude API credential is present (cloud-bridge/.env.local sourced,
+    or ~/.config/navigator/env exists), verifies that the
+    router -> cloud-bridge chain works end to end with a REAL Claude API call.
+    Skipped when there are no credentials (including in CI, since none are
+    committed) — see cloud-bridge/README.md."""
 
     @unittest.skipUnless(HAS_CLOUD_CREDENTIALS, "Claude kimlik bilgisi yok")
     def test_complex_prompt_routes_cloud_with_real_generation(self):
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        long_prompt = "Tek kelimeyle cevap ver: Türkiye'nin başkenti neresi? " + " ".join(
-            ["lütfen"] * 45
+        long_prompt = "Answer in one word: what is the capital of Turkey? " + " ".join(
+            ["please"] * 45
         )
         result = subprocess.run(
             ["python3", "-m", "router", "--prompt", long_prompt],

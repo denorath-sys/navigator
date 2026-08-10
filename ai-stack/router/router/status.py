@@ -1,9 +1,9 @@
-"""local-runtime durumunu sorgulayıp routing kararını üretir; karara göre
-local-runtime veya cloud-bridge'i gerçekten çağırır.
+"""Query the local-runtime status and produce the routing decision; then
+genuinely invoke local-runtime or cloud-bridge according to that decision.
 
-router, hardware-probe'u ayrıca çağırmaz — local-runtime'ın raporu zaten
-hardware_tier ve model_ready alanlarını içeriyor (bkz.
-ai-stack/local-runtime/local_runtime/status.py), tek bir subprocess hop'u
+The router does not call hardware-probe separately — local-runtime's report
+already contains the hardware_tier and model_ready fields (see
+ai-stack/local-runtime/local_runtime/status.py), so a single subprocess hop
 yeterli.
 """
 import json
@@ -55,10 +55,10 @@ def route_request(
     }
 
     if decide_only:
-        # Sadece karar üretir, local-runtime/cloud-bridge'i ÇALIŞTIRMAZ —
-        # ai-stack/assistant gibi çağıranların kendi üretim akışını (örn.
-        # tool-use döngüsü) kurabilmesi, gereksiz/israf bir bulut çağrısı
-        # yapılmadan.
+        # Produces the decision only, and DOES NOT RUN
+        # local-runtime/cloud-bridge — so that callers such as
+        # ai-stack/assistant can build their own generation flow (e.g. a
+        # tool-use loop) without a wasteful, unnecessary cloud call.
         return report
 
     if decision["target"] == "cloud":

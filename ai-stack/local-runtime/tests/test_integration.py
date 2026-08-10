@@ -5,8 +5,8 @@ import unittest
 
 
 class TestLocalRuntimeIntegration(unittest.TestCase):
-    """Gerçek Ollama kurulumuna VE gerçek indirilmiş modele (llama3.2:3b)
-    karşı çalışır — bu makinede tam olarak hazır (ollama_available: true,
+    """Runs against a real Ollama installation AND a really pulled model
+    (llama3.2:3b) — fully ready on this machine (ollama_available: true,
     model_ready: true)."""
 
     def test_status_cli_reports_model_ready(self):
@@ -25,11 +25,11 @@ class TestLocalRuntimeIntegration(unittest.TestCase):
         self.assertTrue(report["model_ready"])
 
     def test_prompt_cli_gets_real_generation(self):
-        """Gerçek bir Ollama generate() çağrısı — model belleğe yüklenip
-        CPU'da çıkarım yapabileceğinden bolca zaman aşımı payı var."""
+        """A real Ollama generate() call — with a generous timeout margin,
+        since the model may be loaded into memory and infer on CPU."""
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         result = subprocess.run(
-            ["python3", "-m", "local_runtime", "--prompt", "Sadece 'merhaba' kelimesiyle cevap ver."],
+            ["python3", "-m", "local_runtime", "--prompt", "Reply with the single word 'hello'."],
             cwd=here,
             capture_output=True,
             text=True,
@@ -43,14 +43,14 @@ class TestLocalRuntimeIntegration(unittest.TestCase):
         self.assertGreater(len(report["content"]), 0)
 
     def test_converse_cli_gets_real_tool_call(self):
-        """Gerçek bir Ollama /api/chat çağrısı, tool-calling ile —
-        llama3.2:3b'nin gerçekten bir tool_use isteği ürettiği doğrulanır."""
+        """A real Ollama /api/chat call with tool-calling — verifying that
+        llama3.2:3b genuinely produces a tool_use request."""
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         payload = {
             "messages": [
                 {
                     "role": "user",
-                    "content": "Bu makinenin donanım tier bilgisini öğrenmek için hardware_tier aracını çağır.",
+                    "content": "Call the hardware_tier tool to find out this machine's hardware tier.",
                 }
             ],
             "tools": [
@@ -58,7 +58,7 @@ class TestLocalRuntimeIntegration(unittest.TestCase):
                     "type": "function",
                     "function": {
                         "name": "hardware_tier",
-                        "description": "Donanım tier bilgisini döner.",
+                        "description": "Returns the hardware tier information.",
                         "parameters": {"type": "object", "properties": {}, "required": []},
                     },
                 }

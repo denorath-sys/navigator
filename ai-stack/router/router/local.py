@@ -1,4 +1,4 @@
-"""local-runtime'ı subprocess ile çağırır — route kararı "local" olduğunda."""
+"""Invokes local-runtime as a subprocess — when the routing decision is "local"."""
 import json
 import subprocess
 

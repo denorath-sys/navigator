@@ -5,8 +5,8 @@ import unittest
 
 
 class TestCloudBridgeIntegration(unittest.TestCase):
-    """Gerçek CLI'ın kimlik bilgisi olmadan çökmeden çalıştığını doğrular
-    (hiçbir gerçek Claude API çağrısı yapılmaz)."""
+    """Verifies that the real CLI runs without crashing when there are no
+    credentials (no real Claude API call is made)."""
 
     def test_status_cli_runs_without_credentials(self):
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

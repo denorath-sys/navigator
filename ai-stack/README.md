@@ -1,43 +1,44 @@
 # ai-stack/
 
-Navigator'ı "AI-native" yapan katman. Yapay zekayı üçüncü parti bir uygulama
-olarak değil, işletim sisteminin doğal bir parçası olarak sunmayı hedefler.
+The layer that makes Navigator "AI-native". It aims to present AI as a
+natural part of the operating system rather than as a third-party
+application.
 
-Altı bileşenden oluşur, her biri kendi README'sinde detaylandırılmıştır:
+It consists of six components, each detailed in its own README:
 
-| Modül | Sorumluluk |
+| Module | Responsibility |
 |---|---|
-| [`hardware-probe/`](hardware-probe/README.md) | Donanımı tespit eder, model tier'ını belirler — **gerçek donanımda doğrulandı** |
-| [`local-runtime/`](local-runtime/README.md) | Yerel model çalıştırma (Ollama) — **uçtan uca çalışıyor**, tool-calling destekli (Ollama + `llama3.2:3b` kurulu) |
-| [`mcp-tools/`](mcp-tools/README.md) | MCP tabanlı sistem/araç erişimi — **10 araç, iki transport (stdio + HTTP+SSE), gerçek test edildi** |
-| [`router/`](router/README.md) | Yerel↔bulut hibrit istek yönlendirme — **her iki yol da uçtan uca gerçek** |
-| [`cloud-bridge/`](cloud-bridge/README.md) | Bulut model sağlayıcısı (Anthropic Claude API) — **gerçek kimlik bilgisi bağlı, tool-use destekli** |
-| [`assistant/`](assistant/README.md) | Faz 4: yukarıdaki beşini tek bir gerçek konuşma döngüsünde birleştiren CLI/REPL — **hem cloud hem local'de gerçek tool-use döngüsü + kalıcı konuşma geçmişi** |
+| [`hardware-probe/`](hardware-probe/README.md) | Detects the hardware and determines the model tier — **verified on real hardware** |
+| [`local-runtime/`](local-runtime/README.md) | Running local models (Ollama) — **works end to end**, tool-calling supported (Ollama + `llama3.2:3b` installed) |
+| [`mcp-tools/`](mcp-tools/README.md) | MCP-based system/tool access — **10 tools, two transports (stdio + HTTP+SSE), really tested** |
+| [`router/`](router/README.md) | Hybrid local↔cloud request routing — **both paths are real end to end** |
+| [`cloud-bridge/`](cloud-bridge/README.md) | Cloud model provider (Anthropic Claude API) — **real credentials wired up, tool-use supported** |
+| [`assistant/`](assistant/README.md) | Phase 4: a CLI/REPL combining the five above into a single real conversation loop — **a real tool-use loop on both cloud and local, plus persistent conversation history** |
 
-## Veri akışı (gerçek kod — sadece niyet değil)
+## Data flow (real code — not just intent)
 
 ```
-kullanıcı promptu (assistant/ CLI veya REPL)
+user prompt (assistant/ CLI or REPL)
         │
         ▼
-router --decide-only  ──►  hardware-probe/ (tier kararı)
+router --decide-only  ──►  hardware-probe/ (tier decision)
         │
-        ├── route: "local" ──► local-runtime/ --converse (tool-use, KISITLI araç seti)
+        ├── route: "local" ──► local-runtime/ --converse (tool-use, RESTRICTED tool set)
         │
-        └── route: "cloud" ──► cloud-bridge/ --converse (tool-use, TAM araç seti)
+        └── route: "cloud" ──► cloud-bridge/ --converse (tool-use, FULL tool set)
                                       │            ▲
                                       ▼            │
-                                mcp-tools/ (gerçek araç çağrısı — MCP stdio)
+                                mcp-tools/ (real tool call — MCP stdio)
 ```
 
-`shell/` (Quickshell UI) bu zincire Faz 4'te gerçekten bağlandı:
-`shell/AssistantPanel.qml` `router`'ı subprocess olarak çağırıyor ve bu
-gerçek bir CI VM'inde uçtan uca doğrulandı (bkz. `shell/README.md`).
+`shell/` (the Quickshell UI) was genuinely connected to this chain in
+Phase 4: `shell/AssistantPanel.qml` invokes `router` as a subprocess, and
+this was verified end to end in a real CI VM (see `shell/README.md`).
 
-## İmajdaki kurulum yolu
+## Installation path in the image
 
-`image/Containerfile` **Katman 5**, bu altı modülü Navigator imajına
-gerçekten katmanlıyor:
+**Layer 5** of `image/Containerfile` genuinely layers these six modules into
+the Navigator image:
 
 ```
 /usr/share/navigator/ai-stack/
@@ -49,68 +50,68 @@ gerçekten katmanlıyor:
 └── assistant/{assistant/,pyproject.toml}
 ```
 
-**Düz kardeş hiyerarşi bir çalışma zamanı sözleşmesidir, tercih değil.**
-Modüller birbirini `python3 -m <modül>` subprocess'i olarak, cwd'ye
-göreli kardeş yollarla çağırıyor (`router` → `../local-runtime`,
+**The flat sibling hierarchy is a runtime contract, not a preference.**
+The modules invoke each other as `python3 -m <module>` subprocesses using
+sibling paths relative to the cwd (`router` → `../local-runtime`,
 `../cloud-bridge`; `local-runtime` → `../hardware-probe`; `assistant` →
-`../router`, `../mcp-tools`). Dizin adları repodaki adlarla birebir aynı
-olmak zorunda; aksi halde zincir sessizce kırılır — gerçek bir CI
-denemesinde tam olarak bu yaşandı (`hardware-probe` kopyalanmamıştı,
-`router` boş stdout döndürdü).
+`../router`, `../mcp-tools`). The directory names must match the ones in the
+repository exactly; otherwise the chain breaks silently — which is exactly
+what happened in a real CI attempt (`hardware-probe` had not been copied and
+`router` returned empty stdout).
 
-İmaja **sadece çalışma zamanı kodu** giriyor: paket dizini +
-`pyproject.toml`. `tests/` girmiyor. `.env.local` de girmiyor — kimlik
-bilgisinin KENDİSİ imaja hiç gömülmez; imaja sadece Katman 4'ün
-`/etc/skel` altına koyduğu BOŞ şablon giriyor (aşağıya bkz.). Altı modülün hiçbirinin üçüncü
-parti bağımlılığı olmadığı için (`dependencies = []`, stdlib-only) bu
-katman pip/venv kurmuyor; tek çalışma zamanı bağımlılığı python3 ≥ 3.11
-ve bu build sırasında iddia ediliyor.
+Only **runtime code** goes into the image: the package directory plus
+`pyproject.toml`. `tests/` does not. Neither does `.env.local` — the
+credential ITSELF is never baked into the image; only the EMPTY template
+that Layer 4 places under `/etc/skel` goes in (see below). Because none of
+the six modules has any third-party dependency (`dependencies = []`,
+stdlib-only), this layer installs no pip or venv; the only runtime
+dependency is python3 ≥ 3.11, and that is asserted during the build.
 
-### Salt-okunur `/usr` ve bytecode
+### Read-only `/usr` and bytecode
 
-Navigator bir ostree/bootc imajı: çalışan sistemde `/usr` salt-okunur.
-Python bu yüzden `__pycache__`'i çalışma zamanında yazamaz ve her
-çağrıda kaynağı yeniden derler — bu zincirde tek istek 3-4 subprocess
-demek olduğu için ölçülebilir bir maliyet. Bytecode bu yüzden build
-sırasında üretiliyor:
+Navigator is an ostree/bootc image: on a running system `/usr` is read-only.
+Python therefore cannot write `__pycache__` at runtime and recompiles the
+source on every invocation — a measurable cost, since a single request in
+this chain means 3-4 subprocesses. Bytecode is therefore generated at build
+time:
 
 ```
-python3 -m compileall -q --invalidation-mode checked-hash <yol>
+python3 -m compileall -q --invalidation-mode checked-hash <path>
 ```
 
-`checked-hash` bilinçli bir seçim ve gerçekten test edildi: ostree
-commit tüm dosya `mtime`'larını normalize ediyor, dolayısıyla
-varsayılan timestamp tabanlı geçersizleştirmeyle .pyc'ler bayat sayılır.
-Yerel bir deneyde (mtime'lar 1970'e çekilip dizin salt-okunur yapılarak)
-`python3 -v` çıktısı bunu doğruladı:
+`checked-hash` is a deliberate choice and was genuinely tested: the ostree
+commit normalises all file `mtime`s, so with the default timestamp-based
+invalidation the `.pyc` files would be considered stale. In a local
+experiment (mtimes pulled back to 1970 and the directory made read-only),
+`python3 -v` output confirmed this:
 
-- timestamp modu → `# bytecode is stale for 'hardware_probe'` +
-  `could not create ... PermissionError` (her çağrıda yeniden derleme,
-  cache yazılamıyor)
+- timestamp mode → `# bytecode is stale for 'hardware_probe'` +
+  `could not create ... PermissionError` (recompilation on every
+  invocation, cache cannot be written)
 - `checked-hash` → `# ...probe.cpython-313.pyc matches ...probe.py`
-  (hash tabanlı doğrulama mtime'dan bağımsız, .pyc kullanılıyor)
+  (hash-based validation is independent of mtime, the `.pyc` is used)
 
-### Gerçek CI kanıtı
+### Real CI evidence
 
-Bu katman gerçek bir Navigator disk imajında, QEMU/KVM ile boot edilmiş
-bir VM'de doğrulandı ([run
+This layer was verified inside a real Navigator disk image, in a VM booted
+with QEMU/KVM ([run
 30504082821](https://github.com/denorath-sys/navigator/actions/runs/30504082821),
-`build-disk-and-boot-test.yml` → `hyprland-test`). Doğrulama adımı önce
-`/usr`'a yazmayı deniyor ve BAŞARISIZ olmasını şart koşuyor — yani
-aşağıdaki her şey imajın kendisinden geliyor, hiçbir `scp`/`usroverlay`
-devrede değil:
+`build-disk-and-boot-test.yml` → `hyprland-test`). The verification step
+first tries to write to `/usr` and requires that to FAIL — meaning
+everything below comes from the image itself, with no `scp` or `usroverlay`
+involved:
 
 ```
-OK: /usr salt-okunur, dolayısıyla aşağıdaki her şey imajdan geliyor.
+OK: /usr is read-only, so everything below comes from the image.
 OK: hardware-probe / local-runtime / cloud-bridge / mcp-tools / router / assistant
-OK: sadece çalışma zamanı kodu var.          (tests/ ve .env* sızmamış)
-pyc sayısı: 36
+OK: runtime code only.                       (no tests/ or .env* leaked in)
+pyc count: 36
 # /usr/share/navigator/ai-stack/router/router/__pycache__/status.cpython-314.pyc
     matches /usr/share/navigator/ai-stack/router/router/status.py
-OK: .pyc'ler kullanılıyor, çalışma zamanında yeniden derleme yok.
+OK: .pyc files are used, no recompilation at runtime.
 ```
 
-Modüller imajdaki yolundan gerçekten çalıştı (kısaltılmış):
+The modules really ran from their path in the image (abbreviated):
 
 ```
 hardware-probe: {"cpu": {"model": "AMD EPYC 7763 64-Core Processor", ...},
@@ -118,120 +119,120 @@ hardware-probe: {"cpu": {"model": "AMD EPYC 7763 64-Core Processor", ...},
 local-runtime:  {"hardware_tier": "minimal", "ollama_available": false,
                  "model_ready": false}
 cloud-bridge:   {"provider": "anthropic", "credentials_configured": false}
-router:         {"route": "cloud", "reasoning": "yerel model hazır değil
-                 (Ollama kapalı veya model indirilmemiş)"}
+router:         {"route": "cloud", "reasoning": "local model not ready
+                 (Ollama down or model not pulled)"}
 ```
 
-`local-runtime`'ın durum raporu kendi `../hardware-probe` kardeşini,
-`router --decide-only` ise `../local-runtime`'ı subprocess olarak
-çağırdığı için bu iki satır aynı zamanda düz kardeş hiyerarşisinin
-imajda gerçekten çözüldüğünün kanıtı.
+Because `local-runtime`'s status report invokes its own `../hardware-probe`
+sibling, and `router --decide-only` invokes `../local-runtime`, as
+subprocesses, these two lines are simultaneously proof that the flat sibling
+hierarchy really resolves inside the image.
 
-Aynı run'da `mcp-tools`'un Hyprland araçları da artık imajdaki yoldan
-(`/usr/share/navigator/ai-stack/mcp-tools`, salt-okunur `/usr`) gerçek
-compositor'a karşı çağrıldı ve `shell/AssistantPanel.qml` imajdaki
-`router`'ı gerçekten çalıştırdı:
+In the same run, the `mcp-tools` Hyprland tools were also called against a
+real compositor from their path in the image
+(`/usr/share/navigator/ai-stack/mcp-tools`, read-only `/usr`), and
+`shell/AssistantPanel.qml` really ran the `router` from the image:
 
 ```
 list_workspaces: [{"id": 1, "name": "1", "monitor": "Virtual-1", ...}]
-AssistantPanel yanıtı: [cloud] unavailable: credentials_not_configured
+AssistantPanel response: [cloud] unavailable: credentials_not_configured
 ```
 
-(Son satır beklenen doğru davranış: CI'da ne Ollama ne Claude kimlik
-bilgisi var — graceful hata yolu, mock değil.)
+(The last line is the expected, correct behaviour: CI has neither Ollama nor
+Claude credentials — a graceful failure path, not a mock.)
 
-### Kimlik bilgisi
+### Credentials
 
-`cloud-bridge` kimlik bilgisini iki kaynaktan çözüyor, bu öncelikle
-(`cloud_bridge/config.py`): önce `ANTHROPIC_API_KEY` /
-`ANTHROPIC_AUTH_TOKEN` ortam değişkenleri, yoksa kullanıcının kendi
-**`~/.config/navigator/env`** dosyası.
+`cloud-bridge` resolves credentials from two sources, in this order of
+precedence (`cloud_bridge/config.py`): first the `ANTHROPIC_API_KEY` /
+`ANTHROPIC_AUTH_TOKEN` environment variables, and failing that the user's
+own **`~/.config/navigator/env`** file.
 
-Dosya yolu bir kolaylık değil, zorunluluktu: gerçek imajda `/usr`
-salt-okunur olduğundan `/usr/share/navigator/ai-stack/cloud-bridge/
-.env.local` gibi bir dosya oluşturulamıyor, kimlik bilgisi imaja da
-gömülemiyor. Geriye kalan "kullanıcı kendi oturum ortamına koysun"
-seçeneği ise gerçekte işlemiyordu: `shell/AssistantPanel.qml`'in
-başlattığı `Process` Quickshell'in ortamını miras alıyor, Quickshell'i
-de Hyprland `exec-once` başlatıyor — grafik oturumu bir greeter'dan ya
-da TTY login'den açıldığında o ortama değişken koymanın taşınabilir bir
-yolu yok. Çözüm, kimlik bilgisini **zincirin ucunda** okumak: dosya
-`HOME`'a göreli çözüldüğü için Quickshell'in ortamı boş olsa bile
-çalışıyor.
+The file path was not a convenience but a necessity: because `/usr` is
+read-only in the real image, a file such as
+`/usr/share/navigator/ai-stack/cloud-bridge/.env.local` cannot be created,
+and the credential cannot be baked into the image either. The remaining
+option — "let the user put it in their own session environment" — did not
+actually work: the `Process` started by `shell/AssistantPanel.qml` inherits
+Quickshell's environment, and Quickshell itself is started by Hyprland
+`exec-once` — when the graphical session is opened from a greeter or a TTY
+login there is no portable way to place a variable in that environment. The
+solution is to read the credential **at the end of the chain**: because the
+file is resolved relative to `HOME`, it works even when Quickshell's
+environment is empty.
 
-Şablon imajda: `image/Containerfile` Katman 4,
-`/etc/skel/.config/navigator/env` altına yorumlanmış ve **boş** bir dosya
-(0600) koyuyor, yani her yeni hesap yolu yerinde bulur. Boot testinde
-ölçülüp iddiaya çevrildi: hem imajdaki şablon hem de
-bootc-image-builder'ın oluşturduğu hesabın kopyası 0600 — kullanıcı
-`chmod`'a mecbur kalmıyor. (Dizin için hedeflenen 0700 tutmuyor, 755
-geliyor; sırrı koruyan dosya modu, ayrıntı cloud-bridge README'sinde.)
-Dosya sahibi dışına açıksa BİLEREK yok sayılıyor (ssh'ın özel anahtar
-davranışı) ve sebep ayırt edilebilir oluyor —
-`credentials_file_insecure` vs `credentials_not_configured`;
-`AssistantPanel` bunları kullanıcıya Türkçe cümleye çeviriyor. Ayrıntı:
-`ai-stack/cloud-bridge/README.md` "Kimlik bilgisi nereden geliyor".
+The template in the image: Layer 4 of `image/Containerfile` places a
+commented, **empty** file (0600) at `/etc/skel/.config/navigator/env`, so
+every new account finds the path in place. This was measured and then
+promoted to an assertion in the boot test: both the template in the image
+and the copy in the account created by bootc-image-builder are 0600 — the
+user is not forced to run `chmod`. (The 0700 intended for the directory does
+not hold, it comes out 755; it is the file mode that protects the secret,
+details in the cloud-bridge README.) If the file is readable beyond its
+owner it is DELIBERATELY ignored (ssh's private-key behaviour), and the
+reason is distinguishable — `credentials_file_insecure` vs
+`credentials_not_configured`; `AssistantPanel` translates these into
+sentences for the user. Details: `ai-stack/cloud-bridge/README.md`, "Where
+the credential comes from".
 
-CI'da kimlik bilgisi hâlâ yok (ve olmayacak), dolayısıyla yukarıdaki
-`[cloud] unavailable: credentials_not_configured` çıktısı doğru davranış
-olarak kalıyor; ama kimlik bilgisi YOLU boot testinde sahte bir anahtarla
-gerçekten doğrulanıyor.
+There are still no credentials in CI (and there never will be), so the
+`[cloud] unavailable: credentials_not_configured` output above remains the
+correct behaviour; but the credential PATH is genuinely verified in the boot
+test using a fake key.
 
-### Ollama (Katman 6, hâlâ PLACEHOLDER)
+### Ollama (Layer 6, still a PLACEHOLDER)
 
-Yerel model runtime'ının kendisi (Ollama/llama.cpp ikilileri) boyut
-kısıtı nedeniyle hâlâ imaja girmiyor. `local-runtime` bunu gerektirmiyor:
-Ollama yoksa `model_ready: false` döndürüyor ve `router` isteği buluta
-yönlendiriyor — CI'da gerçekten doğrulanan yol.
+The local model runtime itself (the Ollama/llama.cpp binaries) still does
+not go into the image, because of the download-size constraint.
+`local-runtime` does not require it: with no Ollama it returns
+`model_ready: false` and `router` routes the request to the cloud — a path
+genuinely verified in CI.
 
-## Durum
+## Status
 
-Altı modülün tamamı gerçek ve bu makinede gerçek verilerle test edildi
-(mock/placeholder değil):
+All six modules are real and were tested with real data on this machine (not
+mocks or placeholders):
 
-- **`hardware-probe/`** — gerçek donanımda doğrulandı: bu makinede
-  tier="low" (Intel i5-8500, 6 çekirdek, 15.4 GB RAM, ayrık GPU yok), 20 test.
-- **`local-runtime/`** — Ollama kuruldu ve `llama3.2:3b` indirildi;
-  `model_ready: true`, gerçek `generate()` çağrıları başarılı. Faz 4'te
-  `chat()`/`--converse` eklendi — gerçek testte tool-calling doğrulandı,
-  20 test.
-- **`router/`** — karar katmanı + local-runtime/cloud-bridge entegrasyonu;
-  Faz 4'te eklenen `--decide-only` sadece karar üretir, çalıştırmaz
-  (assistant'ın kendi üretim akışını kurabilmesi için). Karmaşıklık
-  sezgisine "araç gerekebilir mi" sinyali eklendi
-  (`mentions_tool_keywords()`) — kısa ama donanım/dosya/pencere ile ilgili
-  istekler artık düşük tier'da otomatik buluta düşüyor (gerçek testte
-  doğrulandı: bu makinede "kaç CPU çekirdeği var?" artık `route: "cloud"`
-  alıyor). 37 test.
-- **`mcp-tools/`** — MCP sunucusu (resmi SDK kurmadan, stdlib-only; iki
-  transport, Bearer token kimlik doğrulamalı HTTP+SSE) VE 10 araç
-  (sandbox'lı dosya sistemi araçları + salt-okunur Hyprland sorgu
-  araçları), 88 test.
-- **`cloud-bridge/`** — gerçek bir Claude API key bağlandı (`.env.local`,
-  gitignore'lı); Faz 4'te çok turlu mesaj + tool-use desteği eklendi
-  (`send_messages()`, `--converse`). Ayrıca **kullanıcı seviyesinde
-  kimlik bilgisi yolu** (`~/.config/navigator/env`) — gerçek bir
-  masaüstünde asistanı kullanılabilir yapan eksik parça (aşağıya bkz.).
-  50 test.
-- **`assistant/`** — Faz 4'ün ilk adımı: yukarıdaki beşini birleştiren
-  gerçek bir konuşma döngüsü. **Hem cloud hem local yolu artık gerçek bir
-  tool-use döngüsüyle çalışıyor** — örn. "bu makinede kaç çekirdek var?"
-  sorusuna `hardware_tier` aracını gerçekten çalıştırıp doğru cevap
-  veriyor (ikisinde de). Gerçek testte yerel yolda ciddi bir güvenlik
-  riski yakalandı (3B model zararsız bir istekte bile kendiliğinden
-  `write_file`'ı `overwrite=true` ile çağırmaya kalkıştı) ve gerçekten
-  düzeltildi — yazma/silme araçları yerel modele hiç gösterilmiyor, sadece
-  salt-okunur erişimi var. Bu ve diğer gerçek güvenilirlik bulguları
-  gizlenmeden belgelendi (bkz. `assistant/README.md`). Konuşma
-  geçmişi/hafıza eklendi — REPL'de bellekte, `--history-file` ile ayrı
-  süreçler arasında bile kalıcı. 40 test.
+- **`hardware-probe/`** — verified on real hardware: on this machine
+  tier="low" (Intel i5-8500, 6 cores, 15.4 GB RAM, no discrete GPU), 20 tests.
+- **`local-runtime/`** — Ollama was installed and `llama3.2:3b` pulled;
+  `model_ready: true`, real `generate()` calls succeed. `chat()`/`--converse`
+  were added in Phase 4 — tool-calling verified in real testing, 20 tests.
+- **`router/`** — the decision layer plus local-runtime/cloud-bridge
+  integration; `--decide-only`, added in Phase 4, only produces a decision
+  and does not execute (so that the assistant can build its own generation
+  flow). A "might this need tools?" signal was added to the complexity
+  heuristic (`mentions_tool_keywords()`) — short requests relating to
+  hardware, files or windows now automatically fall through to the cloud on
+  a low tier (verified in real testing: on this machine "how many CPU cores
+  are there?" now gets `route: "cloud"`). 38 tests.
+- **`mcp-tools/`** — the MCP server (without installing the official SDK,
+  stdlib-only; two transports, HTTP+SSE with Bearer token authentication)
+  and 10 tools (sandboxed filesystem tools plus read-only Hyprland query
+  tools), 88 tests.
+- **`cloud-bridge/`** — a real Claude API key was wired up (`.env.local`,
+  gitignored); multi-turn message and tool-use support were added in Phase 4
+  (`send_messages()`, `--converse`). Also the **user-level credential path**
+  (`~/.config/navigator/env`) — the missing piece that makes the assistant
+  usable on a real desktop (see below). 50 tests.
+- **`assistant/`** — the first step of Phase 4: a real conversation loop
+  combining the five above. **Both the cloud and the local path now work
+  with a real tool-use loop** — e.g. for "how many cores does this machine
+  have?" it really runs the `hardware_tier` tool and answers correctly (on
+  both). A serious security risk was caught on the local path during real
+  testing (the 3B model spontaneously tried to call `write_file` with
+  `overwrite=true` even on a harmless request) and was genuinely fixed — the
+  write and delete tools are not shown to the local model at all, it only
+  has read-only access. This and other real reliability findings are
+  documented rather than hidden (see `assistant/README.md`). Conversation
+  history/memory was added — in memory in the REPL, and persistent even
+  across separate processes via `--history-file`. 40 tests.
 
-Altı modülün tamamı ayrıca **gerçek Navigator imajının içinde** ve o
-imajdan çalıştırılıyor (Containerfile Katman 5; `/usr` salt-okunur
-haldeyken CI'da doğrulanıyor — bkz. yukarıdaki "İmajdaki kurulum yolu").
+All six modules are additionally **inside the real Navigator image** and are
+run from that image (Containerfile Layer 5; verified in CI with `/usr`
+read-only — see "Installation path in the image" above).
 
-Toplam ~255 test, ai-stack genelinde. Gerçek entegrasyon testlerinin
-büyük kısmı gerçek subprocess/TCP/dosya sistemi/Ollama/Claude API
-üzerinden çalışıyor; kimlik bilgisi gerektirenler hiçbir kaynakta kimlik
-bilgisi bulunamadığında (CI dahil) otomatik `skip` olacak şekilde
-tasarlandı.
+~256 tests in total across ai-stack. The bulk of the real integration tests
+run over real subprocesses, TCP, the filesystem, Ollama and the Claude API;
+those requiring credentials are designed to `skip` automatically when no
+credentials can be found in any source (including CI).

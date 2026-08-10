@@ -1,41 +1,60 @@
-"""Saf yönlendirme mantığı — I/O yok, tamamen test edilebilir fonksiyonlar.
+"""Pure routing logic — no I/O, fully testable functions.
 
-Eşikler/kurallar Faz 2 taslağıdır; gerçek kullanım verisi (hangi isteklerin
-yerelde başarısız kaldığı, kullanıcı geri bildirimi) biriktikçe Faz 3+'ta
-revize edilecek.
+The thresholds and rules are a Phase 2 draft; they will be revised in
+Phase 3+ as real usage data accumulates (which requests fail locally, user
+feedback).
 """
 
 PREFERENCES = ("balanced", "privacy", "cost", "speed")
 LOW_CAPABILITY_TIERS = ("minimal", "low")
 
-# Bir isteğin mcp-tools'un araçlarını (donanım/dosya sistemi/Hyprland sorgu)
-# gerektirebileceğini işaret eden kaba bir anahtar kelime kümesi.
-# ai-stack/assistant'ta gerçek testte doğrulandı: bu makinede (tier="low")
-# kısa ama araç gerektiren istekler ("kaç CPU çekirdeği var?") sadece kelime
-# sayısına bakan eski sezgiyle yerele düşüyordu, ve küçük yerel modelin
-# tool-use güvenilirliği düşük olduğundan (bkz. assistant/README.md "Yerel
-# tool-use") bazen hatalı/alakasız cevap üretiyordu. Bu yüzden bu tür
-# istekler de 'complex' sayılıp (düşük tier'da) buluta yönlendiriliyor.
+# A rough keyword set signalling that a request may need mcp-tools' tools
+# (hardware / filesystem / Hyprland queries).
+#
+# Verified in real testing in ai-stack/assistant: on this machine
+# (tier="low"), short requests that nonetheless need tools ("how many CPU
+# cores are there?") used to fall through to local under the old heuristic
+# that only looked at word count, and because the small local model has poor
+# tool-use reliability (see assistant/README.md, "Local tool-use") it
+# sometimes produced a wrong or irrelevant answer. Such requests are
+# therefore counted as 'complex' too and routed to the cloud (on a low tier).
+#
+# Both English and Turkish keywords are listed on purpose: the documentation
+# and code of this project are English, but the assistant answers the user in
+# whatever language they write in, so a Turkish prompt must reach the same
+# routing decision as its English equivalent. Adding a language here means
+# adding its keywords, never replacing the existing ones.
 TOOL_KEYWORDS = (
-    # donanım
-    "çekirdek",
+    # hardware
+    "core",
     "cpu",
     "ram",
-    "bellek",
+    "memory",
     "gpu",
+    "graphics card",
+    "hardware",
+    "tier",
+    "çekirdek",
+    "bellek",
     "grafik kart",
     "donanım",
-    "tier",
-    # dosya sistemi
+    # filesystem
+    "file",
+    "folder",
+    "directory",
+    "list",
     "dosya",
     "klasör",
     "dizin",
     "listele",
-    # pencere/masaüstü (Hyprland)
-    "pencere",
+    # windows/desktop (Hyprland)
+    "window",
     "workspace",
+    "desktop",
+    "pencere",
     "masaüstü",
-    # genel araç işareti
+    # generic tool hint
+    "tool",
     "aracı",
     "aracını",
     "aracıyla",
@@ -43,20 +62,20 @@ TOOL_KEYWORDS = (
 
 
 def mentions_tool_keywords(prompt: str) -> bool:
-    """Prompt, mcp-tools'un araçlarını gerektirebilecek bir konudan
-    (donanım/dosya/pencere) bahsediyor mu — kaba bir anahtar kelime
-    taraması. Gerçek bir niyet sınıflandırması değil (bkz. modül
-    docstring'i), ama kelime sayısından daha isabetli bir ilk sinyal."""
+    """Does the prompt mention a topic that may need mcp-tools' tools
+    (hardware/files/windows) — a rough keyword scan. Not real intent
+    classification (see the module docstring), but a more accurate first
+    signal than word count."""
     lowered = prompt.lower()
     return any(keyword in lowered for keyword in TOOL_KEYWORDS)
 
 
 def estimate_complexity(prompt: str) -> str:
-    """Çok kaba bir taslak sezgisel: uzun/çok satırlı istekler VEYA araç
-    gerektirebilecek istekler 'complex' sayılır.
+    """A very rough draft heuristic: long/multi-line requests OR requests
+    that may need tools count as 'complex'.
 
-    Gerçek bir sınıflandırma (token sayısı, geçmiş bağlam uzunluğu, gerçek
-    niyet tespiti) Faz 3+'ta ele alınacak.
+    Real classification (token count, history context length, real intent
+    detection) will be tackled in Phase 3+.
     """
     if "\n" in prompt:
         return "complex"
@@ -69,24 +88,24 @@ def estimate_complexity(prompt: str) -> str:
 
 def decide_route(hardware_tier: str, model_ready: bool, preference: str, complexity: str) -> dict:
     if preference not in PREFERENCES:
-        raise ValueError(f"Bilinmeyen tercih: {preference!r} (geçerli: {PREFERENCES})")
+        raise ValueError(f"Unknown preference: {preference!r} (valid: {PREFERENCES})")
 
     if not model_ready:
         return {
             "target": "cloud",
-            "reasoning": "yerel model hazır değil (Ollama kapalı veya model indirilmemiş)",
+            "reasoning": "local model not ready (Ollama down or model not pulled)",
         }
 
     if preference == "privacy":
         return {
             "target": "local",
-            "reasoning": "gizlilik tercihi: model hazır olduğu sürece her zaman yerel",
+            "reasoning": "privacy preference: always local as long as the model is ready",
         }
 
     if preference == "cost":
         return {
             "target": "local",
-            "reasoning": "maliyet tercihi: model hazır olduğu sürece her zaman yerel (ücretsiz)",
+            "reasoning": "cost preference: always local as long as the model is ready (free)",
         }
 
     if preference == "speed":
@@ -94,25 +113,25 @@ def decide_route(hardware_tier: str, model_ready: bool, preference: str, complex
             return {
                 "target": "cloud",
                 "reasoning": (
-                    "hız tercihi + karmaşık/araç gerektirebilecek istek + düşük donanım "
-                    "tier'ı: bulut daha hızlı ve güvenilir yanıt verebilir"
+                    "speed preference + complex/possibly tool-requiring request + low "
+                    "hardware tier: the cloud can answer faster and more reliably"
                 ),
             }
         return {
             "target": "local",
-            "reasoning": "hız tercihi: ağ gecikmesi olmadan yerel model yeterli",
+            "reasoning": "speed preference: the local model is enough, with no network latency",
         }
 
-    # preference == "balanced" (varsayılan)
+    # preference == "balanced" (the default)
     if complexity == "complex" and hardware_tier in LOW_CAPABILITY_TIERS:
         return {
             "target": "cloud",
             "reasoning": (
-                "karmaşık/araç gerektirebilecek istek + düşük donanım tier'ı: yerel model "
-                "yetersiz kalabilir veya tool-use güvenilirliği düşük olabilir"
+                "complex/possibly tool-requiring request + low hardware tier: the local "
+                "model may be insufficient or its tool-use reliability may be poor"
             ),
         }
     return {
         "target": "local",
-        "reasoning": "model hazır ve istek yerel için uygun",
+        "reasoning": "model is ready and the request is suitable for local",
     }

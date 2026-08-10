@@ -1,18 +1,18 @@
-# Navigator OS — Disk İmajı Build & VM Boot Testi (Faz 3)
+# Navigator OS — Disk Image Build & VM Boot Test (Phase 3)
 #
-# build-image.yml tarafından ghcr.io'ya push edilmiş Navigator container
-# imajını bootc-image-builder ile gerçek bir qcow2 disk imajına çevirir,
-# sonra bu disk imajını GitHub Actions runner'ının KVM'i ile GERÇEKTEN
-# boot edip SSH üzerinden sistemin ayağa kalktığını doğrular — bu, Faz
-# 1-2'de statik incelemeyle sınırlı kalan hyprland.conf/mcp-tools
-# Hyprland araçları gibi parçaların ilk kez gerçek bir compositor/Fedora
-# ortamında (kısmen) doğrulanacağı adım.
+# Converts the Navigator container image pushed to ghcr.io by build-image.yml
+# into a real qcow2 disk image with bootc-image-builder, then GENUINELY boots
+# that disk image with the GitHub Actions runner's KVM and verifies over SSH
+# that the system comes up — this is the step where parts that were limited to
+# static review in Phases 1-2, such as hyprland.conf and the mcp-tools Hyprland
+# tools, are verified (in part) for the first time in a real compositor/Fedora
+# environment.
 #
-# Yerel ortamda ÇALIŞTIRILMAZ — GitHub'ın kendi runner'ında (ücretsiz,
-# ubuntu-24.04'ten beri /dev/kvm destekli) çalışır. Sadece manuel
-# tetikleme (workflow_dispatch) ile başlar; build-image.yml'nin aksine
-# main'e her push'ta otomatik çalışmaz — daha ağır bir işlem olduğundan
-# tetikleme kararı proje sahibine bırakıldı.
+# NOT RUN locally — it runs on GitHub's own runner (free, with /dev/kvm support
+# since ubuntu-24.04). It starts only on a manual trigger
+# (workflow_dispatch); unlike build-image.yml it does not run automatically on
+# every push to main — being a heavier operation, the decision to trigger it was
+# left to the project owner.
 
 name: Build Disk Image & Boot Test
 
@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   build-disk:
-    name: Disk imajı build et (qcow2)
+    name: Build the disk image (qcow2)
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -45,7 +45,7 @@ jobs:
       - name: Maximize build space
         uses: ublue-os/remove-unwanted-software@v7
 
-      - name: Ortamı hazırla
+      - name: Prepare the environment
         run: |
           USER_UID=$(id -u)
           USER_GID=$(id -g)
@@ -54,10 +54,10 @@ jobs:
           echo "USER_UID=${USER_UID}" >> "${GITHUB_ENV}"
           echo "USER_GID=${USER_GID}" >> "${GITHUB_ENV}"
 
-      - name: Boot testi için tek kullanımlık SSH anahtarı üret
+      - name: Generate a single-use SSH key for the boot test
         run: ssh-keygen -t ed25519 -N "" -f boot-test-key -C "navigator-boot-test"
 
-      - name: disk.toml oluştur (bu run'a özel SSH public key ile)
+      - name: Create disk.toml (with the SSH public key specific to this run)
         run: |
           mkdir -p disk_config
           {
@@ -75,14 +75,14 @@ jobs:
             echo "key = \"$(cat boot-test-key.pub)\""
           } > disk_config/boot-test.toml
 
-      - name: ghcr.io'ya giriş yap
+      - name: Log in to ghcr.io
         uses: redhat-actions/podman-login@v1
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: qcow2 disk imajı build et
+      - name: Build the qcow2 disk image
         id: build
         uses: osbuild/bootc-image-builder-action@8661cd3832544ad68c12dcde8681b13ab0f56a8d # main
         with:
@@ -93,7 +93,7 @@ jobs:
           types: qcow2
           rootfs: btrfs
 
-      - name: Disk imajını artifact olarak yükle
+      - name: Upload the disk image as an artifact
         uses: actions/upload-artifact@v4
         with:
           name: navigator-disk-image
@@ -101,7 +101,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: SSH anahtarını ayrı bir artifact olarak yükle
+      - name: Upload the SSH key as a separate artifact
         uses: actions/upload-artifact@v4
         with:
           name: navigator-boot-test-ssh-key
@@ -110,50 +110,50 @@ jobs:
           retention-days: 1
 
   boot-test:
-    name: VM'i boot et ve SSH ile doğrula
+    name: Boot the VM and verify over SSH
     needs: build-disk
     runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
-      - name: Disk imajı artifact'ını indir
+      - name: Download the disk image artifact
         uses: actions/download-artifact@v4
         with:
           name: navigator-disk-image
           path: ./disk-output
 
-      - name: SSH anahtarı artifact'ını indir
+      - name: Download the SSH key artifact
         uses: actions/download-artifact@v4
         with:
           name: navigator-boot-test-ssh-key
           path: ./disk-output
 
-      - name: QEMU + OVMF kur
+      - name: Install QEMU + OVMF
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd
 
-      - name: KVM erişimini doğrula
+      - name: Verify KVM access
         run: |
           ls -l /dev/kvm
           sudo usermod -aG kvm "$USER"
 
-      - name: SSH anahtar iznini düzelt
+      - name: Fix the SSH key permissions
         run: |
           KEY="$(find ./disk-output -name boot-test-key)"
           chmod 600 "${KEY}"
           echo "SSH_KEY=${KEY}" >> "${GITHUB_ENV}"
 
-      - name: VM'i KVM ile arka planda boot et
+      - name: Boot the VM in the background with KVM
         run: |
           set -euo pipefail
           QCOW2="$(find ./disk-output -name '*.qcow2' | head -n1)"
 
-          # Ubuntu 24.04'ten itibaren ovmf paketi dosyaları
-          # OVMF_CODE.fd/OVMF_VARS.fd değil, *_4M.fd olarak veriyor —
-          # ilk çalıştırmada gerçek hatayla yakalandı ("No such file or
-          # directory"). Sürüm/isimlendirme değişikliklerine dayanıklı
-          # olmak için find ile buluyoruz.
+          # From Ubuntu 24.04 onwards the ovmf package ships its files as
+          # *_4M.fd rather than OVMF_CODE.fd/OVMF_VARS.fd — caught by a real
+          # failure on the first run ("No such file or directory"). We locate
+          # them with find so this survives version/naming changes.
+
           OVMF_CODE="$(find /usr/share/OVMF -iname 'OVMF_CODE*.fd' | grep -vi secboot | sort | head -n1)"
           OVMF_VARS_SRC="$(find /usr/share/OVMF -iname 'OVMF_VARS*.fd' | grep -vi secboot | sort | head -n1)"
           echo "OVMF_CODE=${OVMF_CODE}"
@@ -177,23 +177,23 @@ jobs:
           "
           for i in $(seq 1 60); do
             if nc -z 127.0.0.1 2222; then
-              echo "SSH portu açık."
+              echo "SSH port is open."
               exit 0
             fi
             sleep 5
           done
-          echo "SSH portu 5 dakika içinde açılmadı." >&2
+          echo "The SSH port did not open within 5 minutes." >&2
           cat qemu.log || true
           exit 1
 
-      - name: SSH ile sistemin gerçekten ayağa kalktığını doğrula
+      - name: Verify over SSH that the system genuinely came up
         run: |
           set -euo pipefail
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5"
           STATE=""
           for i in $(seq 1 24); do
             STATE="$(ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 navtest@127.0.0.1 "systemctl is-system-running" 2>/dev/null || true)"
-            echo "systemctl is-system-running -> ${STATE:-<yanıt yok>}"
+            echo "systemctl is-system-running -> ${STATE:-<no response>}"
             case "${STATE}" in
               running|degraded) break ;;
             esac
@@ -202,7 +202,7 @@ jobs:
           case "${STATE}" in
             running|degraded) ;;
             *)
-              echo "Sistem 2 dakika içinde ayağa kalkmadı (son durum: ${STATE:-yok})" >&2
+              echo "The system did not come up within 2 minutes (last state: ${STATE:-none})" >&2
               exit 1
               ;;
           esac
@@ -221,47 +221,48 @@ jobs:
           cat qemu.log || true
 
   hyprland-test:
-    name: Hyprland'ı VM'de gerçekten başlat, mcp-tools ve Quickshell'i test et
+    name: Really start Hyprland in the VM, test mcp-tools and Quickshell
     needs: build-disk
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    # Deneysel — boot-test'in aksine başarısızlığı workflow'u kırmasın,
-    # sonucu logdan okuyup değerlendireceğiz (bkz. commit mesajı).
+    # Experimental — unlike boot-test, a failure here must not break the
+    # workflow; we read the result from the log and assess it (see the commit
+    # message).
     continue-on-error: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Disk imajı artifact'ını indir
+      - name: Download the disk image artifact
         uses: actions/download-artifact@v4
         with:
           name: navigator-disk-image
           path: ./disk-output
 
-      - name: SSH anahtarı artifact'ını indir
+      - name: Download the SSH key artifact
         uses: actions/download-artifact@v4
         with:
           name: navigator-boot-test-ssh-key
           path: ./disk-output
 
-      - name: QEMU + OVMF kur
+      - name: Install QEMU + OVMF
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd
 
-      - name: KVM erişimini doğrula
+      - name: Verify KVM access
         run: |
           ls -l /dev/kvm
           sudo usermod -aG kvm "$USER"
 
-      - name: SSH anahtar iznini düzelt
+      - name: Fix the SSH key permissions
         run: |
           KEY="$(find ./disk-output -name boot-test-key)"
           chmod 600 "${KEY}"
           echo "SSH_KEY=${KEY}" >> "${GITHUB_ENV}"
 
-      - name: Hyprland test betiğini oluştur
+      - name: Create the Hyprland test script
         run: |
           cat > hyprland-test.sh <<'SCRIPT'
           #!/bin/bash
@@ -270,33 +271,33 @@ jobs:
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
 
-          # Üçüncü gerçek denemede (--i-am-really-stupid eklendikten sonra)
-          # Hyprland "CBackend::create() failed!" ile çöktü. aquamarine
-          # kaynağında (Session.cpp) doğrulandı: DRM backend, libseat
-          # üzerinden bir "seat" açmaya çalışıyor (CSession::attempt).
-          # SSH ile bağlanılan bir kabuğun systemd-logind'de gerçek bir
-          # seat'i olmuyor, bu yüzden libseat'in logind backend'i
-          # başarısız oluyor → DRM backend hiç başlamıyor → GBM allocator
-          # kurulamıyor → start() false dönüyor. Çözüm: seatd'yi kendimiz
-          # arka planda başlatıp LIBSEAT_BACKEND=seatd ile libseat'i
-          # logind yerine doğrudan seatd'ye yönlendirmek (seatd, VT/seat
-          # kavramı olmadan root için cihaz erişimini kendi yönetir).
+          # On the third real attempt (after --i-am-really-stupid was added)
+          # Hyprland crashed with "CBackend::create() failed!". Verified in the
+          # aquamarine source (Session.cpp): the DRM backend tries to open a
+          # "seat" via libseat (CSession::attempt). A shell reached over SSH has
+          # no real seat in systemd-logind, so libseat's logind backend fails →
+          # the DRM backend never starts → the GBM allocator cannot be set up →
+          # start() returns false. The fix: start seatd ourselves in the
+          # background and point libseat at seatd directly instead of logind
+          # with LIBSEAT_BACKEND=seatd (seatd manages device access for root
+          # itself, with no notion of a VT/seat).
+
           if command -v seatd >/dev/null 2>&1; then
-            echo "=== seatd başlatılıyor ==="
+            echo "=== starting seatd ==="
             setsid nohup seatd > /root/seatd.log 2>&1 < /dev/null &
             disown
             sleep 2
             cat /root/seatd.log || true
             export LIBSEAT_BACKEND=seatd
           else
-            echo "UYARI: seatd bulunamadı — imajda paket eksik olabilir, DRM backend muhtemelen yine başarısız olacak."
+            echo "WARNING: seatd not found — the package may be missing from the image, and the DRM backend will probably fail again."
           fi
 
-          echo "=== Hyprland başlatılıyor ==="
-          # Hyprland gerçek testte kasıtlı olarak root'u reddetti:
+          echo "=== starting Hyprland ==="
+          # In real testing Hyprland deliberately refused to run as root:
           # "[ ERROR ] Hyprland was launched with superuser privileges,
           # but the privileges check is not omitted." — kaynak kodda
-          # (src/main.cpp) doğrulanan tam bayrak: --i-am-really-stupid.
+          # the exact flag verified in its source (src/main.cpp): --i-am-really-stupid.
           setsid nohup Hyprland --i-am-really-stupid > /root/hyprland.log 2>&1 < /dev/null &
           disown
           sleep 10
@@ -309,36 +310,36 @@ jobs:
 
           HYPR_SIG="$(ls "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)"
           if [ -z "$HYPR_SIG" ]; then
-            echo "HATA: Hyprland instance signature bulunamadı — Hyprland başlamamış."
+            echo "ERROR: no Hyprland instance signature found — Hyprland did not start."
             exit 1
           fi
           export HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG"
           echo "HYPRLAND_INSTANCE_SIGNATURE=$HYPR_SIG"
 
           echo "=== hyprctl monitors ==="
-          hyprctl monitors || { echo "HATA: hyprctl monitors başarısız"; exit 1; }
+          hyprctl monitors || { echo "ERROR: hyprctl monitors failed"; exit 1; }
 
-          echo "=== hyprland.conf'un gerçekten yüklendiğini doğrula ==="
+          echo "=== verify that hyprland.conf was genuinely loaded ==="
           # Bu repodaki hyprland/hyprland.conf, "mcp-tools kodunu... kopyala"
-          # adımında /root/.config/hypr/hyprland.conf'a kopyalandı — Hyprland'ın
-          # varsayılan arayacağı yer. Şimdiye kadar bu dosya sadece statik
-          # olarak incelenmişti (bkz. hyprland/README.md); burada gerçek
-          # compositor'ın onu parse edip uyguladığını hyprctl getoption ile
-          # doğruluyoruz — sadece "çökmedi" değil, config'teki gerçek
-          # değerlerin gerçekten etkili olduğunu kontrol ediyoruz.
-          echo "--- config hataları (compositor'ın KENDİ raporu) ---"
+          # step to /root/.config/hypr/hyprland.conf — where Hyprland looks by
+          # default. Until now this file had only been reviewed statically (see
+          # hyprland/README.md); here we verify with hyprctl getoption that the
+          # real compositor parses and applies it — not merely that it "did not
+          # crash", but that the real values from the config are genuinely in
+          # effect.
+          echo "--- config errors (the compositor's OWN report) ---"
           # Burada eskiden /root/hyprland.log'da "config error" grep'leniyordu
-          # ve bu YANLIŞ GÜVENCE veriyordu: gerçekte config'te bir hata
-          # varken bile "(yok)" basıyordu. Hata Hyprland'ın EKRANDAKİ hata
-          # afişinde duruyordu ve ilk ekran görüntüsü alınana kadar hiç
-          # görülmedi (gestures:workspace_swipe, 0.51'de kaldırılmıştı).
+          # and it was giving FALSE ASSURANCE: it printed "(none)" even when
+          # there really was an error in the config. The error was sitting in
+          # Hyprland's ON-SCREEN error banner and was never seen until the first
+          # screenshot was taken (gestures:workspace_swipe, removed in 0.51).
           #
-          # Doğrusu compositor'a doğrudan sormak. `hyprctl configerrors`
-          # hata yoksa "no errors" döner.
-          # `configerrors`'ın TEMİZ durumdaki çıktı biçimi ölçülmeden
-          # iddiaya çevrilmişti ve bu bir CI turuna mal oldu: "no errors"
-          # bekleniyordu, Hyprland 0.51 ise hiçbir şey basmıyor (boş).
-          # Artık kural ölçüme dayanıyor: boş VEYA "no errors" = temiz.
+          # The right way is to ask the compositor directly. `hyprctl
+          # configerrors` returns "no errors" when there is no error.
+          # The output format of `configerrors` in the CLEAN case was promoted to
+          # an assertion without being measured, and that cost a CI round: "no
+          # errors" was expected, whereas Hyprland 0.51 prints nothing (empty).
+          # The rule is now based on measurement: empty OR "no errors" = clean.
           config_errors() { hyprctl configerrors 2>&1 || true; }
           is_clean() {
             local out="$1"
@@ -347,42 +348,43 @@ jobs:
           }
 
           CLEAN_OUT="$(config_errors)"
-          echo "[temiz durum] configerrors çıktısı: '${CLEAN_OUT}'"
+          echo "[clean state] configerrors output: '${CLEAN_OUT}'"
 
-          # Kontrolün BOŞ YEŞİL olmadığını aynı run'da kanıtla: bilerek
-          # var olmayan bir seçenek ekleyip reload et, configerrors'ın
-          # gerçekten konuştuğunu gör, sonra geri al. Bu olmadan "boş
-          # çıktı = temiz" kuralı, komut hiç çalışmasa bile yeşil kalırdı.
+          # Prove within the same run that the check is not VACUOUSLY GREEN:
+          # deliberately add a non-existent option and reload, see that
+          # configerrors genuinely speaks up, then revert. Without this, the
+          # "empty output = clean" rule would stay green even if the command
+          # never ran at all.
           cp /root/.config/hypr/hyprland.conf /root/hyprland.conf.bak
-          echo 'navigator_bilerek_bozuk_secenek = 1' >> /root/.config/hypr/hyprland.conf
+          echo 'navigator_deliberately_broken_option = 1' >> /root/.config/hypr/hyprland.conf
           hyprctl reload >/dev/null 2>&1 || true
           sleep 1
           BROKEN_OUT="$(config_errors)"
-          echo "[bilerek bozuk] configerrors çıktısı: '${BROKEN_OUT}'"
+          echo "[deliberately broken] configerrors output: '${BROKEN_OUT}'"
 
           cp /root/hyprland.conf.bak /root/.config/hypr/hyprland.conf
           hyprctl reload >/dev/null 2>&1 || true
           sleep 1
           RESTORED_OUT="$(config_errors)"
-          echo "[geri alındı] configerrors çıktısı: '${RESTORED_OUT}'"
+          echo "[reverted] configerrors output: '${RESTORED_OUT}'"
 
           if is_clean "${BROKEN_OUT}"; then
-            echo "HATA: bilerek bozuk bir seçenek eklendiği hâlde configerrors sustu."
-            echo "      Bu kontrol hiçbir şey doğrulamıyor demektir; onarılmadan güvenilmemeli."
+            echo "ERROR: configerrors stayed silent even though a deliberately broken option was added."
+            echo "      That means this check verifies nothing; it must not be trusted until repaired."
             exit 1
           fi
-          echo "OK: kontrol boş yeşil değil — bozuk config gerçekten yakalanıyor."
+          echo "OK: the check is not vacuously green — a broken config really is caught."
 
           if ! is_clean "${CLEAN_OUT}"; then
-            echo "HATA: Hyprland config hatası bildiriyor (yukarıdaki [temiz durum] çıktısı)."
-            echo "      Bu, kullanıcının masaüstünde kırmızı bir hata afişi demek."
+            echo "ERROR: Hyprland reports a config error (see the [clean state] output above)."
+            echo "      This means a red error banner on the user's desktop."
             exit 1
           fi
           if ! is_clean "${RESTORED_OUT}"; then
-            echo "HATA: config geri alındıktan sonra hâlâ hata var — testin kendisi ekranı kirletmiş olabilir."
+            echo "ERROR: errors persist after the config was reverted — the test itself may have dirtied the screen."
             exit 1
           fi
-          echo "OK: compositor hiç config hatası bildirmiyor (ve geri alma temiz)."
+          echo "OK: the compositor reports no config errors at all (and the revert is clean)."
 
           CONFIG_OK=1
           check_option() {
@@ -400,30 +402,30 @@ jobs:
             if [ "$actual" = "$expected" ]; then
               echo "OK: $option = $actual"
             else
-              echo "HATA: $option beklenen '$expected', gerçek '$actual'"
+              echo "ERROR: $option expected '$expected', actual '$actual'"
               CONFIG_OK=0
             fi
           }
-          # Bunların hepsi hyprland.conf'ta varsayılandan farklı değerler
-          # (border_size varsayılanı 1, rounding varsayılanı 0,
-          # resize_on_border varsayılanı false, blur:passes varsayılanı 1,
-          # touchpad:natural_scroll varsayılanı false — kaynakta
-          # ConfigValues.cpp'de doğrulandı) — bu yüzden eşleşmeleri
-          # gerçekten config'in yüklendiğinin kanıtı, varsayılan değerle
-          # tesadüfi çakışma değil.
+          # These are all values that differ from the defaults in hyprland.conf
+          # (border_size defaults to 1, rounding to 0, resize_on_border to false,
+          # blur:passes to 1, touchpad:natural_scroll to false — verified in the
+          # source in ConfigValues.cpp) — so a match is genuine proof that the
+          # config was loaded, not a coincidental collision with a default value.
+
+
           #
-          # Not: ilk gerçek CI denemesinde bool tipi seçeneklerin
-          # `hyprctl getoption -j` çıktısında "bool": true/false değil,
-          # "int": 1/0 olarak döndüğü görüldü (kaynak koduyla eşleşmeyen
-          # ama gerçek çalışan binary'nin gerçek davranışı) — beklenen
-          # değerler buna göre düzeltildi.
+          # Note: on the first real CI attempt, boolean options turned out to be
+          # returned in `hyprctl getoption -j` output as "int": 1/0 rather than
+          # "bool": true/false (the real behaviour of the real running binary,
+          # which does not match the source) — the expected values were corrected
+          # accordingly.
           check_option general:border_size 2
           check_option decoration:rounding 10
           check_option input:touchpad:natural_scroll 1
           check_option decoration:blur:passes 2
           check_option general:resize_on_border 1
 
-          echo "--- mainMod+RETURN -> kitty bind'i yüklendi mi ---"
+          echo "--- was the mainMod+RETURN -> kitty bind loaded ---"
           if hyprctl binds -j | python3 -c '
           import json, sys
           binds = json.load(sys.stdin)
@@ -432,19 +434,19 @@ jobs:
           '; then
             echo "OK: mainMod+RETURN -> kitty bind'i bulundu"
           else
-            echo "HATA: mainMod+RETURN -> kitty bind'i bulunamadı"
+            echo "ERROR: the mainMod+RETURN -> kitty bind was not found"
             CONFIG_OK=0
           fi
 
           if [ "$CONFIG_OK" -ne 1 ]; then
-            echo "HATA: hyprland.conf beklenen şekilde yüklenmedi."
+            echo "ERROR: hyprland.conf was not loaded as expected."
             exit 1
           fi
 
-          echo "=== mcp-tools ile gerçek araç çağrısı (imajdaki yoldan) ==="
-          # Katman 5'ten beri mcp-tools imajın kendisinde; artık VM'e
-          # kopyalanmıyor, /usr/share/navigator/ai-stack/mcp-tools'tan
-          # (salt-okunur /usr) çalıştırılıyor.
+          echo "=== a real tool call through mcp-tools (from its path in the image) ==="
+          # Since Layer 5, mcp-tools lives in the image itself; it is no longer
+          # copied to the VM but run from
+          # /usr/share/navigator/ai-stack/mcp-tools (read-only /usr).
           cd /usr/share/navigator/ai-stack/mcp-tools
           python3 -c "
           from mcp_tools.hyprland import list_windows, list_workspaces, active_window
@@ -454,20 +456,20 @@ jobs:
           print('active_window:', json.dumps(active_window()))
           "
 
-          echo "=== Quickshell'i Hyprland'ın kendi exec-once'ı başlattı mı ==="
-          # ARTIK ELLE BAŞLATMIYORUZ. hyprland.conf'a exec-once eklendiğinden
-          # Quickshell'i compositor'ın kendisi başlatıyor; elle de
-          # başlatsaydık ikinci bir örnek olurdu ve `qs ipc` çağrılarının
-          # hangi örneğe gittiği belirsizleşirdi. Böylece bu adım artık
-          # otomatik başlatmanın gerçekten çalıştığını da doğruluyor.
+          echo "=== did Hyprland's own exec-once start Quickshell ==="
+          # WE NO LONGER START IT BY HAND. Since exec-once was added to
+          # hyprland.conf, the compositor itself starts Quickshell; starting it
+          # by hand as well would create a second instance and it would become
+          # unclear which instance `qs ipc` calls reach. This step therefore now
+          # also verifies that the autostart genuinely works.
           #
-          # Quickshell, Hyprland'ın çocuğu olarak başladığı için
-          # WAYLAND_DISPLAY'i compositor'dan miras alıyor — bizim elle
-          # export etmemize gerek kalmadı. Kendi kabuğumuz için yine de
-          # gerekiyor (aşağıdaki qs ipc çağrıları).
+          # Because Quickshell starts as a child of Hyprland it inherits
+          # WAYLAND_DISPLAY from the compositor — we no longer need to export it
+          # by hand. Our own shell still needs it (the qs ipc calls below).
+
           WAYLAND_SOCK="$(ls "$XDG_RUNTIME_DIR" 2>/dev/null | grep -E '^wayland-[0-9]+$' | head -n1)"
           if [ -z "$WAYLAND_SOCK" ]; then
-            echo "HATA: Wayland soketi bulunamadı — Quickshell test edilemiyor."
+            echo "ERROR: no Wayland socket found — Quickshell cannot be tested."
             exit 1
           fi
           export WAYLAND_DISPLAY="$WAYLAND_SOCK"
@@ -482,45 +484,45 @@ jobs:
             sleep 1
           done
           if ! pgrep -af "${QS_PATTERN}"; then
-            echo "HATA: Quickshell süreci yok — hyprland.conf'taki exec-once çalışmamış"
-            echo "      ya da Quickshell çökmüş olabilir. Hyprland log'u aşağıda."
+            echo "ERROR: no Quickshell process — the exec-once in hyprland.conf did not run,"
+            echo "      or Quickshell may have crashed. The Hyprland log is below."
             echo "--- Hyprland log ---"
             cat /root/hyprland.log || true
             exit 1
           fi
-          echo "OK: Quickshell'i Hyprland'ın kendi exec-once'ı başlattı (elle başlatılmadı)."
+          echo "OK: Hyprland's own exec-once started Quickshell (it was not started by hand)."
 
-          echo "=== hyprpaper exec-once ile başladı ve duvar kâğıdını yükledi mi ==="
-          # Duvar kâğıdı buraya kadar stok Hyprland görseliydi; bu ilk
-          # ekran görüntüsü alınana kadar fark edilmemişti. Süreç kontrolü
-          # tek başına yetmez (hyprpaper config'i okuyamazsa da ayakta
-          # kalabilir), bu yüzden IPC'den yüklü duvar kâğıdı da soruluyor.
-          # Asıl kanıt yine görsel: ekran görüntüsü adımı masaüstü
-          # parlaklığını ölçüp stok görselden ayırt ediyor.
+          echo "=== did hyprpaper start via exec-once and load the wallpaper ==="
+          # Up to this point the wallpaper was the stock Hyprland image; that
+          # went unnoticed until the first screenshot was taken. A process check
+          # alone is not enough (hyprpaper can stay up even if it cannot read its
+          # config), so the loaded wallpaper is also queried over IPC.
+          # The real proof is again visual: the screenshot step compares the
+          # desktop against the reference wallpaper.
           for i in $(seq 1 15); do
             pgrep -x hyprpaper >/dev/null && break
             sleep 1
           done
           if ! pgrep -af hyprpaper; then
-            echo "HATA: hyprpaper süreci yok — exec-once çalışmamış ya da config'i okuyamamış."
+            echo "ERROR: no hyprpaper process — exec-once did not run, or it could not read its config."
             grep -i "hyprpaper" /root/hyprland.log | tail -20 || true
             exit 1
           fi
           WALL="$(hyprctl hyprpaper listloaded 2>&1 || true)"
           echo "hyprctl hyprpaper listloaded -> ${WALL}"
           if ! echo "${WALL}" | grep -q "/usr/share/navigator/theme/wallpaper.png"; then
-            echo "HATA: Navigator duvar kâğıdı hyprpaper'a yüklenmemiş."
+            echo "ERROR: the Navigator wallpaper was not loaded into hyprpaper."
             exit 1
           fi
-          echo "OK: hyprpaper ayakta ve Navigator duvar kâğıdını yüklemiş."
+          echo "OK: hyprpaper is up and has loaded the Navigator wallpaper."
 
-          echo "=== Polkit ajanı da exec-once ile başladı mı ==="
-          # Bu bir iddia değil bilgi: polkit ajanı headless bir VM'de
-          # (görünür oturum/seat olmadan) başlamayabilir; masaüstünün
-          # gerçek kullanımında önemli ama burada testi düşürmesi anlamsız.
-          pgrep -af "polkit-mate-authentication-agent" || echo "(polkit ajanı görünmüyor — headless VM'de beklenebilir)"
+          echo "=== did the polkit agent also start via exec-once ==="
+          # This is information, not an assertion: the polkit agent may not start
+          # in a headless VM (with no visible session/seat); it matters in real
+          # desktop use, but failing the test here would be meaningless.
+          pgrep -af "polkit-mate-authentication-agent" || echo "(no polkit agent visible — expected in a headless VM)"
 
-          echo "=== hyprctl layers (Quickshell gerçekten bir layer-shell yüzeyi map etti mi) ==="
+          echo "=== hyprctl layers (did Quickshell genuinely map a layer-shell surface) ==="
           hyprctl layers
           if ! hyprctl layers -j | python3 -c '
           import json, sys
@@ -530,32 +532,32 @@ jobs:
           found = any(len(v) > 0 for v in levels.values())
           sys.exit(0 if found else 1)
           '; then
-            echo "HATA: Virtual-1 monitöründe hiçbir layer-shell yüzeyi bulunamadı — Bar.qml (PanelWindow) map olmamış olabilir."
+            echo "ERROR: no layer-shell surface found on the Virtual-1 monitor — Bar.qml (PanelWindow) may not have mapped."
             exit 1
           fi
-          echo "OK: en az bir layer-shell yüzeyi (Bar.qml/PanelWindow) gerçekten map edildi."
+          echo "OK: at least one layer-shell surface (Bar.qml/PanelWindow) was genuinely mapped."
 
-          echo "=== WorkspaceIndicator gerçek Hyprland verisine bağlı mı ==="
-          # WorkspaceIndicator grafiksel bir bileşen; doğru veriyi
-          # gösterdiğini kanıtlamanın tek yolu bağlandığı veriyi dışarıdan
+          echo "=== is WorkspaceIndicator bound to real Hyprland data ==="
+          # WorkspaceIndicator is a graphical component; the only way to prove it
+          # shows the right data is to read the data it binds to from outside,
           # okumak. shell.qml'deki IpcHandler (target: "workspaces") bunu
-          # sağlıyor — `assistant` handler'ının getResponse/isLoading'i ile
-          # aynı kalıp.
+          # provides — the same pattern as getResponse/isLoading in the
+          # `assistant` handler.
           #
-          # İki ayrı şey doğrulanıyor:
-          #  1) Shell'in gördüğü workspace kümesi ve odak, compositor'ın
-          #     KENDİ raporuyla (hyprctl) birebir aynı mı,
-          #  2) compositor'da gerçek bir değişiklik olduğunda shell bunu
-          #     KENDİLİĞİNDEN görüyor mu (Quickshell.Hyprland'ın socket2
-          #     event bağlantısı) — statik bir placeholder ya da tek
-          #     seferlik bir okuma bu ikinciyi geçemez.
+          # Two separate things are verified:
+          #  1) whether the workspace set and the focus the shell sees match the
+          #     compositor's OWN report (hyprctl) exactly,
+          #  2) whether the shell notices a real change in the compositor ON ITS
+          #     OWN (Quickshell.Hyprland's socket2 event connection) — a static
+          #     placeholder or a one-shot read cannot pass the second.
+
           WS_IPC="qs ipc -p /usr/share/navigator/shell/shell.qml call workspaces"
 
           check_ws_matches_hyprctl() {
             hyprctl workspaces -j > /tmp/hyprctl-ws.json
             hyprctl activeworkspace -j > /tmp/hyprctl-active.json
             if ! ${WS_IPC} list > /tmp/shell-ws.json 2>/tmp/shell-ws.err; then
-              echo "  HATA: qs ipc call workspaces list başarısız: $(cat /tmp/shell-ws.err)"
+              echo "  ERROR: qs ipc call workspaces list failed: $(cat /tmp/shell-ws.err)"
               return 1
             fi
             echo "  shell: $(cat /tmp/shell-ws.json)"
@@ -565,23 +567,23 @@ jobs:
           shell_raw = json.load(open("/tmp/shell-ws.json"))
           shell = sorted(w["id"] for w in shell_raw if w["id"] > 0)
           active = json.load(open("/tmp/hyprctl-active.json"))["id"]
-          assert hypr == shell, f"workspace kümeleri farklı: hyprctl={hypr} shell={shell}"
+          assert hypr == shell, f"workspace sets differ: hyprctl={hypr} shell={shell}"
           foc = sorted(w["id"] for w in shell_raw if w["focused"])
           assert foc == [active], f"shell focused={foc} ama hyprctl aktif workspace={active}"
-          print(f"  OK: kümeler aynı {shell}, focused={active}")
+          print(f"  OK: sets match {shell}, focused={active}")
           '
           }
 
           if ! check_ws_matches_hyprctl; then
-            echo "HATA: WorkspaceIndicator'ın bağlandığı veri compositor'la uyuşmuyor (başlangıç)."
+            echo "ERROR: the data WorkspaceIndicator binds to does not match the compositor (initial)."
             exit 1
           fi
 
-          echo "--- GERÇEK OLAY: hyprctl dispatch workspace 3 ---"
-          # Boş bir workspace'e geçmek onu var ediyor ve eskisini (boşsa)
-          # yok ediyor, yani küme GERÇEKTEN değişiyor. Sabit bir uyku
-          # yerine döngüyle bekliyoruz: bu hem daha güvenilir hem de
-          # güncellemenin gerçekten olay tabanlı olduğunu gösteriyor.
+          echo "--- REAL EVENT: hyprctl dispatch workspace 3 ---"
+          # Switching to an empty workspace brings it into existence and destroys
+          # the old one (if empty), so the set GENUINELY changes. We wait in a
+          # loop rather than with a fixed sleep: that is both more reliable and
+          # demonstrates that the update really is event-driven.
           hyprctl dispatch workspace 3
           FOCUSED=""
           for i in $(seq 1 15); do
@@ -592,39 +594,39 @@ jobs:
             sleep 1
           done
           if [ "${FOCUSED}" != "3" ]; then
-            echo "HATA: workspace 3'e geçildi ama shell 15 saniyede görmedi (focusedId=${FOCUSED})."
-            echo "      Quickshell.Hyprland'ın event soketi (socket2) bağlı değil demektir."
+            echo "ERROR: switched to workspace 3 but the shell did not see it within 15 seconds (focusedId=${FOCUSED})."
+            echo "      That means Quickshell.Hyprland's event socket (socket2) is not connected."
             exit 1
           fi
-          echo "OK: shell workspace değişimini kendiliğinden gördü (polling yok, socket2 olayı)."
+          echo "OK: the shell saw the workspace change on its own (no polling, socket2 event)."
 
           if ! check_ws_matches_hyprctl; then
-            echo "HATA: workspace 3'e geçtikten sonra shell'in verisi compositor'la uyuşmuyor."
+            echo "ERROR: after switching to workspace 3 the shell's data does not match the compositor."
             exit 1
           fi
           hyprctl dispatch workspace 1
 
-          echo "=== AssistantPanel'i ai-stack/router'a karşı test et (Quickshell IPC) ==="
-          # shell.qml'deki IpcHandler (target: "assistant") üzerinden gerçek
-          # bir soru soruyoruz — bu, AssistantPanel.qml'in gerçekten
-          # /usr/share/navigator/ai-stack/router'ı (bu adıma özel VM'e
-          # kopyalandı, bkz. "mcp-tools, hyprland.conf ve shell/ kodunu VM'e
-          # kopyala" adımı) subprocess ile çağırdığının kanıtı. CI'da ne Ollama
-          # ne Claude API kimlik bilgisi var, bu yüzden router kararı her
-          # zaman "cloud"a düşecek (model_ready=false kuralı) ve cloud-bridge
-          # "credentials_not_configured" ile graceful şekilde "unavailable"
-          # dönecek — bu, gerçek bir uçtan uca hata yolu testi, mock değil.
+          echo "=== test AssistantPanel against ai-stack/router (Quickshell IPC) ==="
+          # We ask a real question through the IpcHandler in shell.qml
+          # (target: "assistant") — this is proof that AssistantPanel.qml really
+          # invokes /usr/share/navigator/ai-stack/router as a subprocess (it now
+          # comes from the image itself, see Layer 5). CI has neither Ollama nor
+          # Claude API credentials, so the router decision will always fall
+          # through to "cloud" (the model_ready=false rule) and cloud-bridge will
+          # gracefully return "unavailable" with "credentials_not_configured" —
+          # this is a real end-to-end failure path test, not a mock.
+
           #
           # -p buraya ("ipc" alt komutundan hemen sonra) gerekiyor: Quickshell
-          # kaynağında (launch/parsecommand.cpp) doğrulandı — Config Selection
-          # seçenek grubu "ipc" alt komutuna kayıtlı, "call"a değil. -p'siz
-          # çağrı "default" adlı bir config arıyor (bizimki özel bir yolda,
+          # verified in its source (launch/parsecommand.cpp) — the Config
+          # Selection option group is registered on the "ipc" subcommand, not on
+          # "call". A call without -p looks for a config named "default" (ours is
           # /usr/share/navigator/shell/shell.qml) ve "Could not find default config..."
-          # hatasıyla sessizce başarısız oluyordu (ilk gerçek denemede görüldü).
+          # error (seen on the first real attempt).
           IPC="qs ipc -p /usr/share/navigator/shell/shell.qml call"
           ASK_OUT="$(${IPC} assistant ask "Merhaba, sen kimsin?" 2>&1)"
           ASK_EXIT=$?
-          echo "qs ipc call assistant ask -> exit=${ASK_EXIT} çıktı=${ASK_OUT}"
+          echo "qs ipc call assistant ask -> exit=${ASK_EXIT} output=${ASK_OUT}"
 
           LOADING="true"
           for i in $(seq 1 30); do
@@ -635,30 +637,35 @@ jobs:
             sleep 1
           done
           if [ "$LOADING" != "false" ]; then
-            echo "HATA: AssistantPanel 30 saniye içinde yüklenmeyi bitirmedi."
+            echo "ERROR: AssistantPanel did not finish loading within 30 seconds."
             exit 1
           fi
 
           RESPONSE="$(${IPC} assistant getResponse)"
-          echo "AssistantPanel yanıtı: $RESPONSE"
+          echo "AssistantPanel response: $RESPONSE"
 
-          echo "=== Hyprland log (assistant testinden SONRA) ==="
-          # Quickshell artık exec-once ile Hyprland'ın çocuğu olarak
-          # başladığından stdout/stderr'i ayrı bir dosyada değil,
-          # compositor'ın log'unda.
+          echo "=== Hyprland log (AFTER the assistant test) ==="
+          # Quickshell is now started by exec-once as a child of Hyprland, so
+          # its stdout/stderr is in the compositor's log rather than a separate
+          # file.
           tail -n 40 /root/hyprland.log || true
 
+          # These prefixes must stay in sync with AssistantPanel.qml's error
+          # paths (the "ERROR: no output from router" and "Parse error (...)"
+          # branches). If they drift apart, this check goes silently green on a
+          # panel that is actually failing — which is exactly what happened once
+          # when the panel's messages were translated and this case was not.
           case "$RESPONSE" in
-            ""|"HATA:"*|"Ayrıştırma hatası"*)
-              echo "HATA: AssistantPanel gerçek bir yanıt üretmedi (bkz. yukarıdaki loglar)."
+            ""|"ERROR:"*|"Parse error"*)
+              echo "ERROR: AssistantPanel did not produce a real response (see the logs above)."
               exit 1
               ;;
           esac
-          echo "OK: AssistantPanel gerçekten ai-stack/router'ı çağırdı ve bir yanıt aldı."
+          echo "OK: AssistantPanel genuinely invoked ai-stack/router and got a response."
           SCRIPT
           chmod +x hyprland-test.sh
 
-      - name: VM'i sanal GPU ile (virtio-gpu + vnc, GL YOK) KVM ile arka planda boot et
+      - name: Boot the VM in the background with KVM and a virtual GPU (virtio-gpu + vnc, NO GL)
         run: |
           set -euo pipefail
           QCOW2="$(find ./disk-output -name '*.qcow2' | head -n1)"
@@ -666,24 +673,24 @@ jobs:
           OVMF_VARS_SRC="$(find /usr/share/OVMF -iname 'OVMF_VARS*.fd' | grep -vi secboot | sort | head -n1)"
           echo "OVMF_CODE=${OVMF_CODE}"
           cp "${OVMF_VARS_SRC}" ./OVMF_VARS.fd
-          # -monitor unix:... : QEMU'nun HMP monitörü. Görsel doğruluk
-          # testi bunun üzerinden `screendump` çağırıp ekranın o anki
-          # içeriğini HOST'a ham PPM olarak yazdırıyor — VNC istemcisi
-          # kurmaya ve misafirin içinde bir şey çalıştırmaya gerek yok,
-          # yani görüntü gerçekten "kullanıcının gördüğü" şey.
+          # -monitor unix:... : QEMU's HMP monitor. The visual correctness test
+          # calls `screendump` over it and has the screen's current contents
+          # written to the HOST as a raw PPM — no VNC client needs installing and
+          # nothing needs running inside the guest, so the image really is what
+          # "the user sees".
           #
-          # hyprwm/aquamarine#109'da (Kasım-Aralık 2024) tam olarak bu
-          # senaryo (Hyprland + virtio-gpu QEMU) kırıktı ("No renderer
-          # attached to backend") — PR #121 ile düzeltildi.
+          # In hyprwm/aquamarine#109 (November-December 2024) exactly this
+          # scenario (Hyprland + virtio-gpu QEMU) was broken ("No renderer
+          # attached to backend") — fixed by PR #121.
           #
-          # İkinci denemede: virtio-vga-gl + egl-headless, host'ta hiç
-          # GPU/DRM cihazı olmadığından başarısız oldu ("no drm render
-          # node available"); vgem modülü de bu runner'ın kernelinde yok
+          # On the second attempt: virtio-vga-gl + egl-headless failed because
+          # the host has no GPU/DRM device at all ("no drm render node
+          # available"); the vgem module is not in this runner's kernel either
           # ("Module vgem not found"). Host-side GPU/EGL gerektirmeyen bir
-          # yola geçildi: düz virtio-gpu-pci (GL YOK, sadece 2D) + -display
-          # vnc — VNC display host'ta hiçbir GPU/EGL gerektirmiyor, misafir
-          # kendi Mesa/llvmpipe'ıyla (imajda zaten mevcut) 3D/compositing'i
-          # tamamen yazılımda yapıyor.
+          # path: plain virtio-gpu-pci (NO GL, 2D only) + -display vnc — a VNC
+          # display requires no GPU/EGL on the host, and the guest does all 3D/
+          # compositing entirely in software with its own Mesa/llvmpipe (already
+          # present in the image).
           sg kvm -c "
             nohup qemu-system-x86_64 \
               -machine accel=kvm,type=q35 \
@@ -705,23 +712,23 @@ jobs:
           "
           for i in $(seq 1 60); do
             if nc -z 127.0.0.1 2222; then
-              echo "SSH portu açık."
+              echo "SSH port is open."
               exit 0
             fi
             sleep 5
           done
-          echo "SSH portu 5 dakika içinde açılmadı." >&2
+          echo "The SSH port did not open within 5 minutes." >&2
           cat qemu.log || true
           exit 1
 
-      - name: Sistemin ayağa kalktığını doğrula (root ile)
+      - name: Verify that the system came up (as root)
         run: |
           set -euo pipefail
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5"
           STATE=""
           for i in $(seq 1 24); do
             STATE="$(ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "systemctl is-system-running" 2>/dev/null || true)"
-            echo "systemctl is-system-running -> ${STATE:-<yanıt yok>}"
+            echo "systemctl is-system-running -> ${STATE:-<no response>}"
             case "${STATE}" in
               running|degraded) break ;;
             esac
@@ -730,13 +737,13 @@ jobs:
           case "${STATE}" in
             running|degraded) ;;
             *)
-              echo "Sistem 2 dakika içinde ayağa kalkmadı (son durum: ${STATE:-yok})" >&2
+              echo "The system did not come up within 2 minutes (last state: ${STATE:-none})" >&2
               cat qemu.log || true
               exit 1
               ;;
           esac
 
-      - name: Katman 3/4/7 — theme, hyprland.conf ve shell imajda mı, marka renkleri senkron mu
+      - name: Layer 3/4/7 — are theme, hyprland.conf and shell in the image, are the brand colours in sync
         run: |
           set -euo pipefail
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
@@ -757,56 +764,56 @@ jobs:
           mkdir -p image-shell
           ${SCP} "root@127.0.0.1:/usr/share/navigator/shell/*.qml" image-shell/
 
-          echo "=== imajdaki dosyalar repodakilerle birebir aynı mı ==="
+          echo "=== are the files in the image byte-identical to the ones in the repo ==="
           if ! cmp -s image-palette.json theme/palette.json; then
-            echo "HATA: imajdaki palette.json repodakinden farklı:"
+            echo "ERROR: the palette.json in the image differs from the one in the repo:"
             diff -u theme/palette.json image-palette.json | head -20
             exit 1
           fi
-          # Duvar kâğıdı ekran görüntüsü karşılaştırmasının REFERANSI; bu
-          # kontrol olmadan "ekran repodaki görsele benziyor" iddiası
-          # imajdaki görselin bayat olması durumunda anlamsızlaşırdı.
+          # The wallpaper is the REFERENCE for the screenshot comparison; without
+          # this check the claim "the screen resembles the image in the repo"
+          # would be meaningless if the image's copy were stale.
           if ! cmp -s image-wallpaper.png theme/wallpaper.png; then
-            echo "HATA: imajdaki wallpaper.png repodakinden farklı (imaj bayat?)."
+            echo "ERROR: the wallpaper.png in the image differs from the one in the repo (stale image?)."
             ls -l image-wallpaper.png theme/wallpaper.png
             exit 1
           fi
           if ! cmp -s image-hyprpaper.conf hyprland/hyprpaper.conf; then
-            echo "HATA: imajdaki hyprpaper.conf repodakinden farklı:"
+            echo "ERROR: the hyprpaper.conf in the image differs from the one in the repo:"
             diff -u hyprland/hyprpaper.conf image-hyprpaper.conf | head -20
             exit 1
           fi
           if ! cmp -s image-hyprland.conf hyprland/hyprland.conf; then
-            echo "HATA: imajdaki hyprland.conf repodakinden farklı:"
+            echo "ERROR: the hyprland.conf in the image differs from the one in the repo:"
             diff -u hyprland/hyprland.conf image-hyprland.conf | head -20
             exit 1
           fi
-          # shell/'de KAÇ dosya olduğunu da kontrol ediyoruz: sadece var olanları
-          # karşılaştırmak, imaja hiç girmemiş bir .qml'i gözden kaçırırdı.
+          # We also check HOW MANY files there are in shell/: comparing only the
+          # ones present would miss a .qml that never made it into the image.
           REPO_QML_COUNT="$(ls shell/*.qml | wc -l)"
           IMAGE_QML_COUNT="$(ls image-shell/*.qml | wc -l)"
           if [ "${REPO_QML_COUNT}" -ne "${IMAGE_QML_COUNT}" ]; then
-            echo "HATA: imajda ${IMAGE_QML_COUNT} .qml var, repoda ${REPO_QML_COUNT}:"
+            echo "ERROR: the image has ${IMAGE_QML_COUNT} .qml files, the repo has ${REPO_QML_COUNT}:"
             ls shell/*.qml image-shell/*.qml
             exit 1
           fi
           for f in shell/*.qml; do
             if ! cmp -s "$f" "image-shell/$(basename "$f")"; then
-              echo "HATA: imajdaki $(basename "$f") repodakinden farklı:"
+              echo "ERROR: the $(basename "$f") in the image differs from the one in the repo:"
               diff -u "$f" "image-shell/$(basename "$f")" | head -20
               exit 1
             fi
           done
-          echo "OK: palette.json, wallpaper.png, hyprland.conf, hyprpaper.conf ve ${IMAGE_QML_COUNT} .qml dosyası repodakilerle birebir aynı (imaj bayat değil)."
+          echo "OK: palette.json, wallpaper.png, hyprland.conf, hyprpaper.conf and ${IMAGE_QML_COUNT} .qml files are byte-identical to the repo (the image is not stale)."
 
-          echo "=== hyprland.conf'taki exec-once hedefleri imajda var mı ==="
-          # Yanlış yazılmış ya da paket değişimiyle kaybolmuş bir exec-once,
-          # Hyprland tarafından SESSİZCE yutulur: compositor yine de açılır,
-          # sadece masaüstü eksik başlar ve hiçbir test kırılmaz. Bu yüzden
-          # her exec-once'ın çalıştırılabilirini imajda gerçekten arıyoruz.
+          echo "=== do the exec-once targets in hyprland.conf exist in the image ==="
+          # An exec-once that is misspelled or has disappeared through a package
+          # change is SILENTLY swallowed by Hyprland: the compositor still comes
+          # up, the desktop merely starts incomplete, and no test breaks. We
+          # therefore really look for each exec-once's executable in the image.
           EXECS="$(grep -E '^[[:space:]]*exec-once[[:space:]]*=' image-hyprland.conf | sed -E 's/^[^=]*=[[:space:]]*//' | awk '{print $1}')"
           if [ -z "${EXECS}" ]; then
-            echo "HATA: hyprland.conf'ta hiç exec-once yok — en az Navigator shell'i bekleniyordu."
+            echo "ERROR: there is no exec-once at all in hyprland.conf — at least the Navigator shell was expected."
             exit 1
           fi
           for e in ${EXECS}; do
@@ -814,17 +821,17 @@ jobs:
                  "command -v '$e' >/dev/null 2>&1 || [ -x '$e' ]"; then
               echo "OK: $e"
             else
-              echo "HATA: exec-once hedefi '$e' imajda yok ya da çalıştırılabilir değil."
+              echo "ERROR: the exec-once target '$e' is not in the image, or is not executable."
               exit 1
             fi
           done
 
           echo "=== marka renkleri senkron mu (palette.json tek kaynak) ==="
           # palette.json makine-okunur tek kaynak ama hem hyprland.conf hem
-          # shell/Theme.qml aynı hex'leri ELLE tekrar ediyor (ikisi de kendi
+          # shell/Theme.qml repeats the same hexes BY HAND (both note this in
           # yorumunda "manuel senkron" diyor). Bu, sessizce sapabilecek bir
-          # tekrar — burada gerçekten doğrulanıyor. Katman 7'den beri ÜÇÜ DE
-          # (palette.json, hyprland.conf, Theme.qml) imajdan okunuyor.
+          # duplication — verified for real here. Since Layer 7 ALL THREE
+          # (palette.json, hyprland.conf, Theme.qml) are read from the image.
           python3 - <<'PY'
           import json, re, sys
 
@@ -840,140 +847,143 @@ jobs:
 
           m = re.search(r"col\.active_border\s*=\s*(.+)", conf)
           if not m:
-              fails.append("hyprland.conf'ta col.active_border bulunamadı")
+              fails.append("col.active_border not found in hyprland.conf")
           else:
               line = m.group(1).strip()
               hexes = [h.lower() for h in re.findall(r"rgba\(([0-9a-fA-F]{6})[0-9a-fA-F]{2}\)", line)]
               if hexes != stops:
-                  fails.append(f"col.active_border gradyanı uyuşmuyor: conf={hexes} palette={stops}")
+                  fails.append(f"col.active_border gradient mismatch: conf={hexes} palette={stops}")
               if f"{angle}deg" not in line:
-                  fails.append(f"col.active_border açısı uyuşmuyor: conf={line!r} palette={angle}deg")
+                  fails.append(f"col.active_border angle mismatch: conf={line!r} palette={angle}deg")
 
           m = re.search(r"shadow\s*\{[^}]*?color\s*=\s*rgba\(([0-9a-fA-F]{6})[0-9a-fA-F]{2}\)", conf, re.S)
           if not m:
-              fails.append("hyprland.conf'ta shadow color bulunamadı")
+              fails.append("shadow color not found in hyprland.conf")
           elif m.group(1).lower() != colors["navy"]:
-              fails.append(f"shadow color navy ile uyuşmuyor: conf={m.group(1)} palette={colors['navy']}")
+              fails.append(f"shadow color does not match navy: conf={m.group(1)} palette={colors['navy']}")
 
           for name in ("teal", "purple", "gold", "navy"):
               if not re.search(rf'property color {name}:\s*"#{colors[name]}"', theme_qml, re.I):
-                  fails.append(f"Theme.qml içindeki {name} uyuşmuyor (beklenen #{colors[name]})")
+                  fails.append(f"{name} in Theme.qml does not match (expected #{colors[name]})")
 
           if fails:
-              print("HATA: marka renkleri senkron değil:")
+              print("ERROR: the brand colours are out of sync:")
               for f in fails:
                   print("  -", f)
               sys.exit(1)
-          print("OK: palette.json <-> hyprland.conf <-> Theme.qml senkron (üçü de imajdan).")
+          print("OK: palette.json <-> hyprland.conf <-> Theme.qml in sync (all three from the image).")
           print(f"    teal={colors['teal']} purple={colors['purple']} gold={colors['gold']} "
-                f"navy={colors['navy']}, gradyan açısı={angle}deg")
+                f"navy={colors['navy']}, gradient angle={angle}deg")
           PY
 
-          echo "=== Katman 4 yeni kullanıcıya gerçekten ulaşıyor mu (/etc/skel) ==="
-          # /etc/skel sadece HESAP OLUŞTURMA anında kopyalanır ve disk.toml'daki
-          # navtest kullanıcısını bootc-image-builder oluşturuyor — bib'in bunu
-          # useradd/skel yoluyla yaptığı belgelenmiş bir garanti DEĞİL. Bu yüzden
-          # ilk turda teşhis olarak ölçüldü (run 30664668160) ve gerçek cevap
-          # alındı: navtest'in ev dizini /var/home/navtest ve içinde hem
+          echo "=== does Layer 4 genuinely reach a new user (/etc/skel) ==="
+          # /etc/skel is copied only at ACCOUNT CREATION time, and the navtest
+          # user in disk.toml is created by bootc-image-builder — that bib does
+          # this via useradd/skel is NOT a documented guarantee. It was therefore
+          # measured as a diagnostic on the first round (run 30664668160) and a
+          # real answer came back: navtest's home directory is /var/home/navtest
           # .bashrc/.bash_profile hem .config/hypr/hyprland.conf var — yani skel
-          # gerçekten uygulanıyor. Ölçüm kesin sonuç verdiğine göre artık
-          # iddia ediliyor: bib veya taban imaj bu davranışı değiştirirse
-          # (Katman 4 yeni kullanıcılara ulaşmayı bırakırsa) test kırılsın.
+          # is genuinely applied. Since the measurement was conclusive it is now
+          # an assertion: if bib or the base image changes this behaviour (if
+          # Layer 4 stops reaching new users), the test should break.
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
             "getent passwd navtest; echo ---; ls -la /home/navtest/.config/hypr/ 2>&1"
           if ! ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
                "cmp -s /home/navtest/.config/hypr/hyprland.conf /etc/skel/.config/hypr/hyprland.conf"; then
-            echo "HATA: navtest'in ev dizinindeki hyprland.conf /etc/skel'dekiyle aynı değil (ya da hiç yok)."
-            echo "      Katman 4 yeni kullanıcılara ulaşmıyor — /etc/skel yerine başka bir yol gerekiyor."
+            echo "ERROR: the hyprland.conf in navtest's home directory is not the same as the one in /etc/skel (or is missing entirely)."
+            echo "      Layer 4 is not reaching new users — a path other than /etc/skel is needed."
             exit 1
           fi
-          echo "OK: bootc-image-builder'ın oluşturduğu hesap /etc/skel'i aldı — Katman 4 yeni kullanıcılara gerçekten ulaşıyor."
+          echo "OK: the account created by bootc-image-builder got /etc/skel — Layer 4 genuinely reaches new users."
 
-      - name: Kimlik bilgisi yolu — /etc/skel şablonu ve imajda GERÇEK çözümleme
+      - name: Credential path — the /etc/skel template and REAL resolution in the image
         run: |
           set -euo pipefail
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           SCP="scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${SSH_KEY} -P 2222"
 
-          # 1) Şablon imajda repodakiyle birebir aynı mı (imaj bayatsa yakalanır).
+          # 1) Is the template in the image byte-identical to the repo's (catches a stale image).
           ${SCP} root@127.0.0.1:/etc/skel/.config/navigator/env image-navigator-env
           if ! cmp -s image-navigator-env image/skel/.config/navigator/env; then
-            echo "HATA: imajdaki /etc/skel/.config/navigator/env repodakiyle aynı değil."
+            echo "ERROR: the /etc/skel/.config/navigator/env in the image is not the same as the repo's."
             diff -u image/skel/.config/navigator/env image-navigator-env || true
             exit 1
           fi
-          echo "OK: kimlik bilgisi şablonu imajda ve repodakiyle birebir aynı."
+          echo "OK: the credential template is in the image and byte-identical to the repo's."
 
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 'bash -s' <<'CHECK'
           set -u
 
-          # ÖNCE TEŞHİSLER, SONRA İDDİALAR. İlk turda tersiydi ve gerçek bir
-          # bedeli oldu: kanıtlanmamış bir iddia (dizin modu) job'ı düşürünce,
-          # asıl merak edilen ölçüm (yeni hesabın kopyası) hiç çalışmadı.
-          # Ölçmek istediğin şeyi, kanıtlanmamış bir iddianın arkasına koyma.
-
-          echo "=== TEŞHİS: dizin modu nerede kayboluyor? ==="
-          # İki turda ölçüldü: dosya 600 geliyor ama DİZİN 755 —
+          # DIAGNOSTICS FIRST, ASSERTIONS SECOND. On the first round it was the
+          # other way round and it had a real cost: when an unproven assertion
+          # (the directory mode) failed the job, the measurement actually wanted
+          # (the new account's copy) never ran at all. Do not put the thing you
+          # want to measure behind an unproven assertion.
+          echo "=== DIAGNOSTIC: where does the directory mode get lost? ==="
+          # Measured over two rounds: the file comes out 600 but the DIRECTORY is
           # Containerfile'daki `chmod 700 /etc/skel/.config/navigator`
-          # tutmuyor. İkinci tur (run 30895377833) nerede kaybolduğunu da
-          # söyledi: /usr/etc'de de 755, yani sorun deployment'taki /etc
-          # merge'ü DEĞİL, imaj katmanı/commit aşaması. Aynı RUN'daki
-          # `chmod 600` dosyada tuttuğuna göre bu, düz bir "chmod
-          # çalışmadı" değil. Kesin mekanizma henüz bilinmiyor; dizin modu
-          # bu yüzden teşhis olarak izlenmeye devam ediyor (iddia değil).
-          stat -c '%n mod=%a sahip=%U:%G' \
+          # does not hold. The second round (run 30895377833) also said where it
+          # is lost: it is 755 in /usr/etc too, so the problem is NOT the /etc
+          # merge at deployment but the image layer/commit stage. Since the
+          # `chmod 600` in the same RUN does hold for the file, this is not a
+          # plain "chmod did not work" either. The exact mechanism is not yet
+          # known; the directory mode therefore continues to be tracked as a
+          # diagnostic (not an assertion).
+          stat -c '%n mode=%a owner=%U:%G' \
             /etc/skel/.config /etc/skel/.config/navigator /etc/skel/.config/navigator/env 2>&1 || true
-          stat -c '%n mod=%a sahip=%U:%G' \
+          stat -c '%n mode=%a owner=%U:%G' \
             /usr/etc/skel/.config/navigator /usr/etc/skel/.config/navigator/env 2>&1 \
-            || echo "(/usr/etc/skel yok)"
+            || echo "(/usr/etc/skel does not exist)"
 
-          echo "=== İDDİA: yeni hesabın kopyası dosya modunu korumalı ==="
-          # Belgelenmiş bir garanti değildi, bu yüzden önce teşhis olarak
-          # ölçüldü (run 30895377833) ve kesin cevap alındı: navtest'in
-          # kopyası 600. Ölçüm kesin olduğuna göre artık iddia — bib veya
-          # taban imaj bu davranışı değiştirir de kopya 644'e düşerse,
-          # kullanıcının kimlik bilgisi dosyası ilk açılışta cloud-bridge
-          # tarafından reddedilir; bunu sessizce öğrenmek istemiyoruz.
+          echo "=== ASSERTION: the new account's copy must preserve the file mode ==="
+          # This was not a documented guarantee, so it was first measured as a
+          # diagnostic (run 30895377833) and a conclusive answer came back:
+          # navtest's copy is 600. Since the measurement is conclusive it is now
+          # an assertion — if bib or the base image changes this behaviour and
+          # the copy drops to 644, the user's credential file would be rejected
+          # by cloud-bridge on first boot; we do not want to learn that silently.
           ls -la /var/home/navtest/.config/navigator/ 2>&1 || echo "(navtest'te navigator dizini yok)"
           [ -e /var/home/navtest/.config/navigator/env ] || {
-            echo "HATA: navtest'in ev dizininde .config/navigator/env yok — şablon yeni hesaplara ulaşmıyor."; exit 1; }
+            echo "ERROR: navtest's home directory has no .config/navigator/env — the template is not reaching new accounts."; exit 1; }
           NAVTEST_MODE=$(stat -c '%a' /var/home/navtest/.config/navigator/env)
           [ "${NAVTEST_MODE}" = "600" ] || {
-            echo "HATA: navtest kopyasının modu ${NAVTEST_MODE}, 600 bekleniyordu."; exit 1; }
-          echo "OK: yeni hesabın kopyası da 0600 — kullanıcı chmod'a mecbur kalmıyor."
+            echo "ERROR: the mode of the navtest copy is ${NAVTEST_MODE}, 600 was expected."; exit 1; }
+          echo "OK: the new account's copy is 0600 too — the user is not forced to run chmod."
 
-          echo "=== İDDİA: şablon DOSYASI sahibine kapalı olmalı ==="
-          # Sırrı koruyan şey dosyanın modu; cloud-bridge de dizine değil
-          # dosyaya bakıyor. git dosya modunu saklamadığı için COPY 0644
-          # bırakırdı, Containerfile Katman 4 bunu chmod ile düzeltiyor —
-          # ve bunun deploy edilmiş imajda GERÇEKTEN tuttuğu ölçüldü.
-          # Bu iddia o chmod düşerse kırılsın diye var.
+          echo "=== ASSERTION: the template FILE must be closed to others ==="
+          # What protects the secret is the file's mode; cloud-bridge looks at
+          # the file, not the directory. Because git does not store the file
+          # mode, COPY would leave 0644, and Layer 4 of the Containerfile fixes
+          # that with chmod — and this was measured to GENUINELY hold in the
+          # deployed image. This assertion exists so that it breaks if that
+          # chmod is ever dropped.
           #
-          # Dizin modu bilinçli olarak İDDİA DEĞİL, teşhis (yukarıda):
-          # 700 hedeflendi ama ostree /etc yolunda 755 olarak çıkıyor.
-          # Etkisi sınırlı — başkası dizini listeleyip `env` dosyasının
-          # varlığını görebilir, içeriğini okuyamaz.
+          # The directory mode is deliberately NOT AN ASSERTION but a diagnostic
+          # (above): 700 was intended but it comes out as 755 on the ostree /etc
+          # path. The impact is limited — someone else can list the directory and
+          # see that the `env` file exists, but cannot read its contents.
           [ "$(stat -c '%a' /etc/skel/.config/navigator/env)" = "600" ] || {
-            echo "HATA: /etc/skel/.config/navigator/env modu 600 değil."; exit 1; }
-          echo "OK: şablon dosyası 0600."
+            echo "ERROR: the mode of /etc/skel/.config/navigator/env is not 600."; exit 1; }
+          echo "OK: the template file is 0600."
 
-          echo "=== GERÇEK ÇÖZÜMLEME: imajdaki cloud-bridge dosyayı okuyor mu? ==="
-          # Sahte bir anahtar yeter: burada test edilen şey kimlik bilgisinin
-          # ÇÖZÜMLENMESİ, Claude API'ye gitmek değil (CI'da sır yok ve
-          # olmamalı). Ortamdaki her ANTHROPIC_* bilerek siliniyor ki tek
-          # olası kaynak dosya olsun — bu, masaüstündeki gerçek yolun aynısı
-          # (Quickshell'in ortamında bu değişkenler yok).
+          echo "=== REAL RESOLUTION: does the cloud-bridge in the image read the file? ==="
+          # A fake key is enough: what is tested here is the RESOLUTION of the
+          # credential, not reaching the Claude API (there are no secrets in CI,
+          # and there must not be). Every ANTHROPIC_* in the environment is
+          # deliberately cleared so the file is the only possible source — the
+          # same as the real path on the desktop (Quickshell's environment does
+          # not have these variables).
           TMPHOME=$(mktemp -d)
           mkdir -p "${TMPHOME}/.config/navigator"
-          printf 'ANTHROPIC_API_KEY=sk-ant-ci-sahte\n' > "${TMPHOME}/.config/navigator/env"
+          printf 'ANTHROPIC_API_KEY=sk-ant-ci-fake\n' > "${TMPHOME}/.config/navigator/env"
           chmod 600 "${TMPHOME}/.config/navigator/env"
           cd /usr/share/navigator/ai-stack/cloud-bridge
           RUN_CB="env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u XDG_CONFIG_HOME HOME=${TMPHOME} python3 -m cloud_bridge"
 
-          OUT=$(${RUN_CB}) || { echo "HATA: cloud_bridge çalışmadı"; exit 1; }
+          OUT=$(${RUN_CB}) || { echo "ERROR: cloud_bridge did not run"; exit 1; }
           echo "${OUT}"
-          if echo "${OUT}" | grep -q 'sk-ant-ci-sahte'; then
-            echo "HATA: kimlik bilgisinin KENDİSİ durum raporuna sızdı."; exit 1
+          if echo "${OUT}" | grep -q 'sk-ant-ci-fake'; then
+            echo "ERROR: the credential ITSELF leaked into the status report."; exit 1
           fi
           echo "${OUT}" | python3 -c '
           import json, sys
@@ -982,16 +992,17 @@ jobs:
           assert d["credentials_source"] == "file", d
           assert d["credentials_file"].endswith("/.config/navigator/env"), d
           assert d["credentials_file_problem"] is None, d
-          print("OK: kimlik bilgisi ~/.config/navigator/env dosyasından çözüldü.")
+          print("OK: the credential was resolved from the ~/.config/navigator/env file.")
           ' || exit 1
 
-          echo "=== İzinler gevşetilirse dosya REDDEDİLİYOR mu? ==="
+          echo "=== is the file REFUSED when the permissions are loosened? ==="
           chmod 644 "${TMPHOME}/.config/navigator/env"
-          # Önce ağ gerektirmeyen durum raporu: reddetme mantığı bozulmuşsa
-          # burada kırılır. Sıra önemli — bu iddia sonra gelseydi, bozuk bir
-          # sürümde CI sahte anahtarla api.anthropic.com'a GERÇEK bir istek
-          # atardı (yerel sapma denemesinde tam olarak bu görüldü: 401).
-          OUT=$(${RUN_CB}) || { echo "HATA: cloud_bridge çalışmadı"; exit 1; }
+          # The status report needs no network and comes first: if the refusal
+          # logic is broken it breaks here. The order matters — had this
+          # assertion come later, a broken version would make CI send a REAL
+          # request to api.anthropic.com with the fake key (exactly what was seen
+          # in a local deviation experiment: a 401).
+          OUT=$(${RUN_CB}) || { echo "ERROR: cloud_bridge did not run"; exit 1; }
           echo "${OUT}"
           echo "${OUT}" | python3 -c '
           import json, sys
@@ -999,22 +1010,22 @@ jobs:
           assert d["credentials_configured"] is False, d
           assert d["credentials_source"] is None, d
           assert d["credentials_file_problem"] == "insecure_permissions", d
-          print("OK: dünyaya okunabilir kimlik bilgisi dosyası reddedildi (sessizce okunmadı).")
+          print("OK: a world-readable credential file was refused (not read silently).")
           ' || exit 1
-          # Ve kullanıcının panelde göreceği sebep dizgesi de doğru olmalı.
-          OUT=$(${RUN_CB} --prompt "merhaba") || { echo "HATA: cloud_bridge çalışmadı"; exit 1; }
+          # And the reason string the user will see in the panel must be right too.
+          OUT=$(${RUN_CB} --prompt "hello") || { echo "ERROR: cloud_bridge did not run"; exit 1; }
           echo "${OUT}"
           echo "${OUT}" | python3 -c '
           import json, sys
           d = json.load(sys.stdin)
           assert d["status"] == "unavailable", d
           assert d["reason"] == "credentials_file_insecure", d
-          print("OK: reason=credentials_file_insecure (AssistantPanel bunu çeviriyor).")
+          print("OK: reason=credentials_file_insecure (AssistantPanel translates this).")
           ' || exit 1
 
           echo "=== Dosya yokken graceful mi? ==="
           rm -f "${TMPHOME}/.config/navigator/env"
-          OUT=$(${RUN_CB} --prompt "merhaba") || { echo "HATA: cloud_bridge çalışmadı"; exit 1; }
+          OUT=$(${RUN_CB} --prompt "hello") || { echo "ERROR: cloud_bridge did not run"; exit 1; }
           echo "${OUT}" | python3 -c '
           import json, sys
           d = json.load(sys.stdin)
@@ -1025,50 +1036,50 @@ jobs:
           rm -rf "${TMPHOME}"
           CHECK
 
-      - name: Test betiğini VM'e kopyala
+      - name: Copy the test script to the VM
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           scp ${SSH_OPTS} -i "${SSH_KEY}" -P 2222 hyprland-test.sh root@127.0.0.1:/root/hyprland-test.sh
           # hyprland.conf ARTIK KOPYALANMIYOR: Containerfile Katman 4 onu
-          # imaja /etc/skel/.config/hypr/hyprland.conf olarak gömüyor.
-          # Hyprland'ın root olarak arayacağı konuma imajın KENDİ dosyasını
-          # koyuyoruz — böylece aşağıdaki config doğrulaması (border_size,
-          # rounding, blur:passes, ...) gerçekten imajdaki dosyayı test ediyor.
-          # (Test root olarak çalışıyor; /etc/skel sadece YENİ hesaplara
-          # kopyalanır, root zaten mevcut olduğundan elle kopyalamak gerekiyor.)
+          # embeds it into the image as /etc/skel/.config/hypr/hyprland.conf.
+          # We put the image's OWN file where Hyprland will look for it as root —
+          # so that the config verification below (border_size, rounding,
+          # blur:passes, ...) really tests the file from the image.
+          # (The test runs as root; /etc/skel is only copied to NEW accounts, and
+          # root already exists, so it has to be copied by hand.)
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
             "mkdir -p /root/.config/hypr && cp /etc/skel/.config/hypr/hyprland.conf /root/.config/hypr/hyprland.conf && cp /etc/skel/.config/hypr/hyprpaper.conf /root/.config/hypr/hyprpaper.conf"
           # shell/ ARTIK KOPYALANMIYOR: Containerfile Katman 7 onu imaja
-          # /usr/share/navigator/shell/ altına koyuyor. Bununla birlikte bu
-          # workflow'da runner'dan VM'e kopyalanan tek şey test betiğinin
-          # kendisi kaldı — test edilen her Navigator bileşeni imajdan geliyor.
+          # under /usr/share/navigator/shell/. With that, the only thing copied
+          # from the runner to the VM in this workflow is the test script itself
+          # — every Navigator component under test comes from the image.
           # ai-stack ARTIK KOPYALANMIYOR: image/Containerfile Katman 5 onu
-          # gerçekten imaja gömüyor, /usr/share/navigator/ai-stack/ altına.
-          # Daha önce burada scp + `rpm-ostree usroverlay` ile CI'a özel bir
-          # taklit vardı; artık test gerçek üretim yolunu, /usr salt-okunur
-          # haldeyken doğruluyor (bkz. sonraki adım).
+          # genuinely embeds it into the image, under /usr/share/navigator/ai-stack/.
+          # There used to be a CI-specific simulation here with scp +
+          # `rpm-ostree usroverlay`; the test now verifies the real production
+          # path with /usr read-only (see the next step).
 
-      - name: ai-stack'in imajın kendisinde olduğunu doğrula (/usr salt-okunur)
+      - name: Verify that ai-stack is in the image itself (/usr read-only)
         run: |
           set -euo pipefail
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-          # Bu adımın tek amacı, ai-stack'in CI tarafından kopyalanmış değil
-          # imajda katmanlanmış olduğunu kanıtlamak. Üç şeyi birlikte
-          # gösteriyor: (1) /usr gerçekten salt-okunur (yani hiçbir
-          # usroverlay/scp devrede değil), (2) altı modülün tamamı yerinde,
-          # (3) bytecode build sırasında üretilmiş (compileall katmanı).
+          # The sole purpose of this step is to prove that ai-stack was layered
+          # into the image rather than copied in by CI. It shows three things
+          # together: (1) /usr really is read-only (i.e. no usroverlay/scp is
+          # involved), (2) all six modules are in place, (3) the bytecode was
+          # generated at build time (the compileall layer).
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 'bash -s' <<'CHECK'
           set -u
-          echo "=== /usr yazılabilir mi? (salt-okunur OLMASI bekleniyor) ==="
+          echo "=== is /usr writable? (it is expected NOT to be) ==="
           findmnt -no OPTIONS /usr || true
           if touch /usr/share/navigator/.write-probe 2>/dev/null; then
             rm -f /usr/share/navigator/.write-probe
-            echo "HATA: /usr yazılabilir — bu test artık gerçek imajı doğrulamıyor olabilir."
+            echo "ERROR: /usr is writable — this test may no longer be verifying the real image."
             exit 1
           fi
-          echo "OK: /usr salt-okunur, dolayısıyla aşağıdaki her şey imajdan geliyor."
+          echo "OK: /usr is read-only, so everything below comes from the image."
 
-          echo "=== ai-stack modülleri ==="
+          echo "=== ai-stack modules ==="
           ls -la /usr/share/navigator/ai-stack/
           MISSING=0
           for m in hardware-probe local-runtime cloud-bridge mcp-tools router assistant; do
@@ -1081,46 +1092,46 @@ jobs:
           done
           [ "$MISSING" -eq 0 ] || exit 1
 
-          echo "=== tests/ ve .env* imaja SIZMAMIŞ olmalı ==="
+          echo "=== tests/ and .env* must NOT have leaked into the image ==="
           if find /usr/share/navigator/ai-stack -name 'tests' -o -name '.env*' | grep -q .; then
             echo "HATA: imajda istenmeyen dosyalar var:"
             find /usr/share/navigator/ai-stack -name 'tests' -o -name '.env*'
             exit 1
           fi
-          echo "OK: sadece çalışma zamanı kodu var."
+          echo "OK: runtime code only."
 
-          echo "=== build sırasında derlenmiş bytecode (salt-okunur /usr için) ==="
+          echo "=== bytecode compiled at build time (for the read-only /usr) ==="
           PYC_COUNT="$(find /usr/share/navigator/ai-stack -name '*.pyc' | wc -l)"
-          echo "pyc sayısı: ${PYC_COUNT}"
+          echo "pyc count: ${PYC_COUNT}"
           if [ "$PYC_COUNT" -eq 0 ]; then
-            echo "HATA: hiç .pyc yok — compileall katmanı çalışmamış."
+            echo "ERROR: no .pyc at all — the compileall layer did not run."
             exit 1
           fi
 
-          echo "=== .pyc'ler çalışma zamanında GERÇEKTEN kullanılıyor mu ==="
-          # Sadece .pyc'lerin varlığını saymak yetmez: ostree mtime'ları
-          # normalize ettiği için timestamp tabanlı bir .pyc "bayat" sayılır
-          # ve salt-okunur /usr'da her çağrıda yeniden derlenirdi (yerelde
-          # python3 -v ile doğrulandı). checked-hash'in bu imajda gerçekten
-          # işe yaradığını python3 -v çıktısıyla kanıtlıyoruz.
+          echo "=== are the .pyc files GENUINELY used at runtime ==="
+          # Counting the presence of .pyc files is not enough: because ostree
+          # normalises mtimes, a timestamp-based .pyc counts as "stale" and would
+          # be recompiled on every invocation under a read-only /usr (verified
+          # locally with python3 -v). We prove with python3 -v output that
+          # checked-hash genuinely does its job in this image.
           IMPORT_V="$(cd /usr/share/navigator/ai-stack/router && python3 -v -c 'import router.decision' 2>&1 || true)"
           if echo "$IMPORT_V" | grep -q "bytecode is stale"; then
-            echo "HATA: bytecode bayat sayılıyor — checked-hash beklendiği gibi çalışmıyor:"
+            echo "ERROR: the bytecode counts as stale — checked-hash is not working as expected:"
             echo "$IMPORT_V" | grep -E "bytecode is stale|could not create" | head -5
             exit 1
           fi
           echo "$IMPORT_V" | grep -E "router/__pycache__" | head -3
-          echo "OK: .pyc'ler kullanılıyor, çalışma zamanında yeniden derleme yok."
+          echo "OK: the .pyc files are used, no recompilation at runtime."
 
-          echo "=== modüller imajdaki yolundan gerçekten çalışıyor mu ==="
-          # Argümansız çağrılar durum raporu basıyor (bkz. ilgili
-          # __main__.py docstring'leri). local_runtime'ın durum raporu kendi
-          # ../hardware-probe kardeşini subprocess olarak çalıştırıyor,
-          # router --decide-only ise ../local-runtime'ı — yani bu iki çağrı
-          # imajdaki düz kardeş hiyerarşisinin gerçekten çözüldüğünü de
-          # kanıtlıyor. mcp_tools bir sunucu (çağrılırsa bloklar) ve
-          # assistant tam zinciri istiyor; ikisi için import kontrolü
-          # yapılıyor — bu da .pyc'lerin gerçekten yüklenebildiğini gösterir.
+          echo "=== do the modules really run from their path in the image ==="
+          # Calls with no arguments print a status report (see the respective
+          # __main__.py docstrings). local_runtime's status report runs its own
+          # ../hardware-probe sibling as a subprocess, and router --decide-only
+          # runs ../local-runtime — so these two calls also prove that the flat
+          # sibling hierarchy in the image really resolves. mcp_tools is a server
+          # (it would block if invoked) and assistant wants the full chain; an
+          # import check is done for those two — which also shows that the .pyc
+          # files can genuinely be loaded.
           FAIL=0
           run_mod() {
             dir="$1"; shift
@@ -1138,53 +1149,53 @@ jobs:
           run_mod mcp-tools      python3 -c "import mcp_tools.server, mcp_tools.tools, mcp_tools.hyprland, mcp_tools.http_transport; print('import OK')"
           run_mod assistant      python3 -c "import assistant.conversation, assistant.mcp_client; print('import OK')"
           [ "$FAIL" -eq 0 ] || exit 1
-          echo "OK: ai-stack imajdaki gerçek yolundan çalışıyor."
+          echo "OK: ai-stack runs from its real path in the image."
           CHECK
 
-      - name: DRM/GPU cihazlarını VM içinde listele (teşhis için)
+      - name: List DRM/GPU devices inside the VM (for diagnostics)
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
             "ls -la /dev/dri/ 2>&1; echo ---; lspci | grep -i vga; echo ---; which Hyprland python3 qs; echo ---; rpm -q seatd libseat quickshell 2>&1; which seatd 2>&1; echo ---; echo XDG_SESSION_ID=\$XDG_SESSION_ID; loginctl 2>&1 || true"
 
-      - name: ai-stack/router'ı doğrudan SSH ile test et (Quickshell'siz teşhis)
+      - name: Test ai-stack/router directly over SSH (a Quickshell-free diagnostic)
         run: |
-          # AssistantPanel.qml'in Process'ini devreye sokmadan, aynı komutu
-          # düz SSH ile çalıştırarak ai-stack/router'ın (ve ../local-runtime,
-          # ../hardware-probe göreli bağımlılıklarının) VM'de tek başına
-          # çalıştığını doğruluyor — bir sorun çıkarsa Quickshell'in süreç
-          # başlatma mekanizmasından mı yoksa ai-stack'in kendisinden mi
-          # geldiğini hızlıca ayırt etmeye yarıyor.
+          # Without involving AssistantPanel.qml's Process, it runs the same
+          # command over plain SSH to verify that ai-stack/router (and its
+          # relative ../local-runtime, ../hardware-probe dependencies) works on
+          # its own in the VM — if something goes wrong, this quickly
+          # distinguishes whether it comes from Quickshell's process-launching
+          # mechanism or from ai-stack itself.
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 \
             "ls -la /usr/share/navigator/ai-stack/router/ 2>&1; echo ---; cd /usr/share/navigator/ai-stack/router && time python3 -m router --prompt 'test' --pretty; echo \"exit=\$?\""
 
-      - name: Hyprland'ı gerçekten başlat, mcp-tools ve Quickshell'i test et
+      - name: Really start Hyprland, test mcp-tools and Quickshell
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "bash /root/hyprland-test.sh"
 
-      - name: Görsel doğruluk — ekranın gerçek görüntüsünü al ve incele
-        # `always()` DEĞİL ama testin kendisi düşse bile görüntü çok
-        # değerli olurdu; bu yüzden bir sonraki adımda artifact her
-        # koşulda yükleniyor. Burada başarısızlık gerçek bir sinyal:
-        # Hyprland ayaktayken ekran boş kalıyorsa bunu bilmeliyiz.
+      - name: Visual correctness — capture and inspect the real image of the screen
+        # NOT `always()`, but the image would be very valuable even if the test
+        # itself failed; the next step therefore uploads the artifact
+        # unconditionally. A failure here is a real signal: if the screen stays
+        # blank while Hyprland is up, we need to know.
         run: |
           set -euo pipefail
-          # Hyprland ve Quickshell test betiğinden sonra da yaşıyor
-          # (setsid nohup ile başlatıldılar), yani ekranda masaüstünün
+          # Hyprland and Quickshell survive the test script as well (they were
+          # started with setsid nohup), so the desktop is still on screen
           # kendisi duruyor.
           python3 .github/scripts/qemu-screendump.py \
             "$(pwd)/qemu-monitor.sock" "$(pwd)/navigator-screen.ppm"
-          # --reference: ekrandaki masaüstünün GERÇEKTEN Navigator duvar
-          # kâğıdı olduğunu doğrular. Repodaki dosyayı veriyoruz; imajdaki
-          # kopyanın repodakiyle aynı olduğunu "Katman 3/4/7" adımı ayrıca
-          # kontrol ediyor, dolayısıyla zincir kapalı.
+          # --reference: verifies that the on-screen desktop GENUINELY is the
+          # Navigator wallpaper. We pass the file from the repository; the
+          # "Layer 3/4/7" step separately checks that the copy in the image
+          # matches the repository's, so the chain is closed.
           python3 .github/scripts/analyze-screenshot.py \
             "$(pwd)/navigator-screen.ppm" "$(pwd)/navigator-screen.png" \
             --reference=theme/wallpaper.png
 
-      - name: Ekran görüntüsünü artifact olarak yükle
+      - name: Upload the screenshot as an artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:

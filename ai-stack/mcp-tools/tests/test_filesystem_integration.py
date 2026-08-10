@@ -6,9 +6,9 @@ import unittest
 
 
 class TestFilesystemToolsIntegration(unittest.TestCase):
-    """Gerçek stdio MCP sunucu sürecine karşı dosya sistemi araçlarını
-    doğrular — path traversal engellemesi dahil (NAVIGATOR_MCP_FS_ROOT ile
-    izole bir sandbox'a yönlendirilir, gerçek ev dizinine dokunulmaz)."""
+    """Verifies the filesystem tools against a real stdio MCP server process
+    — including path traversal blocking (pointed at an isolated sandbox via
+    NAVIGATOR_MCP_FS_ROOT, so the real home directory is never touched)."""
 
     def _send(self, proc, message):
         proc.stdin.write(json.dumps(message) + "\n")
@@ -20,7 +20,7 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
     def test_read_file_list_directory_and_traversal_block(self):
         with tempfile.TemporaryDirectory() as tmp:
             with open(os.path.join(tmp, "hello.txt"), "w") as f:
-                f.write("merhaba navigator")
+                f.write("hello navigator")
             os.makedirs(os.path.join(tmp, "subdir"))
 
             here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -59,7 +59,7 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                 )
                 read_response = self._recv(proc)
                 self.assertFalse(read_response["result"]["isError"])
-                self.assertEqual(read_response["result"]["content"][0]["text"], "merhaba navigator")
+                self.assertEqual(read_response["result"]["content"][0]["text"], "hello navigator")
 
                 self._send(
                     proc,
@@ -82,7 +82,7 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                 )
                 traversal_response = self._recv(proc)
                 self.assertTrue(traversal_response["result"]["isError"])
-                self.assertIn("dışına çıkıyor", traversal_response["result"]["content"][0]["text"])
+                self.assertIn("escapes the permitted root directory", traversal_response["result"]["content"][0]["text"])
 
                 self._send(
                     proc,
@@ -92,15 +92,15 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                         "method": "tools/call",
                         "params": {
                             "name": "write_file",
-                            "arguments": {"path": "yeni.txt", "content": "navigator yazdı"},
+                            "arguments": {"path": "new.txt", "content": "navigator wrote this"},
                         },
                     },
                 )
                 write_response = self._recv(proc)
                 self.assertFalse(write_response["result"]["isError"])
-                self.assertTrue(os.path.isfile(os.path.join(tmp, "yeni.txt")))
-                with open(os.path.join(tmp, "yeni.txt"), encoding="utf-8") as f:
-                    self.assertEqual(f.read(), "navigator yazdı")
+                self.assertTrue(os.path.isfile(os.path.join(tmp, "new.txt")))
+                with open(os.path.join(tmp, "new.txt"), encoding="utf-8") as f:
+                    self.assertEqual(f.read(), "navigator wrote this")
 
                 self._send(
                     proc,
@@ -110,7 +110,7 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                         "method": "tools/call",
                         "params": {
                             "name": "write_file",
-                            "arguments": {"path": "yeni.txt", "content": "tekrar"},
+                            "arguments": {"path": "new.txt", "content": "tekrar"},
                         },
                     },
                 )
@@ -125,13 +125,13 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                         "method": "tools/call",
                         "params": {
                             "name": "write_file",
-                            "arguments": {"path": "yeni.txt", "content": "tekrar", "overwrite": True},
+                            "arguments": {"path": "new.txt", "content": "tekrar", "overwrite": True},
                         },
                     },
                 )
                 overwrite_allowed_response = self._recv(proc)
                 self.assertFalse(overwrite_allowed_response["result"]["isError"])
-                with open(os.path.join(tmp, "yeni.txt"), encoding="utf-8") as f:
+                with open(os.path.join(tmp, "new.txt"), encoding="utf-8") as f:
                     self.assertEqual(f.read(), "tekrar")
 
                 self._send(
@@ -148,7 +148,7 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                 )
                 write_traversal_response = self._recv(proc)
                 self.assertTrue(write_traversal_response["result"]["isError"])
-                self.assertIn("dışına çıkıyor", write_traversal_response["result"]["content"][0]["text"])
+                self.assertIn("escapes the permitted root directory", write_traversal_response["result"]["content"][0]["text"])
 
                 self._send(
                     proc,
@@ -158,14 +158,14 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                         "method": "tools/call",
                         "params": {
                             "name": "rename_file",
-                            "arguments": {"path": "yeni.txt", "new_path": "yeniden-adli.txt"},
+                            "arguments": {"path": "new.txt", "new_path": "renamed.txt"},
                         },
                     },
                 )
                 rename_response = self._recv(proc)
                 self.assertFalse(rename_response["result"]["isError"])
-                self.assertFalse(os.path.exists(os.path.join(tmp, "yeni.txt")))
-                self.assertTrue(os.path.isfile(os.path.join(tmp, "yeniden-adli.txt")))
+                self.assertFalse(os.path.exists(os.path.join(tmp, "new.txt")))
+                self.assertTrue(os.path.isfile(os.path.join(tmp, "renamed.txt")))
 
                 self._send(
                     proc,
@@ -181,7 +181,7 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                 )
                 rename_traversal_response = self._recv(proc)
                 self.assertTrue(rename_traversal_response["result"]["isError"])
-                self.assertIn("dışına çıkıyor", rename_traversal_response["result"]["content"][0]["text"])
+                self.assertIn("escapes the permitted root directory", rename_traversal_response["result"]["content"][0]["text"])
 
                 self._send(
                     proc,
@@ -191,13 +191,13 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                         "method": "tools/call",
                         "params": {
                             "name": "delete_file",
-                            "arguments": {"path": "yeniden-adli.txt"},
+                            "arguments": {"path": "renamed.txt"},
                         },
                     },
                 )
                 delete_denied_response = self._recv(proc)
                 self.assertTrue(delete_denied_response["result"]["isError"])
-                self.assertTrue(os.path.isfile(os.path.join(tmp, "yeniden-adli.txt")))
+                self.assertTrue(os.path.isfile(os.path.join(tmp, "renamed.txt")))
 
                 self._send(
                     proc,
@@ -207,13 +207,13 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                         "method": "tools/call",
                         "params": {
                             "name": "delete_file",
-                            "arguments": {"path": "yeniden-adli.txt", "confirm": True},
+                            "arguments": {"path": "renamed.txt", "confirm": True},
                         },
                     },
                 )
                 delete_response = self._recv(proc)
                 self.assertFalse(delete_response["result"]["isError"])
-                self.assertFalse(os.path.exists(os.path.join(tmp, "yeniden-adli.txt")))
+                self.assertFalse(os.path.exists(os.path.join(tmp, "renamed.txt")))
 
                 self._send(
                     proc,
@@ -229,7 +229,7 @@ class TestFilesystemToolsIntegration(unittest.TestCase):
                 )
                 delete_traversal_response = self._recv(proc)
                 self.assertTrue(delete_traversal_response["result"]["isError"])
-                self.assertIn("dışına çıkıyor", delete_traversal_response["result"]["content"][0]["text"])
+                self.assertIn("escapes the permitted root directory", delete_traversal_response["result"]["content"][0]["text"])
             finally:
                 proc.stdin.close()
                 proc.terminate()

@@ -1,4 +1,4 @@
-"""MCP JSON-RPC 2.0 dispatch mantığı — I/O'dan bağımsız, doğrudan test edilebilir."""
+"""MCP JSON-RPC 2.0 dispatch logic — independent of I/O, directly testable."""
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "navigator-mcp-tools"
@@ -17,7 +17,7 @@ class MCPServer:
         }
 
     def handle_message(self, message: dict) -> dict | None:
-        """Bir JSON-RPC isteğini işler. Notification'lar (id'siz mesajlar) için None döner."""
+        """Handle a JSON-RPC request. Returns None for notifications (messages with no id)."""
         method = message.get("method")
         msg_id = message.get("id")
         params = message.get("params", {}) or {}
@@ -73,7 +73,7 @@ class MCPServer:
 
         if name not in self._tools:
             return {
-                "content": [{"type": "text", "text": f"Bilinmeyen araç: {name}"}],
+                "content": [{"type": "text", "text": f"Unknown tool: {name}"}],
                 "isError": True,
             }
 
@@ -81,7 +81,7 @@ class MCPServer:
             text_result = self._tools[name]["handler"](**arguments)
             return {"content": [{"type": "text", "text": text_result}], "isError": False}
         except Exception as e:
-            return {"content": [{"type": "text", "text": f"Araç hatası: {e}"}], "isError": True}
+            return {"content": [{"type": "text", "text": f"Tool error: {e}"}], "isError": True}
 
     @staticmethod
     def _error_response(msg_id, code: int, message: str) -> dict:

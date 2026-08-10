@@ -1,4 +1,4 @@
-"""hardware-probe çıktısını ve Ollama durumunu tek bir raporda birleştirir."""
+"""Combines the hardware-probe output and the Ollama status into a single report."""
 import json
 import subprocess
 
@@ -10,11 +10,12 @@ HARDWARE_PROBE_CMD = ["python3", "-m", "hardware_probe"]
 
 
 def get_hardware_tier(cwd: str | None = None) -> dict:
-    """ai-stack/hardware-probe CLI'ını çalıştırıp tier raporunu döner.
+    """Run the ai-stack/hardware-probe CLI and return its tier report.
 
-    İki modül ayrı paketler olduğundan (bkz. ai-stack/README.md mimarisi)
-    doğrudan Python import yerine CLI üzerinden konuşuluyor — bu, gerçek
-    sistemde ayrı süreçler olarak çalışacakları şekle daha yakın.
+    Because the two modules are separate packages (see the architecture in
+    ai-stack/README.md) they talk over the CLI rather than a direct Python
+    import — which is closer to how they will run as separate processes on a
+    real system.
     """
     result = subprocess.run(
         HARDWARE_PROBE_CMD, cwd=cwd, capture_output=True, text=True, check=True

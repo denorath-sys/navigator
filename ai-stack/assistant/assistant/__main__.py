@@ -1,12 +1,12 @@
-"""CLI: `python3 -m assistant --prompt "..."` (tek seferlik, JSON çıktı) veya
-`python3 -m assistant` (varsayılan: interaktif REPL, insan diliyle çıktı).
+"""CLI: `python3 -m assistant --prompt "..."` (one-shot, JSON output) or
+`python3 -m assistant` (the default: an interactive REPL, human-readable output).
 
-Konuşma geçmişi:
+Conversation history:
 - REPL'de otomatik olarak bellekte tutulur (oturum boyunca), `/reset` ile
   temizlenir.
-- `--history-file <yol>` verilirse, geçmiş bir JSON dosyasında kalıcı
+- if `--history-file <path>` is given, the history is kept persistently in a
   tutulur — hem tek seferlik hem REPL modunda; her turdan sonra dosyaya
-  yazılır (bir çökme geçmişi kaybetmesin diye).
+  after every turn (so that a crash does not lose the history).
 """
 import argparse
 import json
@@ -19,7 +19,7 @@ from .mcp_client import MCPClient, MCPClientError
 SCHEMA_VERSION = "0.1"
 PREFERENCES = ("balanced", "privacy", "cost", "speed")
 RESET_COMMANDS = ("/reset", "/yeni")
-EXIT_COMMANDS = ("çıkış", "exit", "quit")
+EXIT_COMMANDS = ("exit", "exit", "quit")
 
 
 def _add_common_args(parser: argparse.ArgumentParser) -> None:
@@ -31,7 +31,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--history-file",
         default=None,
-        help="Konuşma geçmişini bu JSON dosyasından okur/yazar (verilmezse kalıcı tutulmaz)",
+        help="Read/write the conversation history from/to this JSON file (not persisted if omitted)",
     )
 
 
@@ -84,8 +84,8 @@ def _run_single_prompt(args) -> int:
 
 def _run_repl(args) -> int:
     print(
-        "Navigator Asistan — çıkmak için Ctrl+D veya 'çıkış', geçmişi "
-        "sıfırlamak için '/reset' yaz.",
+        "Navigator Assistant — press Ctrl+D or type 'exit' to quit, "
+        "'/reset' to clear the history.",
         file=sys.stderr,
     )
     history = _load_history(args)
@@ -104,7 +104,7 @@ def _run_repl(args) -> int:
                 if prompt in RESET_COMMANDS:
                     history = []
                     _save_history(args, history)
-                    print("(konuşma geçmişi sıfırlandı)", file=sys.stderr)
+                    print("(conversation history cleared)", file=sys.stderr)
                     continue
                 try:
                     result = _run_turn_with_args(prompt, client, args, history)
@@ -116,9 +116,9 @@ def _run_repl(args) -> int:
                 print(result["content"])
                 if result["tool_calls"]:
                     tool_names = ", ".join(t["name"] for t in result["tool_calls"])
-                    print(f"  (kullanılan araçlar: {tool_names})", file=sys.stderr)
+                    print(f"  (tools used: {tool_names})", file=sys.stderr)
     except MCPClientError as e:
-        print(f"mcp-tools'a bağlanılamadı: {e}", file=sys.stderr)
+        print(f"Could not connect to mcp-tools: {e}", file=sys.stderr)
         return 1
     return 0
 
@@ -126,16 +126,16 @@ def _run_repl(args) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Navigator OS assistant — router/mcp-tools/cloud-bridge'i tek bir "
-            "konuşma döngüsünde birleştirir."
+            "Navigator OS assistant — combines router/mcp-tools/cloud-bridge "
+            "into a single conversation loop."
         )
     )
     parser.add_argument(
         "--prompt",
         default=None,
-        help="Verilirse tek seferlik çalışır (JSON çıktı); yoksa interaktif REPL başlar",
+        help="If given, runs once (JSON output); otherwise an interactive REPL starts",
     )
-    parser.add_argument("--pretty", action="store_true", help="(--prompt ile) JSON çıktısını girintili yazdır")
+    parser.add_argument("--pretty", action="store_true", help="(with --prompt) print the JSON output indented")
     _add_common_args(parser)
     args = parser.parse_args()
 

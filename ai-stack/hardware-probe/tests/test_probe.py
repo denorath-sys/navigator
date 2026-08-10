@@ -4,7 +4,7 @@ from hardware_probe.probe import run_probe
 
 
 class TestRunProbeIntegration(unittest.TestCase):
-    """Bu makinenin gerçek /proc ve /sys/class/drm'ine karşı çalışır."""
+    """Runs against this machine's real /proc and /sys/class/drm."""
 
     def test_runs_without_crashing_on_real_system(self):
         report = run_probe()

@@ -26,8 +26,8 @@ class TestParseCpuinfo(unittest.TestCase):
         self.assertEqual(result["model"], "Intel(R) Core(TM) i5-8500 CPU @ 3.00GHz")
 
     def test_hyperthreading_does_not_inflate_physical_count(self):
-        # Aynı core id'yi paylaşan iki "processor" (SMT/HT) tek fiziksel
-        # çekirdek olarak sayılmalı.
+        # Two "processor" entries sharing the same core id (SMT/HT) must
+        # count as a single physical core.
         smt_sample = SAMPLE.replace("core id\t\t: 1", "core id\t\t: 0")
         result = parse_cpuinfo(smt_sample)
         self.assertEqual(result["cores_logical"], 2)

@@ -50,8 +50,8 @@ class TestBuildStatusReport(unittest.TestCase):
         self.assertEqual(report["credentials_file_problem"], "insecure_permissions")
 
     def test_secret_value_never_appears_in_report(self):
-        """Rapor kimlik bilgisinin KENDİSİNİ asla taşımamalı — bu çıktı
-        log'lanabiliyor (router zinciri, CI adımları)."""
+        """The report must never carry the credential ITSELF — this output
+        can be logged (the router chain, CI steps)."""
         report = build_status_report(
             client=FakeClient(_resolution({"ANTHROPIC_API_KEY": "sk-ant-gizli"}, SOURCE_FILE))
         )

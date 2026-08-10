@@ -1,13 +1,13 @@
-"""NPU (Neural Processing Unit) tespiti — henüz uygulanmadı.
+"""NPU (Neural Processing Unit) detection — not implemented yet.
 
-Intel VPU, AMD XDNA, Qualcomm Hexagon gibi NPU'lar için ortak bir Linux
-sysfs/driver arayüzü yok; somut bir kernel API hedefi netleşince (Faz 3+)
-gerçek tespit eklenecek.
+There is no common Linux sysfs/driver interface for NPUs such as Intel VPU,
+AMD XDNA or Qualcomm Hexagon; real detection will be added once a concrete
+kernel API target becomes clear (Phase 3+).
 """
 
 
 def probe_npu() -> dict:
     return {
         "present": False,
-        "note": "NPU tespiti henüz uygulanmadı (Faz 3+)",
+        "note": "NPU detection not implemented yet (Phase 3+)",
     }

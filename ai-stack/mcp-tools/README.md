@@ -1,114 +1,113 @@
 # ai-stack/mcp-tools/
 
-## Ne yapıyor
+## What it does
 
-Navigator asistanının sistemle etkileşim kurmasını sağlayan araç katmanı.
-[Model Context Protocol (MCP)](https://modelcontextprotocol.io) standardını
-kullanarak, hem yerel hem bulut modellerinin aynı araç setine tek bir
-arayüzle erişmesini sağlar — `router/` hangi modeli seçtiğinden bağımsız
-olarak araç çağrıları bu modül üzerinden yürütülür.
+The tool layer that lets the Navigator assistant interact with the system.
+Using the [Model Context Protocol (MCP)](https://modelcontextprotocol.io)
+standard, it gives both local and cloud models access to the same tool set
+through a single interface — tool calls run through this module regardless
+of which model `router/` picked.
 
-**Mimari karar (Faz 2):** MCP protokolü, resmi `mcp` Python SDK'sı
-kurulmadan, stdlib-only implemente edilerek yazıldı — diğer ai-stack
-modülleriyle aynı "harici bağımlılık yok" ilkesi korundu. İki transport
-destekleniyor, ikisi de aynı `MCPServer.handle_message()` mantığını
-paylaşıyor:
+**Architectural decision (Phase 2):** the MCP protocol was implemented
+stdlib-only, without installing the official `mcp` Python SDK — preserving
+the same "no external dependencies" principle as the other ai-stack modules.
+Two transports are supported, both sharing the same
+`MCPServer.handle_message()` logic:
 
-- **stdio** (varsayılan) — newline-delimited JSON-RPC 2.0
-- **HTTP+SSE** (`--http`) — klasik iki uç noktalı model (`GET /sse` +
-  `POST /messages`), `http.server` ile (bkz. "HTTP+SSE transport" aşağıda)
+- **stdio** (default) — newline-delimited JSON-RPC 2.0
+- **HTTP+SSE** (`--http`) — the classic two-endpoint model (`GET /sse` +
+  `POST /messages`), via `http.server` (see "HTTP+SSE transport" below)
 
-## Araçlar
+## Tools
 
-On araç kayıtlı — ikisi zaten çalışan diğer ai-stack modüllerini
-sarmalıyor, beşi sandbox'lı dosya sistemi erişimi, üçü de Hyprland
-compositor durumunu salt-okunur sorguluyor:
+Ten tools are registered — two wrapping other, already working ai-stack
+modules, five providing sandboxed filesystem access, and three querying
+Hyprland compositor state read-only:
 
-| Araç | Açıklama |
+| Tool | Description |
 |---|---|
-| `hardware_tier` | `hardware-probe`'u sarmalar — donanım tier'ını ve CPU/RAM/GPU sinyallerini döner |
-| `route_request` | `router`'ı sarmalar — bir isteğin yerel mi bulut mu ile karşılanacağına karar verir (artık gerçek yerel üretim/bulut çağrısını da tetikliyor) |
-| `read_file` | Bir dosyanın içeriğini okur — **sandbox'lı** |
-| `list_directory` | Bir dizinin içeriğini listeler — **sandbox'lı** |
-| `write_file` | Bir dosyaya metin içerik yazar — **sandbox'lı**, var olan dosyaya yazmak için `overwrite=true` şart |
-| `delete_file` | Bir dosyayı siler — **sandbox'lı**, geri alınamaz, `confirm=true` şart |
-| `rename_file` | Bir dosyayı yeniden adlandırır/taşır — **sandbox'lı** (hem kaynak hem hedef), hedef zaten varsa `overwrite=true` şart |
-| `list_windows` | Açık Hyprland pencerelerini listeler — **salt-okunur** (`hyprctl -j clients`) |
-| `list_workspaces` | Hyprland workspace'lerini listeler — **salt-okunur** (`hyprctl -j workspaces`) |
-| `active_window` | Odaklanmış pencerenin bilgisini döner — **salt-okunur** (`hyprctl -j activewindow`) |
+| `hardware_tier` | Wraps `hardware-probe` — returns the hardware tier and the CPU/RAM/GPU signals |
+| `route_request` | Wraps `router` — decides whether a request is served locally or by the cloud (it now also triggers the real local generation / cloud call) |
+| `read_file` | Reads a file's contents — **sandboxed** |
+| `list_directory` | Lists a directory's contents — **sandboxed** |
+| `write_file` | Writes text content to a file — **sandboxed**, `overwrite=true` required to write over an existing file |
+| `delete_file` | Deletes a file — **sandboxed**, irreversible, `confirm=true` required |
+| `rename_file` | Renames/moves a file — **sandboxed** (both source and destination), `overwrite=true` required if the destination already exists |
+| `list_windows` | Lists open Hyprland windows — **read-only** (`hyprctl -j clients`) |
+| `list_workspaces` | Lists Hyprland workspaces — **read-only** (`hyprctl -j workspaces`) |
+| `active_window` | Returns information about the focused window — **read-only** (`hyprctl -j activewindow`) |
 
-### Dosya sistemi araçları — güvenlik modeli
+### Filesystem tools — the security model
 
-Tüm dosya sistemi araçları (`filesystem.py`) bilinçli olarak dar bir
-yetki yüzeyiyle tasarlandı:
+All the filesystem tools (`filesystem.py`) were deliberately designed with a
+narrow authority surface:
 
-- **Sadece dosyalar** — hiçbir araç dizin silmiyor/yeniden adlandırmıyor;
-  bir dizin path'i verilirse hata döner. Kapsam bilinçli olarak dar
-  tutuluyor.
-- **Sandbox'lı kök dizin** — tüm yollar bir kök dizine (varsayılan:
-  kullanıcının ev dizini, `NAVIGATOR_MCP_FS_ROOT` ortam değişkeniyle
-  geçersiz kılınabilir) göre çözümlenir; `os.path.realpath` ile kanonik
-  forma indirgenip kökün dışına çıkmadığı doğrulanır. `../` ile path
-  traversal ve kök dışına mutlak yol verme denemeleri engellenir
-  (gerçek MCP protokolü üzerinden test edildi — bkz. testler). Bu kontrol
-  `write_file`, `delete_file` ve `rename_file` (hem kaynak hem hedef)
-  için aynen geçerli.
-- **Yazma için ek korumalar** — `write_file` var olan bir dosyanın üzerine
-  ancak `overwrite=true` ile yazabilir (yanlışlıkla veri kaybını
-  önlemek için); üst dizin zaten var olmalı (araç kendiliğinden dizin
-  oluşturmaz, kapsamı dosya içeriğiyle sınırlı tutar); bir dizin path'ine
-  yazma denemesi hata verir.
-- **Silme için ek koruma** — `delete_file` geri alınamaz bir işlem
-  olduğundan `confirm=true` olmadan hiçbir şey silmez; yanlışlıkla
-  çağrılırsa (LLM'in kendi kendine tetiklemesi dahil) varsayılan olarak
-  hata döner.
-- **Yeniden adlandırma için ek koruma** — `rename_file`, `write_file` ile
-  tutarlı: hedef zaten varsa `overwrite=true` gerekir, hedefin üst dizini
-  zaten var olmalı.
-- **Boyut sınırı** — `read_file` en fazla ~1 MB okur (`MAX_READ_BYTES`),
-  `write_file` en fazla ~1 MB yazar (`MAX_WRITE_BYTES`), `list_directory`
-  en fazla 500 girdi döner (`MAX_LIST_ENTRIES`) — büyük dosya/dizinlerin
-  context'i boğmasını önlemek için.
+- **Files only** — no tool deletes or renames a directory; given a directory
+  path they return an error. The scope is deliberately kept narrow.
+- **A sandboxed root directory** — all paths are resolved relative to a root
+  directory (default: the user's home directory, overridable with the
+  `NAVIGATOR_MCP_FS_ROOT` environment variable); they are reduced to
+  canonical form with `os.path.realpath` and verified not to escape the
+  root. Path traversal with `../` and attempts to give an absolute path
+  outside the root are blocked (tested over the real MCP protocol — see the
+  tests). This check applies identically to `write_file`, `delete_file` and
+  `rename_file` (both source and destination).
+- **Extra protections for writing** — `write_file` can only write over an
+  existing file with `overwrite=true` (to prevent accidental data loss); the
+  parent directory must already exist (the tool does not create directories
+  on its own, keeping its scope limited to file content); and attempting to
+  write to a directory path returns an error.
+- **An extra protection for deletion** — because `delete_file` is
+  irreversible it deletes nothing without `confirm=true`; if called
+  accidentally (including the LLM triggering it on its own) it returns an
+  error by default.
+- **An extra protection for renaming** — `rename_file` is consistent with
+  `write_file`: `overwrite=true` is required if the destination already
+  exists, and the destination's parent directory must already exist.
+- **Size limits** — `read_file` reads at most ~1 MB (`MAX_READ_BYTES`),
+  `write_file` writes at most ~1 MB (`MAX_WRITE_BYTES`), and
+  `list_directory` returns at most 500 entries (`MAX_LIST_ENTRIES`) — to
+  keep large files and directories from drowning the context.
 
-### Hyprland araçları — kapsam ve sınırlama
+### Hyprland tools — scope and limitations
 
-`list_windows`, `list_workspaces` ve `active_window` (`hyprland.py`)
-bilinçli olarak **salt-okunur** — workspace değiştirme, pencere
-kapatma/taşıma gibi dispatch komutları YOK. `hyprctl -j <komut>`'u
-subprocess ile çağırıp JSON çıktısını döndürür.
+`list_windows`, `list_workspaces` and `active_window` (`hyprland.py`) are
+deliberately **read-only** — there are NO dispatch commands such as
+switching workspace or closing/moving a window. They invoke
+`hyprctl -j <command>` as a subprocess and return its JSON output.
 
-Geliştirme ortamı Debian/Pardus olduğundan (Hyprland bu dağıtımda
-paketli değil) bu üç araç yerel makinede test edilemiyor — ama CI'da
-GERÇEK bir Hyprland compositor'a karşı doğrulandı (aşağıya bkz.).
-Bunlara ek olarak:
+Because the development environment is Debian/Pardus (Hyprland is not
+packaged there), these three tools cannot be tested on the local machine —
+but they were verified against a REAL Hyprland compositor in CI (see below).
+In addition to that:
 
-1. Mock'lanmış `subprocess.run`/`shutil.which` ile unit test edildi
+1. They were unit-tested with mocked `subprocess.run`/`shutil.which`
    (`tests/test_hyprland.py`).
-2. Gerçek bir stdio MCP oturumunda, Hyprland çalışmıyorken araçların
-   çökmeden net bir hatayla (`isError: true`, `HyprlandError` mesajı)
-   graceful başarısız olduğu doğrulandı (`tests/
-   test_hyprland_integration.py`) — cloud-bridge'in kimlik bilgisiz
-   yolunun doğrulanmasıyla aynı desen.
+2. In a real stdio MCP session it was verified that, with Hyprland not
+   running, the tools fail gracefully with a clear error
+   (`isError: true`, a `HyprlandError` message) rather than crashing
+   (`tests/test_hyprland_integration.py`) — the same pattern as verifying
+   cloud-bridge's credential-less path.
 
-**Gerçek compositor'a karşı doğrulandı (CI, 2026-07-18):**
-`.github/workflows/build-disk-and-boot-test.yml`'deki `hyprland-test`
-job'ı, gerçek bir Navigator disk imajını QEMU'da (`virtio-gpu-pci` +
-`-display vnc`, host'ta GPU/EGL gerektirmez — misafir kendi Mesa/
-llvmpipe'ıyla yazılımda render ediyor) boot edip Hyprland'ı gerçekten
-başlatıyor ve `mcp_tools.hyprland` fonksiyonlarını doğrudan çağırıyor.
-Yolda iki gerçek sorun çıktı ve çözüldü:
+**Verified against a real compositor (CI, 2026-07-18):** the
+`hyprland-test` job in `.github/workflows/build-disk-and-boot-test.yml`
+boots a real Navigator disk image in QEMU (`virtio-gpu-pci` +
+`-display vnc`, requiring no GPU/EGL on the host — the guest renders in
+software with its own Mesa/llvmpipe), really starts Hyprland, and calls the
+`mcp_tools.hyprland` functions directly. Two real problems came up along the
+way and were solved:
 
-- Hyprland kasıtlı olarak root'u reddediyor — CI'da yalnızca root SSH
-  erişimi var, `--i-am-really-stupid` bayrağıyla aşıldı.
-- aquamarine'ın DRM backend'i `libseat_open_seat()` ile bir seat açmaya
-  çalışıyor; SSH oturumunun systemd-logind'de gerçek bir seat'i
-  olmadığından bu başarısız oluyordu (`CBackend::create() failed!`).
-  imajda `seatd` paketi yoktu (`rpm -q seatd` → "package seatd is not
-  installed", `loginctl` → SEAT sütunu "-"); paket eklendi
-  (`image/Containerfile`) ve test betiği Hyprland'dan önce seatd'yi
-  arka planda başlatıp `LIBSEAT_BACKEND=seatd` ayarlıyor.
+- Hyprland deliberately refuses to run as root — CI only has root SSH
+  access, so this was worked around with the `--i-am-really-stupid` flag.
+- aquamarine's DRM backend tries to open a seat with
+  `libseat_open_seat()`; because an SSH session has no real seat in
+  systemd-logind, this was failing (`CBackend::create() failed!`). The
+  `seatd` package was missing from the image (`rpm -q seatd` → "package
+  seatd is not installed", `loginctl` → a "-" in the SEAT column); the
+  package was added (`image/Containerfile`) and the test script starts
+  seatd in the background before Hyprland and sets `LIBSEAT_BACKEND=seatd`.
 
-Sonuç — gerçek `hyprctl monitors` çıktısı (QEMU sanal monitörü):
+The result — real `hyprctl monitors` output (the QEMU virtual monitor):
 
 ```
 Monitor Virtual-1 (ID 0):
@@ -118,7 +117,7 @@ Monitor Virtual-1 (ID 0):
 	focused: yes
 ```
 
-Ve gerçek `mcp_tools.hyprland` çağrıları (mock değil):
+And real `mcp_tools.hyprland` calls (not mocks):
 
 ```
 list_windows: []
@@ -126,159 +125,159 @@ list_workspaces: [{"id": 1, "name": "1", "monitor": "Virtual-1", "monitorID": 0,
 active_window: {}
 ```
 
-(`list_windows` ve `active_window` boş dönüyor çünkü hiçbir pencere
-açılmadı — beklenen davranış, hata değil: `hyprctl -j activewindow`
-odaklanmış pencere yokken `{}` döner, `active_window()` bunu bir
-`HyprlandError` fırlatmadan olduğu gibi geçiriyor.)
+(`list_windows` and `active_window` come back empty because no window was
+opened — expected behaviour, not an error: `hyprctl -j activewindow`
+returns `{}` when there is no focused window, and `active_window()` passes
+that through without raising a `HyprlandError`.)
 
-## Kullanım
+## Usage
 
-Harici bağımlılık yok, sadece Python 3.11+ (stdlib). `hardware-probe` ve
-`router`'ın yanında (kardeş dizinler olarak) bulunması gerekiyor.
+No external dependencies, only Python 3.11+ (stdlib). It must sit next to
+`hardware-probe` and `router` (as sibling directories).
 
-Sunucuyu stdio üzerinden başlatmak (varsayılan):
+Starting the server over stdio (the default):
 
 ```sh
 cd ai-stack/mcp-tools
 python3 -m mcp_tools
 ```
 
-HTTP+SSE üzerinden başlatmak (kimlik doğrulama zorunlu, bkz. aşağıdaki
-bölüm):
+Starting it over HTTP+SSE (authentication is mandatory, see the section
+below):
 
 ```sh
 cd ai-stack/mcp-tools
-python3 -m mcp_tools --http --port 8765   # --host ile adres de değiştirilebilir
-# token verilmezse otomatik üretilir ve stderr'e yazdırılır; sabit bir
-# token için: --token <TOKEN> veya NAVIGATOR_MCP_HTTP_TOKEN ortam değişkeni
+python3 -m mcp_tools --http --port 8765   # the address can also be changed with --host
+# if no token is given one is generated automatically and printed to stderr;
+# for a fixed token: --token <TOKEN> or the NAVIGATOR_MCP_HTTP_TOKEN env var
 ```
 
-Dosya sistemi araçlarının kök dizinini değiştirmek için (varsayılan: ev
-dizini):
+To change the root directory of the filesystem tools (default: the home
+directory):
 
 ```sh
-NAVIGATOR_MCP_FS_ROOT=/istediğin/kök python3 -m mcp_tools
+NAVIGATOR_MCP_FS_ROOT=/your/root python3 -m mcp_tools
 ```
 
-stdio'da: stdin'e newline-delimited JSON-RPC mesajları yazılır, yanıtlar
-stdout'tan aynı şekilde okunur (bkz. `tests/test_integration.py`'daki
-örnek oturum: `initialize` → `notifications/initialized` → `tools/list` →
-`tools/call`).
+Over stdio: newline-delimited JSON-RPC messages are written to stdin and
+responses are read the same way from stdout (see the example session in
+`tests/test_integration.py`: `initialize` → `notifications/initialized` →
+`tools/list` → `tools/call`).
 
-Testler:
+Tests:
 
 ```sh
 cd ai-stack/mcp-tools
 python3 -m unittest discover -v -s tests
 ```
 
-## Gerçek oturum örneği
+## A real session example
 
-Bu makinede gerçek bir stdio oturumu çalıştırıldı (izole bir sandbox
-dizinine karşı, `NAVIGATOR_MCP_FS_ROOT` ile):
+A real stdio session was run on this machine (against an isolated sandbox
+directory, via `NAVIGATOR_MCP_FS_ROOT`):
 
 ```
 tools/list -> ["hardware_tier", "route_request", "read_file", "list_directory", "write_file", "delete_file", "rename_file", "list_windows", "list_workspaces", "active_window"]
-tools/call(read_file, {"path": "hello.txt"}) -> {"content": [{"type": "text", "text": "merhaba navigator"}], "isError": false}
+tools/call(read_file, {"path": "hello.txt"}) -> {"content": [{"type": "text", "text": "hello navigator"}], "isError": false}
 tools/call(list_directory, {}) -> {"content": [{"type": "text", "text": "[{\"name\": \"hello.txt\", ...}, {\"name\": \"subdir\", ...}]"}], "isError": false}
-tools/call(read_file, {"path": "../../../../etc/passwd"}) -> {"content": [{"type": "text", "text": "Araç hatası: '...' izin verilen kök dizinin (...) dışına çıkıyor"}], "isError": true}
-tools/call(write_file, {"path": "yeni.txt", "content": "navigator yazdı"}) -> {"content": [{"type": "text", "text": "16 bayt yazıldı: yeni.txt"}], "isError": false}
-tools/call(write_file, {"path": "yeni.txt", "content": "tekrar"}) -> {"content": [{"type": "text", "text": "Araç hatası: Dosya zaten var: yeni.txt (üzerine yazmak için overwrite=true gerekir)"}], "isError": true}
-tools/call(rename_file, {"path": "yeni.txt", "new_path": "yeniden-adli.txt"}) -> {"content": [{"type": "text", "text": "Yeniden adlandırıldı: yeni.txt -> yeniden-adli.txt"}], "isError": false}
-tools/call(delete_file, {"path": "yeniden-adli.txt"}) -> {"content": [{"type": "text", "text": "Araç hatası: Silme geri alınamaz — onaylamak için confirm=true gerekir: yeniden-adli.txt"}], "isError": true}
-tools/call(delete_file, {"path": "yeniden-adli.txt", "confirm": true}) -> {"content": [{"type": "text", "text": "Silindi: yeniden-adli.txt"}], "isError": false}
-tools/call(list_windows, {}) -> {"content": [{"type": "text", "text": "Araç hatası: Hyprland çalışmıyor (HYPRLAND_INSTANCE_SIGNATURE ayarlı değil)"}], "isError": true}
+tools/call(read_file, {"path": "../../../../etc/passwd"}) -> {"content": [{"type": "text", "text": "Tool error: '...' escapes the permitted root directory (...)"}], "isError": true}
+tools/call(write_file, {"path": "new.txt", "content": "navigator wrote this"}) -> {"content": [{"type": "text", "text": "20 bytes written: new.txt"}], "isError": false}
+tools/call(write_file, {"path": "new.txt", "content": "again"}) -> {"content": [{"type": "text", "text": "Tool error: File already exists: new.txt (overwrite=true is required to write over it)"}], "isError": true}
+tools/call(rename_file, {"path": "new.txt", "new_path": "renamed.txt"}) -> {"content": [{"type": "text", "text": "Renamed: new.txt -> renamed.txt"}], "isError": false}
+tools/call(delete_file, {"path": "renamed.txt"}) -> {"content": [{"type": "text", "text": "Tool error: Deletion is irreversible — confirm=true is required to confirm: renamed.txt"}], "isError": true}
+tools/call(delete_file, {"path": "renamed.txt", "confirm": true}) -> {"content": [{"type": "text", "text": "Deleted: renamed.txt"}], "isError": false}
+tools/call(list_windows, {}) -> {"content": [{"type": "text", "text": "Tool error: Hyprland is not running (HYPRLAND_INSTANCE_SIGNATURE is not set)"}], "isError": true}
 ```
 
-(`list_windows` bu makinede beklendiği gibi hata veriyor — Hyprland
-burada çalışmıyor. Gerçek bir compositor'da `isError: false` ve gerçek
-pencere listesi dönmesi beklenir, Faz 3'te doğrulanacak.)
+(`list_windows` errors on this machine as expected — Hyprland does not run
+here. On a real compositor `isError: false` and a real window list are
+expected, to be verified in Phase 3.)
 
-`mcp-tools → router → local-runtime → hardware-probe` zinciri de gerçek
-MCP protokolü üzerinden uçtan uca çalışıyor (bkz. `route_request` aracı) —
-hem stdio hem HTTP+SSE transport'unda aynı şekilde.
+The `mcp-tools → router → local-runtime → hardware-probe` chain also works
+end to end over the real MCP protocol (see the `route_request` tool) —
+identically on both the stdio and the HTTP+SSE transport.
 
 ## HTTP+SSE transport
 
-`http_transport.py`, MCP'nin 2024-11-05 spesifikasyonundaki klasik HTTP+SSE
-modelini implemente eder (daha yeni "Streamable HTTP" değil — `server.py`
-zaten `protocolVersion: "2024-11-05"` bildiriyor, tutarlı):
+`http_transport.py` implements the classic HTTP+SSE model from MCP's
+2024-11-05 specification (not the newer "Streamable HTTP" — `server.py`
+already advertises `protocolVersion: "2024-11-05"`, so this is consistent):
 
-1. İstemci `GET /sse`'ye bağlanır — sunucu bir `session_id` üretir, ilk
-   `endpoint` event'i ile istemcinin POST edeceği URI'yi
-   (`/messages?session_id=<id>`) bildirir, sonra bağlantıyı açık tutar.
-2. İstemci JSON-RPC isteklerini o URI'ye `POST` eder — sunucu isteği aynı
-   `MCPServer.handle_message()` ile işler, **yanıtı HTTP body'sinde
-   dönmez** (sadece `202 Accepted`), bunun yerine session'ın kuyruğuna
-   ekler.
-3. Kuyruğa eklenen yanıt, adım 1'de açılan SSE bağlantısı üzerinden
-   `message` event'i olarak asenkron akar.
+1. The client connects to `GET /sse` — the server generates a `session_id`,
+   announces the URI the client should POST to
+   (`/messages?session_id=<id>`) via a first `endpoint` event, and then
+   keeps the connection open.
+2. The client `POST`s JSON-RPC requests to that URI — the server handles the
+   request with the same `MCPServer.handle_message()`, **does not return the
+   response in the HTTP body** (only `202 Accepted`), and instead adds it to
+   the session's queue.
+3. The queued response flows asynchronously as a `message` event over the
+   SSE connection opened in step 1.
 
-`ThreadingHTTPServer` kullanıldığından her bağlantı (uzun ömürlü SSE
-GET'i dahil) kendi thread'inde çalışır — POST istekleri SSE bağlantısını
-bloklamaz. Bilinmeyen/eksik `session_id` ile POST → `400`.
+Because `ThreadingHTTPServer` is used, every connection (including the
+long-lived SSE GET) runs in its own thread — POST requests do not block the
+SSE connection. A POST with an unknown or missing `session_id` → `400`.
 
-Bu makinede gerçek bir HTTP+SSE oturumu (gerçek TCP soketleri, subprocess)
-uçtan uca çalıştırıldı: endpoint keşfi → `initialize`/`tools/list`/
-`tools/call` POST'ları → SSE üzerinden doğru `id` eşleşmesiyle yanıtlar.
+A real HTTP+SSE session (real TCP sockets, subprocess) was run end to end on
+this machine: endpoint discovery → `initialize`/`tools/list`/`tools/call`
+POSTs → responses over SSE with correct `id` matching.
 
-## Kimlik doğrulama (HTTP+SSE)
+## Authentication (HTTP+SSE)
 
-stdio transport zaten yerel bir süreç boru hattı olduğundan (işletim
-sistemi süreç izolasyonu yeterli) kimlik doğrulaması gerektirmiyor. Ama
-HTTP+SSE bir TCP soketi açtığı için (varsayılan `127.0.0.1` olsa bile)
-`auth.py`'de implemente edilen Bearer token doğrulaması zorunlu:
+The stdio transport needs no authentication, being a local process pipeline
+(OS process isolation is sufficient). But because HTTP+SSE opens a TCP
+socket (even if bound to `127.0.0.1` by default), the Bearer token
+verification implemented in `auth.py` is mandatory:
 
-- **Kimliksiz çalışma yok.** `--token` verilmezse veya
-  `NAVIGATOR_MCP_HTTP_TOKEN` ortam değişkeni set değilse, sunucu
-  `secrets.token_urlsafe(32)` ile otomatik bir token üretir ve
-  başlangıçta stderr'e yazdırır — sessizce açık kapı olarak asla
-  çalışmaz (Jupyter'ın notebook token modeliyle aynı ilke).
-- **Her iki uç nokta da korunuyor** — `GET /sse` ve `POST /messages`,
-  `Authorization: Bearer <token>` header'ı eksik veya yanlışsa `401`
-  döner (`WWW-Authenticate: Bearer` header'ıyla birlikte).
-- **Zamanlama saldırısına dayanıklı karşılaştırma** —
-  `hmac.compare_digest` kullanılıyor, düz `==` değil.
-- Token önceliği: `--token` CLI argümanı > `NAVIGATOR_MCP_HTTP_TOKEN` >
-  otomatik üretim.
+- **No unauthenticated operation.** If `--token` is not given and the
+  `NAVIGATOR_MCP_HTTP_TOKEN` environment variable is not set, the server
+  generates a token automatically with `secrets.token_urlsafe(32)` and
+  prints it to stderr at start-up — it never silently runs as an open door
+  (the same principle as Jupyter's notebook token model).
+- **Both endpoints are protected** — `GET /sse` and `POST /messages` return
+  `401` (together with a `WWW-Authenticate: Bearer` header) if the
+  `Authorization: Bearer <token>` header is missing or wrong.
+- **Timing-attack-resistant comparison** — `hmac.compare_digest` is used,
+  not a plain `==`.
+- Token precedence: the `--token` CLI argument > `NAVIGATOR_MCP_HTTP_TOKEN`
+  > automatic generation.
 
-Gerçek TCP üzerinden doğrulandı: doğru token ile tam MCP oturumu (SSE +
-POST), token'sız/yanlış token ile her iki uç noktada da `401` (bkz.
+Verified over real TCP: a full MCP session (SSE + POST) with the correct
+token, and `401` on both endpoints with no token or a wrong token (see
 `tests/test_http_transport_integration.py`).
 
-## Kapsam dışı — henüz yapılmadı
+## Out of scope — not done yet
 
-- Dizin silme/yeniden adlandırma/oluşturma yok — sadece dosyalar
-  (`write_file` de yeni dizin oluşturmaz, üst dizin zaten var olmalı).
-- Hyprland **kontrol** komutları yok — sadece sorgu (`list_windows`,
-  `list_workspaces`, `active_window`). Workspace değiştirme, pencere
-  odaklama/kapatma/taşıma gibi dispatch komutları bilinçli olarak
-  eklenmedi (daha geniş bir yetki yüzeyi; CI'da gerçek Hyprland artık
-  test edilebiliyor ama bu, kapsamı genişletme kararını henüz
-  gerektirmedi).
-- Quickshell ile konuşan araçlar yok.
-- Hyprland araçları bu (Debian/Pardus) makinede test edilemiyor, ama
-  CI'da gerçek bir compositor'a karşı üçü de (`list_windows`,
-  `list_workspaces`, `active_window`) doğrulandı — bkz. "Hyprland
-  araçları — kapsam ve sınırlama".
-- TLS/HTTPS yok — Bearer token düz HTTP üzerinden taşınıyor; şu an sadece
-  `127.0.0.1` varsayımıyla güvenli, dışa açık kullanım için TLS şart.
-- MCP'nin daha yeni "Streamable HTTP" transport'u yok — sadece klasik
-  HTTP+SSE (2024-11-05).
+- No directory deletion/renaming/creation — files only (`write_file` does
+  not create a new directory either; the parent must already exist).
+- No Hyprland **control** commands — queries only (`list_windows`,
+  `list_workspaces`, `active_window`). Dispatch commands such as switching
+  workspace or focusing/closing/moving a window were deliberately not added
+  (a wider authority surface; real Hyprland can now be tested in CI, but
+  that has not yet made widening the scope necessary).
+- No tools that talk to Quickshell.
+- The Hyprland tools cannot be tested on this (Debian/Pardus) machine, but
+  all three (`list_windows`, `list_workspaces`, `active_window`) were
+  verified against a real compositor in CI — see "Hyprland tools — scope and
+  limitations".
+- No TLS/HTTPS — the Bearer token travels over plain HTTP; it is only safe
+  under the current `127.0.0.1` assumption, and TLS is essential for
+  externally exposed use.
+- MCP's newer "Streamable HTTP" transport is not supported — only the
+  classic HTTP+SSE (2024-11-05).
 
-## Durum
+## Status
 
-Faz 2 — MCP sunucusu (`protocol.py`, `server.py`, `tools.py`), dosya
-sistemi araçları (`filesystem.py` — okuma, listeleme, kontrollü yazma,
-silme VE yeniden adlandırma), HTTP+SSE transport (`http_transport.py`),
-Bearer token kimlik doğrulaması (`auth.py`) VE Hyprland sorgu araçları
-(`hyprland.py` — salt-okunur, mock'lanmış + graceful-hata testleriyle
-doğrulandı) tamamlandı, `python3 -m mcp_tools [--http] [--token T]`
-CLI.
-88 test geçiyor (protokol round-trip, server dispatch, gerçek modüllere
-karşı araç testleri, path traversal engellemesi, overwrite koruması ve
-confirm zorunluluğu dahil dosya sistemi testleri, session registry unit
-testleri, auth yardımcı fonksiyon testleri, mock'lanmış Hyprland
-testleri, ve gerçek subprocess/TCP soketleriyle iki transport üzerinden
-uçtan uca MCP protokol testleri — kimlik doğrulamalı/doğrulamasız
-istekler ve Hyprland'ın graceful hata yolu dahil).
+Phase 2 — the MCP server (`protocol.py`, `server.py`, `tools.py`), the
+filesystem tools (`filesystem.py` — reading, listing, controlled writing,
+deletion AND renaming), the HTTP+SSE transport (`http_transport.py`), Bearer
+token authentication (`auth.py`) AND the Hyprland query tools (`hyprland.py`
+— read-only, verified with mocked and graceful-failure tests) are complete,
+with a `python3 -m mcp_tools [--http] [--token T]` CLI.
+88 tests pass (protocol round-trip, server dispatch, tool tests against the
+real modules, filesystem tests including path traversal blocking, overwrite
+protection and the confirm requirement, session registry unit tests, auth
+helper function tests, mocked Hyprland tests, and end-to-end MCP protocol
+tests over both transports with real subprocesses and TCP sockets —
+including authenticated and unauthenticated requests and Hyprland's graceful
+failure path).

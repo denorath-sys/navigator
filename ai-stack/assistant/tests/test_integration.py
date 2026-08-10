@@ -12,12 +12,13 @@ HAS_CLOUD_CREDENTIALS = bool(
 
 
 class TestAssistantIntegration(unittest.TestCase):
-    """assistant -> router -> (local-runtime | cloud-bridge) -> mcp-tools
-    zincirinin GERÇEK subprocess'lerle uçtan uca çalıştığını doğrular.
+    """Verifies that the assistant -> router -> (local-runtime |
+    cloud-bridge) -> mcp-tools chain works end to end with REAL subprocesses.
 
-    Yerel yol (Ollama kurulu/model hazır olduğundan) her zaman gerçek
-    çalışır. Bulut yolu + gerçek tool-use döngüsü, ANTHROPIC_API_KEY/
-    ANTHROPIC_AUTH_TOKEN ortamda yoksa (CI dahil) otomatik `skip` olur.
+    The local path always runs for real (Ollama is installed and the model is
+    ready). The cloud path + the real tool-use loop `skip` automatically when
+    ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN is absent from the environment
+    (including in CI).
     """
 
     def _run_cli(self, prompt: str, extra_args: list[str] | None = None) -> dict:
@@ -33,13 +34,13 @@ class TestAssistantIntegration(unittest.TestCase):
         return json.loads(result.stdout)
 
     def _run_cli_until(self, prompt, predicate, extra_args=None, max_attempts=3) -> dict:
-        """Yerel 3B modelin tool-use çıktısı gerçek testte doğası gereği
-        stokastik olduğu gözlendi (bazen yapılandırılmış tool_calls yerine
-        ham JSON metni üretiyor) — bu bir kod hatası değil, küçük modelin
-        bilinen bir sınırlaması (bkz. assistant/README.md). İçerik
-        kalitesine bağlı testler bu yüzden sınırlı sayıda tekrar dener;
-        güvenlik testleri (yazma aracı asla gösterilmez/çalıştırılmaz)
-        deterministik olduğundan bunu KULLANMAZ."""
+        """The local 3B model's tool-use output was observed in real testing
+        to be inherently stochastic (it sometimes produces raw JSON text
+        instead of structured tool_calls) — this is not a code bug but a known
+        limitation of small models (see assistant/README.md). Tests that depend
+        on content quality therefore retry a limited number of times; the
+        security tests (the write tool is never shown or executed) DO NOT use
+        this, being deterministic."""
         report = None
         for _ in range(max_attempts):
             report = self._run_cli(prompt, extra_args)
@@ -48,14 +49,14 @@ class TestAssistantIntegration(unittest.TestCase):
         return report
 
     def test_simple_prompt_routes_local_with_real_generation(self):
-        """3B model gerçek testte basit isteklerde bile ara sıra gereksiz
-        araç çağırıyor (küçük modelin zayıf yönü) — bu yüzden tool_calls
-        boş OLMAK ZORUNDA değil, ama ASLA yazma/silme aracı olmamalı
-        (bkz. LOCAL_SAFE_TOOL_NAMES, gerçek testte yakalanan halüsinasyon
-        write_file çağrısına karşı savunma)."""
+        """In real testing the 3B model occasionally makes unnecessary tool
+        calls even on simple requests (a weakness of small models) — so
+        tool_calls does NOT HAVE to be empty, but it must NEVER contain a
+        write or delete tool (see LOCAL_SAFE_TOOL_NAMES, the defence against
+        the hallucinated write_file call caught in real testing)."""
         from assistant.conversation import LOCAL_SAFE_TOOL_NAMES
 
-        report = self._run_cli("Sadece 'merhaba' kelimesiyle cevap ver.")
+        report = self._run_cli("Reply with the single word 'hello'.")
         self.assertEqual(report["status"], "ok")
         self.assertEqual(report["route"], "local")
         for call in report["tool_calls"]:
@@ -64,9 +65,9 @@ class TestAssistantIntegration(unittest.TestCase):
         self.assertGreater(len(report["content"]), 0)
 
     def test_local_tool_use_never_exposes_write_tools(self):
-        """Yerel modele write_file/delete_file/rename_file'ın hiç
-        gösterilmediğini doğrudan doğrular — gerçek mcp-tools + gerçek
-        Ollama ile."""
+        """Directly verifies that write_file/delete_file/rename_file are
+        never shown to the local model — with real mcp-tools and real
+        Ollama."""
         from assistant.conversation import _mcp_tools_to_ollama_tools, LOCAL_SAFE_TOOL_NAMES
 
         with MCPClient(cwd="../mcp-tools") as client:
@@ -79,20 +80,20 @@ class TestAssistantIntegration(unittest.TestCase):
         self.assertIn("hardware_tier", tool_names)
 
     def test_local_prompt_that_needs_tool_gets_real_correct_answer(self):
-        """Faz 4'te gerçek testte önce başarısız olan tam senaryo: kısa
-        bir donanım sorusu (şema filtresi düzeltmesi sayesinde) doğru
-        cevap üretir — bkz. assistant/README.md. Küçük modelin bilinen
-        değişkenliği nedeniyle sınırlı tekrar denenir (bkz.
+        """The exact scenario that failed first in real testing in Phase 4: a
+        short hardware question now produces the right answer (thanks to the
+        schema filter fix) — see assistant/README.md. It is retried a limited
+        number of times because of the small model's known variability (see
         _run_cli_until).
 
-        Router'a eklenen 'araç gerekebilir mi' sinyali sayesinde bu
-        prompt artık `balanced` tercihinde varsayılan olarak buluta
-        düşüyor (bkz. router/tests/test_integration.py
+        Thanks to the 'might this need tools?' signal added to the router,
+        this prompt now falls through to the cloud by default under the
+        `balanced` preference (see router/tests/test_integration.py
         test_short_tool_prompt_decide_only_routes_cloud_on_this_low_tier_machine)
-        — burada yerel tool-use'ın (gizlilik/maliyet tercih edildiğinde
-        hâlâ kullanılacak yol olduğundan) doğru çalıştığını doğrulamak
-        için --prefer cost ile yerel zorlanıyor."""
-        prompt = "Bu makinede kaç CPU çekirdeği var? Aracı kullanarak öğren, kısa cevap ver."
+        — local is forced here with --prefer cost, to verify that local
+        tool-use works correctly (since it is still the path used when privacy
+        or cost is preferred)."""
+        prompt = "How many CPU cores does this machine have? Use the tool to find out, answer briefly."
         report = self._run_cli_until(
             prompt,
             predicate=lambda r: r.get("status") == "ok" and "6" in r.get("content", ""),
@@ -103,19 +104,20 @@ class TestAssistantIntegration(unittest.TestCase):
         self.assertIn("6", report["content"])
 
     def test_history_persists_across_separate_processes_via_history_file(self):
-        """--history-file ile konuşma geçmişi AYRI süreçler arasında
-        kalıcı — REPL veya --prompt bağımsız her çalıştırma önceki
-        turları hatırlar. Yerel yol (kimlik bilgisi gerekmez) ile gerçek
-        Ollama üretimiyle doğrulanır. İkinci turun içerik kalitesi (isim
-        hatırlama) küçük modelin bilinen değişkenliği nedeniyle sınırlı
-        tekrar dener — her denemeden önce geçmiş dosyası ilk turdan sonraki
-        haline sıfırlanır (bkz. _run_cli_until, assistant/README.md)."""
+        """With --history-file the conversation history is persistent ACROSS
+        SEPARATE processes — every run remembers the earlier turns, whether
+        REPL or --prompt. Verified with real Ollama generation over the local
+        path (no credentials needed). The second turn's content quality
+        (remembering the name) retries a limited number of times because of the
+        small model's known variability — before each attempt the history file
+        is reset to its state after the first turn (see _run_cli_until,
+        assistant/README.md)."""
         fd, history_path = tempfile.mkstemp(suffix=".json")
         os.close(fd)
-        os.remove(history_path)  # assistant kendisi oluştursun
+        os.remove(history_path)  # let the assistant create it itself
         try:
             first = self._run_cli(
-                "Benim adım Ahmet, bunu unutma.", ["--history-file", history_path]
+                "My name is Ahmet, don't forget it.", ["--history-file", history_path]
             )
             self.assertEqual(first["route"], "local")
             self.assertTrue(os.path.exists(history_path))
@@ -123,7 +125,7 @@ class TestAssistantIntegration(unittest.TestCase):
                 history_after_first_turn = json.load(f)
             self.assertEqual(
                 history_after_first_turn[0],
-                {"role": "user", "content": "Benim adım Ahmet, bunu unutma."},
+                {"role": "user", "content": "My name is Ahmet, don't forget it."},
             )
 
             second = None
@@ -131,7 +133,7 @@ class TestAssistantIntegration(unittest.TestCase):
                 with open(history_path, "w", encoding="utf-8") as f:
                     json.dump(history_after_first_turn, f, ensure_ascii=False)
                 second = self._run_cli(
-                    "Benim adım neydi? Sadece ismi söyle.", ["--history-file", history_path]
+                    "What was my name? Just say the name.", ["--history-file", history_path]
                 )
                 if "Ahmet" in second["content"]:
                     break
@@ -143,34 +145,34 @@ class TestAssistantIntegration(unittest.TestCase):
                 os.remove(history_path)
 
     @unittest.skipUnless(
-        HAS_CLOUD_CREDENTIALS, "ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN ayarlı değil"
+        HAS_CLOUD_CREDENTIALS, "ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN is not set"
     )
     def test_complex_prompt_routes_cloud_and_uses_real_hardware_tool(self):
         long_prompt = (
-            "Bu makinede kaç tane CPU çekirdeği var, toplam RAM ne kadar, ve "
-            "ayrık bir grafik kartı var mı yok mu, bunların hepsini lütfen "
-            "gerçek donanım tespit aracını kullanarak öğren ve bana net bir "
-            "şekilde madde madde özetle, sakın tahmin etme, sadece aracın "
-            "döndürdüğü gerçek verilere dayan ve kısa tut."
+            "How many CPU cores does this machine have, how much total RAM, and "
+            "is there a discrete graphics card — please find all of this out "
+            "using the real hardware detection tool and summarise it for me "
+            "clearly as bullet points, never guess, rely only on the real data "
+            "the tool returns, and keep it short."
         )
         report = self._run_cli(long_prompt)
         self.assertEqual(report["status"], "ok")
         self.assertEqual(report["route"], "cloud")
         self.assertEqual(report["tool_calls"], [{"name": "hardware_tier", "input": {}}])
-        self.assertIn("6", report["content"])  # gerçek çekirdek sayısı
-        self.assertIn("15", report["content"])  # gerçek RAM (~15.4 GB)
+        self.assertIn("6", report["content"])  # the real core count
+        self.assertIn("15", report["content"])  # the real RAM (~15.4 GB)
 
     @unittest.skipUnless(
-        HAS_CLOUD_CREDENTIALS, "ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN ayarlı değil"
+        HAS_CLOUD_CREDENTIALS, "ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN is not set"
     )
     def test_mcp_client_and_run_cloud_turn_real_end_to_end(self):
-        """CLI'ı atlayıp iç API'yi doğrudan kullanarak (gerçek mcp-tools
-        subprocess'i + gerçek Claude API) aynı akışı doğrular."""
+        """Verifies the same flow by bypassing the CLI and using the internal
+        API directly (a real mcp-tools subprocess + the real Claude API)."""
         from assistant.conversation import run_cloud_turn
 
         with MCPClient(cwd="../mcp-tools") as client:
             result = run_cloud_turn(
-                "Bu makinenin donanım tier'ı nedir? Aracı kullanarak gerçekten öğren.",
+                "What is this machine's hardware tier? Really find out using the tool.",
                 client,
             )
         self.assertEqual(result["route"], "cloud")

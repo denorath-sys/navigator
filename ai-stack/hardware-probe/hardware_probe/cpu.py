@@ -30,8 +30,8 @@ def parse_cpuinfo(text: str) -> dict:
     if core_ids_per_physical:
         physical_count = sum(len(cores) for cores in core_ids_per_physical.values())
     else:
-        # physical id/core id alanları yoksa (bazı ARM/sanal ortamlar), tek
-        # tek çekirdek varsayımı en güvenli fallback.
+        # If the physical id/core id fields are absent (some ARM/virtual
+        # environments), assuming one core each is the safest fallback.
         physical_count = logical_count
 
     return {

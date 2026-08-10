@@ -1,12 +1,12 @@
-"""Donanım sinyallerini bir Navigator AI model tier'ına eşler.
+"""Maps hardware signals to a Navigator AI model tier.
 
-Eşikler Faz 2 taslağıdır — `local-runtime` gerçek model benchmark verisi
-ürettikçe (Faz 3+) yeniden ayarlanacaktır.
+The thresholds are a Phase 2 draft — they will be retuned (Phase 3+) as
+`local-runtime` produces real model benchmark data.
 
-  - "minimal": RAM < 8 GB, ayrık GPU yok        → sadece bulut önerilir
-  - "low":     RAM >= 8 GB, ayrık GPU eşiği yok  → küçük yerel model (~3B)
-  - "mid":     RAM >= 16 GB ve VRAM >= 6 GB      → orta model (~8B)
-  - "high":    RAM >= 32 GB ve VRAM >= 12 GB     → büyük model (~14B+)
+  - "minimal": RAM < 8 GB, no discrete GPU        → cloud only is recommended
+  - "low":     RAM >= 8 GB, discrete GPU threshold not met → small local model (~3B)
+  - "mid":     RAM >= 16 GB and VRAM >= 6 GB      → medium model (~8B)
+  - "high":    RAM >= 32 GB and VRAM >= 12 GB     → large model (~14B+)
 """
 
 TIERS = ("minimal", "low", "mid", "high")
@@ -27,16 +27,16 @@ def decide_tier(memory_gb: float, gpu_devices: list[dict]) -> dict:
 
     if memory_gb >= 32 and vram_gb >= 12:
         tier = "high"
-        reason = f"RAM {memory_gb} GB >= 32 ve dedicated VRAM {vram_gb} GB >= 12"
+        reason = f"RAM {memory_gb} GB >= 32 and dedicated VRAM {vram_gb} GB >= 12"
     elif memory_gb >= 16 and vram_gb >= 6:
         tier = "mid"
-        reason = f"RAM {memory_gb} GB >= 16 ve dedicated VRAM {vram_gb} GB >= 6"
+        reason = f"RAM {memory_gb} GB >= 16 and dedicated VRAM {vram_gb} GB >= 6"
     elif memory_gb >= 8:
         tier = "low"
-        reason = f"RAM {memory_gb} GB >= 8 ama mid eşiği (16 GB + 6 GB VRAM) karşılanmadı"
+        reason = f"RAM {memory_gb} GB >= 8 but the mid threshold (16 GB + 6 GB VRAM) was not met"
     else:
         tier = "minimal"
-        reason = f"RAM {memory_gb} GB < 8 — yerel model önerilmez"
+        reason = f"RAM {memory_gb} GB < 8 — no local model recommended"
 
     return {
         "tier": tier,

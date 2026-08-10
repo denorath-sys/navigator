@@ -1,4 +1,4 @@
-"""Navigator OS mcp-tools — Navigator asistanına MCP üzerinden araç erişimi sağlar."""
+"""Navigator OS mcp-tools — provides the Navigator assistant with tool access over MCP."""
 from .server import MCPServer
 
 __all__ = ["MCPServer"]

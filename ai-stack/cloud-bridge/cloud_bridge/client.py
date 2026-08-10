@@ -1,14 +1,14 @@
-"""Anthropic Claude API için ince istemci — stdlib-only (harici bağımlılık yok).
+"""A thin client for the Anthropic Claude API — stdlib-only (no external dependencies).
 
-Not: Resmi `anthropic` Python SDK'sı kimlik bilgisi çözümlemesini (API key →
+Note: the official `anthropic` Python SDK does credential resolution (API key →
 auth token → OAuth profili → Workload Identity Federation → disk profili)
-otomatik yapar ve önerilen yoldur. Burada diğer ai-stack modülleriyle aynı
-stdlib-only ilkesi korunmak istendiği için (Navigator OS'un rpm-ostree/
+automatically and is the recommended path. Raw HTTP is used here because the
+same stdlib-only principle as the other ai-stack modules was to be preserved
 Containerfile paketleme modeliyle uyumlu — bkz. README "Neden resmi SDK
-değil") ham HTTP kullanıldı. Sadece ANTHROPIC_API_KEY ve
-ANTHROPIC_AUTH_TOKEN destekleniyor (ortam değişkeni veya
+pip dependencies). Only ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN are
+supported (from an environment variable or
 `~/.config/navigator/env` — bkz. `config.py`); OAuth profili/WIF
-çözümlemesi YOK — bu bilinen bir sınırlama.
+resolution — a known limitation.
 """
 import json
 import urllib.error
@@ -25,7 +25,7 @@ DEFAULT_MODEL = "claude-opus-4-8"
 
 
 class AnthropicError(Exception):
-    """Anthropic API'ye bağlanılamadığında, kimlik bilgisi eksikse veya bir istek başarısız olduğunda."""
+    """Raised when the Anthropic API cannot be reached, credentials are missing, or a request fails."""
 
 
 class AnthropicClient:
@@ -37,17 +37,17 @@ class AnthropicClient:
     ):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        # Sadece testler için: normalde yol os.environ'dan (HOME/
-        # XDG_CONFIG_HOME) çözülür — bkz. config.config_path().
+        # For tests only: normally the path is resolved from os.environ
+        # (HOME/XDG_CONFIG_HOME) — see config.config_path().
         self.credentials_path = credentials_path
 
     def resolve_credentials(self) -> CredentialResolution:
-        """Kimlik bilgisini HER ÇAĞRIDA yeniden çözer (önbelleklenmez).
+        """Re-resolve the credential ON EVERY CALL (it is not cached).
 
-        Böylece uzun ömürlü bir istemci nesnesi, kullanıcı dosyayı
-        oluşturduktan/düzelttikten sonra yeniden başlatmaya gerek kalmadan
-        onu görür; maliyet, çağrı başına birkaç yüz baytlık bir dosya
-        okuması (dosya yoksa tek bir stat).
+        This way a long-lived client object sees the file after the user
+        creates or fixes it, without needing a restart; the cost is reading a
+        file of a few hundred bytes per call (a single stat if the file does
+        not exist).
         """
         return resolve_credentials(path=self.credentials_path)
 
@@ -60,25 +60,24 @@ class AnthropicClient:
 
         auth_token = values.get("ANTHROPIC_AUTH_TOKEN")
         if auth_token:
-            # OAuth token'lar Authorization: Bearer ile gönderilir (x-api-key
-            # ile DEĞİL) ve anthropic-beta: oauth-2025-04-20 header'ı gerekir.
+            # OAuth tokens are sent with Authorization: Bearer (NOT with
+            # x-api-key) and require the anthropic-beta: oauth-2025-04-20 header.
             return {
                 "Authorization": f"Bearer {auth_token}",
                 "anthropic-beta": "oauth-2025-04-20",
             }
 
         raise AnthropicError(
-            "Kimlik bilgisi yok: ANTHROPIC_API_KEY veya ANTHROPIC_AUTH_TOKEN "
-            "ortam değişkeni ya da ~/.config/navigator/env dosyası gerekli."
+            "No credentials: an ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN "
+            "environment variable, or a ~/.config/navigator/env file, is required."
         )
 
     def is_available(self) -> bool:
-        """Bir kimlik bilgisinin çözülüp çözülmediğini kontrol eder —
-        GERÇEK BİR API ÇAĞRISI YAPMAZ. Ollama istemcisinin
-        is_available()'ından farklı olarak (bkz. local-runtime/client.py):
-        Anthropic API'sinde ücretsiz bir "ping" uç noktası olmadığından,
-        gereksiz/anlamsız bir ağ çağrısı yapmak yerine sadece kimlik
-        bilgisinin varlığı kontrol ediliyor.
+        """Check whether a credential resolves — it MAKES NO REAL API CALL.
+        Unlike the Ollama client's is_available() (see
+        local-runtime/client.py): because the Anthropic API has no free "ping"
+        endpoint, only the presence of a credential is checked rather than
+        making a pointless network call.
         """
         return bool(self.resolve_credentials().values)
 
@@ -89,9 +88,9 @@ class AnthropicClient:
         max_tokens: int = 1024,
         system: str | None = None,
     ) -> dict:
-        """POST /v1/messages ile tek turluk bir tamamlama isteği gönderir.
+        """Send a single-turn completion request with POST /v1/messages.
 
-        `send_messages()`'ın tek kullanıcı mesajlı, tool'suz özel hali.
+        A special case of `send_messages()` with one user message and no tools.
         """
         return self.send_messages(
             [{"role": "user", "content": prompt}], model=model, max_tokens=max_tokens, system=system
@@ -105,12 +104,12 @@ class AnthropicClient:
         system: str | None = None,
         tools: list[dict] | None = None,
     ) -> dict:
-        """POST /v1/messages ile çok turlu bir mesaj listesi gönderir.
+        """Send a multi-turn message list with POST /v1/messages.
 
-        `assistant/` modülünün tool-use döngüsü için: `tools` verilirse
-        Claude yanıtında `tool_use` içerik blokları dönebilir
-        (`stop_reason: "tool_use"`); çağıran taraf bunları çalıştırıp
-        `tool_result` mesajıyla `messages`'a ekleyip tekrar çağırmalı.
+        For the `assistant/` module's tool-use loop: if `tools` is given,
+        Claude's response can contain `tool_use` content blocks
+        (`stop_reason: "tool_use"`); the caller must execute them, append them
+        to `messages` as a `tool_result` message, and call again.
         """
         headers = {
             "Content-Type": "application/json",
@@ -135,4 +134,4 @@ class AnthropicClient:
             with urllib.request.urlopen(request, timeout=self.timeout) as resp:
                 return json.loads(resp.read())
         except (urllib.error.URLError, OSError, ValueError) as e:
-            raise AnthropicError(f"Claude API isteği başarısız: {e}") from e
+            raise AnthropicError(f"Claude API request failed: {e}") from e

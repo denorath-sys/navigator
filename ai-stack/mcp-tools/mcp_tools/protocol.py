@@ -1,9 +1,9 @@
-"""MCP stdio transport: satır sonuyla ayrılmış JSON-RPC 2.0 mesajları.
+"""MCP stdio transport: newline-delimited JSON-RPC 2.0 messages.
 
-MCP spesifikasyonu (https://modelcontextprotocol.io) stdio transport için
-mesajların newline ile ayrılmış, içinde newline barındırmayan JSON
-nesneleri olmasını gerektirir (LSP'nin Content-Length header'lı çerçeveleme
-yöntemi KULLANILMAZ — MCP daha basit).
+For the stdio transport, the MCP specification
+(https://modelcontextprotocol.io) requires messages to be newline-delimited
+JSON objects containing no embedded newline (LSP's Content-Length header
+framing is NOT USED — MCP is simpler).
 """
 import json
 import sys
@@ -15,7 +15,7 @@ def read_message(stream=sys.stdin):
         return None  # EOF
     line = line.strip()
     if not line:
-        return read_message(stream)  # boş satırları atla
+        return read_message(stream)  # skip blank lines
     return json.loads(line)
 
 

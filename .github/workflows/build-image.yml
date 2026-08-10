@@ -1,10 +1,10 @@
-# Navigator OS — İmaj Build & Push Pipeline (Faz 1 taslağı)
+# Navigator OS — Image Build & Push Pipeline (Phase 1 draft)
 #
-# Bu workflow, image/Containerfile'ı GitHub'ın kendi runner'ında (GitHub-hosted,
-# ücretsiz/paylaşımlı kaynak) build eder ve ghcr.io container registry'sine
-# push eder. Yerel ortamda ağır build/compose işlemi ÇALIŞTIRILMAZ — bu
-# pipeline manuel tetikleme (workflow_dispatch) veya main'e push ile
-# başlatılır; tetikleme kararı proje sahibine aittir.
+# This workflow builds image/Containerfile on GitHub's own runner
+# (GitHub-hosted, free/shared resources) and pushes it to the ghcr.io container
+# registry. The heavy build/compose operation is NOT RUN locally — that is a
+# pipeline started by a manual trigger (workflow_dispatch) or a push to main;
+# started; the decision to trigger it belongs to the project owner.
 
 name: Build Navigator Image
 
@@ -14,16 +14,16 @@ on:
     branches: [main]
     paths:
       - "image/Containerfile"
-      # Katman 4'ün /etc/skel şablonları (kimlik bilgisi dosyası).
+      # Layer 4's /etc/skel templates (the credential file).
       - "image/skel/**"
-      # theme/palette.json (Katman 3) ve hyprland/hyprland.conf (Katman 4)
-      # artık imaja gerçekten kopyalanıyor.
+      # theme/palette.json (Layer 3) and hyprland/hyprland.conf (Layer 4)
+      # is now genuinely copied into the image.
       - "theme/**"
       - "hyprland/**"
-      # ai-stack/ artık imaja gerçekten kopyalanıyor (Containerfile Katman 5),
-      # dolayısıyla ai-stack'teki bir değişiklik imajı bayatlatıyor.
+      # ai-stack/ is now genuinely copied into the image (Containerfile Layer 5),
+      # so a change in ai-stack makes the image stale.
       - "ai-stack/**"
-      # shell/*.qml aynı şekilde (Katman 7).
+      # shell/*.qml likewise (Layer 7).
       - "shell/**"
       - ".github/workflows/build-image.yml"
 
@@ -79,5 +79,5 @@ jobs:
       - name: Summary
         if: github.event_name != 'pull_request'
         run: |
-          echo "### Navigator imajı push edildi" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Navigator image pushed" >> "$GITHUB_STEP_SUMMARY"
           echo "\`${{ steps.push.outputs.registry-paths }}\`" >> "$GITHUB_STEP_SUMMARY"

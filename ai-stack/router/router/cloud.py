@@ -1,4 +1,4 @@
-"""cloud-bridge'i subprocess ile çağırır — route kararı "cloud" olduğunda."""
+"""Invokes cloud-bridge as a subprocess — when the routing decision is "cloud"."""
 import json
 import subprocess
 

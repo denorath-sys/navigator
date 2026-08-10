@@ -9,29 +9,30 @@ from .status import route_request
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Navigator OS router — isteği yerel/bulut arasında yönlendirme kararı üretir."
+        description="Navigator OS router — produces a local/cloud routing decision for a request."
     )
-    parser.add_argument("--prompt", required=True, help="Yönlendirilecek kullanıcı isteği")
+    parser.add_argument("--prompt", required=True, help="The user request to route")
     parser.add_argument("--prefer", choices=PREFERENCES, default="balanced")
-    parser.add_argument("--pretty", action="store_true", help="JSON çıktısını girintili yazdır")
+    parser.add_argument("--pretty", action="store_true", help="Print the JSON output indented")
     parser.add_argument(
         "--decide-only",
         action="store_true",
         help=(
-            "Sadece route kararını (complexity/hardware_tier/model_ready/route/"
-            "reasoning) döner, local-runtime veya cloud-bridge'i ÇALIŞTIRMAZ "
-            "(örn. ai-stack/assistant kendi üretim akışını kuracaksa)"
+            "Return only the routing decision (complexity/hardware_tier/"
+            "model_ready/route/reasoning) and DO NOT RUN local-runtime or "
+            "cloud-bridge (e.g. when ai-stack/assistant builds its own "
+            "generation flow)"
         ),
     )
     parser.add_argument(
         "--local-runtime-path",
         default="../local-runtime",
-        help="ai-stack/local-runtime dizininin yolu (varsayılan: ../local-runtime)",
+        help="Path to the ai-stack/local-runtime directory (default: ../local-runtime)",
     )
     parser.add_argument(
         "--cloud-bridge-path",
         default="../cloud-bridge",
-        help="ai-stack/cloud-bridge dizininin yolu (varsayılan: ../cloud-bridge)",
+        help="Path to the ai-stack/cloud-bridge directory (default: ../cloud-bridge)",
     )
     args = parser.parse_args()
 

@@ -1,13 +1,13 @@
-"""Hardware tier'ından önerilen yerel Ollama modeline eşleme.
+"""Mapping from the hardware tier to a recommended local Ollama model.
 
-Taslak eşleme (Faz 2) — model AĞIRLIKLARI burada indirilmiyor, sadece isim
-önerisi üretiliyor. Gerçek indirme ayrı bir onay adımı gerektirir (bkz.
-README.md "İndirme gerektiren kısım"). Eşleme, `local-runtime` gerçek
-kullanım/benchmark verisi biriktikçe Faz 3+'ta revize edilecek.
+A draft mapping (Phase 2) — no model WEIGHTS are downloaded here, only a name
+recommendation is produced. A real download requires a separate approval step
+(see README.md). The mapping will be revised in Phase 3+ as `local-runtime`
+accumulates real usage and benchmark data.
 """
 
 TIER_MODEL_MAP = {
-    "minimal": None,  # yerel model önerilmez — router cloud-bridge'e yönlendirmeli
+    "minimal": None,  # no local model recommended — the router should route to cloud-bridge
     "low": {"model": "llama3.2:3b", "approx_size_gb": 2.0},
     "mid": {"model": "llama3.1:8b", "approx_size_gb": 4.7},
     "high": {"model": "llama3.1:70b", "approx_size_gb": 40.0},

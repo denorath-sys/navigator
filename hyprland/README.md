@@ -1,195 +1,199 @@
 # hyprland/
 
-Navigator masaüstünün compositor katmanı: [Hyprland](https://hyprland.org) (Wayland).
+The compositor layer of the Navigator desktop:
+[Hyprland](https://hyprland.org) (Wayland).
 
-- `hyprland.conf` — Faz 1 taban yapılandırması: keybind'ler, workspace davranışı,
-  pencere yönetimi ve animasyon ayarları.
-- Görsel kimlik (`theme/palette.json`) ile senkron tutulan renk değerleri
-  (aktif kenarlık gradyanı vb.) burada sabit kodlanmıştır; ileride tema
-  dosyalarından otomatik üretilecek şekilde script'e bağlanabilir. Bu
-  tekrar artık **CI'da gerçekten doğrulanıyor** — imajdaki
-  `hyprland.conf`'un `col.active_border` gradyanı/açısı ve `shadow`
-  rengi, imajdaki `palette.json` ile karşılaştırılıyor (aşağıya bkz.).
-- Super+Space kısayolu Faz 4'te `ai-stack/router`'a gerçekten bağlandı
-  (`qs ipc call assistant toggle` → `shell/AssistantPanel.qml`).
-- `exec-once` ile otomatik başlatma (aşağıya bkz.).
+- `hyprland.conf` — the Phase 1 base configuration: keybindings, workspace
+  behaviour, window management and animation settings.
+- Colour values kept in sync with the visual identity
+  (`theme/palette.json`) — the active border gradient and so on — are
+  hard-coded here; they could later be wired to a script that generates them
+  from the theme files. This duplication is now **genuinely verified in CI**
+  — the `col.active_border` gradient/angle and the `shadow` colour of the
+  `hyprland.conf` in the image are compared against the `palette.json` in the
+  image (see below).
+- The Super+Space shortcut was genuinely wired to `ai-stack/router` in
+  Phase 4 (`qs ipc call assistant toggle` → `shell/AssistantPanel.qml`).
+- Autostart via `exec-once` (see below).
 
-## Otomatik başlatma (`exec-once`)
+## Autostart (`exec-once`)
 
-Bu dosyada uzun süre hiç `exec-once` yoktu — imajda bulunan bileşenleri
-hiçbir şey başlatmıyordu. Katman 7 ile shell imaja girdikten sonra iki
-giriş eklendi:
+For a long time this file had no `exec-once` at all — nothing was starting
+the components present in the image. Once the shell entered the image with
+Layer 7, two entries were added:
 
-| Komut | Neden |
+| Command | Why |
 |---|---|
-| `qs -p /usr/share/navigator/shell/shell.qml` | Navigator shell (Katman 7'nin koyduğu yol) |
-| `/usr/libexec/polkit-mate-authentication-agent-1` | Ajan yoksa GUI'den yetki isteyen işlemler kullanıcıya hiç sorulmadan sessizce reddedilir |
-| `hyprpaper` | Navigator duvar kâğıdı; olmadan masaüstü stok Hyprland görselini gösteriyordu |
+| `qs -p /usr/share/navigator/shell/shell.qml` | The Navigator shell (the path Layer 7 installs it to) |
+| `/usr/libexec/polkit-mate-authentication-agent-1` | Without an agent, operations requesting authorisation from the GUI are silently denied without ever asking the user |
+| `hyprpaper` | The Navigator wallpaper; without it the desktop was showing the stock Hyprland image |
 
-**Bilinçli olarak eklenmeyenler**, gerekçeleriyle config'in içinde de
-yazılı:
+**Deliberately not added**, with the reasoning also written inside the
+config:
 
-- **waybar** — Navigator'ın kendi üst paneli var (`shell/Bar.qml`); ikisi
-  birlikte çalışırsa iki panel üst üste biner.
-- **hypridle** — kendi config dosyasını (`hypridle.conf`) gerektiriyor
-  ve Navigator henüz yazmadı. Config'siz başlatmak ilk saniyede pes eden
-  bir daemon demek olurdu. (**hyprpaper** aynı gerekçeyle uzun süre
-  burada değildi; artık hem `hyprpaper.conf`'u hem duvar kâğıdı varlığı
-  olduğu için listeye girdi — aşağıya bkz.)
-- **NetworkManager, pipewire, wireplumber** — systemd tarafından
-  yönetiliyorlar (sistem servisi ve socket ile tetiklenen kullanıcı
-  servisleri), compositor'ın işi değil.
+- **waybar** — Navigator has its own top panel (`shell/Bar.qml`); running
+  both would stack two panels on top of each other.
+- **hypridle** — it requires its own config file (`hypridle.conf`), which
+  Navigator has not written yet. Starting it without a config would mean a
+  daemon that gives up in the first second. (**hyprpaper** was absent for a
+  long time for the same reason; it has now joined the list because both its
+  `hyprpaper.conf` and the wallpaper asset exist — see below.)
+- **NetworkManager, pipewire, wireplumber** — these are managed by systemd
+  (a system service and socket-activated user services), and are not the
+  compositor's job.
 
-### `hyprpaper.conf` — duvar kâğıdı
+### `hyprpaper.conf` — the wallpaper
 
-`hyprpaper.conf` de `hyprland.conf` ile aynı yolu izliyor: `/etc/skel`
-üzerinden yeni kullanıcının `~/.config/hypr/`'ına kopyalanıyor, yani
-kullanıcı duvar kâğıdını değiştirebiliyor ve seçimi imaj
-güncellemelerinde ezilmiyor.
+`hyprpaper.conf` follows the same path as `hyprland.conf`: it is copied via
+`/etc/skel` into a new user's `~/.config/hypr/`, so the user can change the
+wallpaper and their choice is not overwritten by image updates.
 
-Görsel `theme/wallpaper.png` (marka görseli, Katman 3 ile
-`/usr/share/navigator/theme/wallpaper.png`). Ayrıntı ve ekranda
-gerçekten göründüğünün nasıl doğrulandığı için bkz. `theme/README.md`,
-"Duvar kâğıdı".
+The asset is `theme/wallpaper.png` (the brand image, placed at
+`/usr/share/navigator/theme/wallpaper.png` by Layer 3). For details, and for
+how it is verified to really appear on screen, see `theme/README.md`,
+"Wallpaper".
 
-`wallpaper = , <yol>` satırındaki boş monitör alanı "tüm monitörler"
-demek; monitör adı yazmak taşınabilir olmazdı (CI'daki QEMU VM'inde
-monitör adı `Virtual-1`, gerçek donanımda başka).
+The empty monitor field in the `wallpaper = , <path>` line means "all
+monitors"; naming a monitor would not be portable (in CI's QEMU VM the
+monitor is called `Virtual-1`, and it is something else on real hardware).
 
-CI iki ayrı şeyi doğruluyor: hyprpaper süreci gerçekten ayakta mı ve
-`hyprctl hyprpaper listloaded` Navigator'ın duvar kâğıdını bildiriyor mu.
-Asıl kanıt ise görsel — ekran görüntüsü `theme/wallpaper.png` ile blok
-bazında karşılaştırılıyor (bkz. `theme/README.md`); hyprpaper hiç
-başlamazsa ya da başka bir görsel gösterilirse o iddia düşer.
+CI verifies two separate things: whether the hyprpaper process is really up,
+and whether `hyprctl hyprpaper listloaded` reports Navigator's wallpaper.
+The real proof, though, is visual — the screenshot is compared block by
+block against `theme/wallpaper.png` (see `theme/README.md`); if hyprpaper
+never starts, or a different image is shown, that assertion fails.
 
-### `exec-once` hedefleri CI'da doğrulanıyor
+### `exec-once` targets are verified in CI
 
-Yanlış yazılmış ya da paket değişimiyle kaybolmuş bir `exec-once`'ı
-Hyprland **sessizce yutar**: compositor yine açılır, sadece masaüstü
-eksik başlar ve hiçbir test kırılmaz. Bu yüzden CI, imajdaki
-`hyprland.conf`'tan `exec-once` satırlarını ayrıştırıp her hedefin
-imajda gerçekten çalıştırılabilir olduğunu kontrol ediyor.
+Hyprland **silently swallows** an `exec-once` that is misspelled or has
+disappeared through a package change: the compositor still comes up, the
+desktop merely starts incomplete, and no test breaks. CI therefore parses
+the `exec-once` lines out of the `hyprland.conf` in the image and checks
+that every target is genuinely executable in the image.
 
-Ayrıca Quickshell artık CI'da **elle başlatılmıyor** — Hyprland'ın kendi
-`exec-once`'ı başlatıyor ve test bunu doğruluyor. (Elle de başlatılsaydı
-ikinci bir örnek olur, `qs ipc` çağrılarının hangi örneğe gittiği
-belirsizleşirdi.)
+Quickshell is also no longer started **by hand** in CI — Hyprland's own
+`exec-once` starts it and the test verifies that. (Had it also been started
+by hand there would be a second instance, and it would become unclear which
+instance `qs ipc` calls were reaching.)
 
-## İmajdaki kurulum yolu (Katman 4)
+## Installation path in the image (Layer 4)
 
-`image/Containerfile` Katman 4, bu dosyayı imaja
-`/etc/skel/.config/hypr/hyprland.conf` olarak koyuyor. `useradd` yeni bir
-hesap açarken `/etc/skel`'i ev dizinine kopyaladığı için her yeni
-Navigator kullanıcısı bu config ile başlıyor; sonrasında kendi
-`~/.config/hypr/hyprland.conf`'unu serbestçe değiştirebiliyor ve imaj
-güncellemeleri bu dosyayı **ezmiyor** (`/etc/skel` yalnızca hesap
-oluşturma anında okunur).
+Layer 4 of `image/Containerfile` places this file into the image as
+`/etc/skel/.config/hypr/hyprland.conf`. Because `useradd` copies `/etc/skel`
+into the home directory when creating a new account, every new Navigator
+user starts with this config; afterwards they can freely modify their own
+`~/.config/hypr/hyprland.conf`, and image updates do **not** overwrite that
+file (`/etc/skel` is read only at account creation time).
 
-Bu mekanizmanın bootc-image-builder'ın oluşturduğu hesaplarda gerçekten
-işlediği varsayılmadı, ölçüldü: CI önce teşhis olarak sordu
-([run 30664668160](https://github.com/denorath-sys/navigator/actions/runs/30664668160)),
-gerçek cevap alındı — `navtest`'in ev dizini `/var/home/navtest` (ostree
-düzeni) ve içinde `.bashrc`/`.bash_profile` ile birlikte
-`.config/hypr/hyprland.conf` var, `/etc/skel`'dekiyle birebir aynı.
-Ölçüm kesin olduğu için kontrol artık **iddia**: bib veya taban imaj bu
-davranışı değiştirirse test kırılır.
+It was not assumed that this mechanism really works for accounts created by
+bootc-image-builder — it was measured: CI first asked as a diagnostic
+([run 30664668160](https://github.com/denorath-sys/navigator/actions/runs/30664668160))
+and got a real answer — `navtest`'s home directory is `/var/home/navtest`
+(the ostree layout) and it contains `.config/hypr/hyprland.conf` alongside
+`.bashrc`/`.bash_profile`, byte-identical to the one in `/etc/skel`. Since
+the measurement was conclusive, the check is now an **assertion**: if bib or
+the base image changes this behaviour, the test breaks.
 
-## Faz 2 — statik sözdizimi incelemesi
+## Phase 2 — static syntax review
 
-Geliştirme ortamı Debian/Pardus tabanlı olduğundan (Hyprland bu dağıtımda
-paketli değil) gerçek bir Hyprland compositor oturumunda çalıştırılamadı —
-bunun yerine `hyprland.conf`, Hyprland'ın belgelenmiş `hyprlang` söz
-dizimine göre satır satır statik olarak incelendi:
+Because the development environment is Debian/Pardus-based (Hyprland is not
+packaged on that distribution), it could not be run in a real Hyprland
+compositor session — instead `hyprland.conf` was reviewed statically, line
+by line, against Hyprland's documented `hyprlang` syntax:
 
-- Süslü parantez dengesi otomatik kontrol edildi: **OK**
-- `general`, `decoration` (iç içe `blur`/`shadow`), `animations`, `dwindle`,
-  `input` (iç içe `touchpad`) blokları güncel Hyprland söz dizimine uygun
-- ⚠️ **`gestures` bloğu hakkındaki bu değerlendirme YANLIŞTI** — aşağıya
-  bkz. "Statik incelemenin kaçırdığı gerçek hata"
-- Değişkenler (`$mainMod`, `$terminal` vb.) kullanılmadan önce tanımlı —
-  sıralama doğru (Hyprlang basit metin ikamesi yapar)
-- Tüm `bind`/`bindm` satırları geçerli dispatcher isimleri kullanıyor
+- Brace balance was checked automatically: **OK**
+- The `general`, `decoration` (with nested `blur`/`shadow`), `animations`,
+  `dwindle` and `input` (with nested `touchpad`) blocks conform to current
+  Hyprland syntax
+- ⚠️ **This assessment about the `gestures` block was WRONG** — see "The
+  real error the static review missed" below
+- Variables (`$mainMod`, `$terminal` and so on) are defined before use — the
+  ordering is correct (Hyprlang does simple text substitution)
+- All `bind`/`bindm` lines use valid dispatcher names
 
-**Sonuç:** Sözdizimsel bir hata bulunamadı — **ama bu sonuç eksikti.**
+**Conclusion:** no syntax error was found — **but that conclusion was
+incomplete.**
 
-## Statik incelemenin kaçırdığı gerçek hata
+## The real error the static review missed
 
-`gestures { workspace_swipe = true }` sözdizimsel olarak kusursuzdu ve
-Hyprland belgelerinde yıllarca böyleydi. Ama **Hyprland 0.51 jest
-sistemini baştan yazdı ve bu seçeneği kaldırdı**; imajdaki sürüm
-(0.51.1) onu görünce gerçek bir config hatası üretiyordu:
+`gestures { workspace_swipe = true }` was syntactically flawless, and had
+been documented that way in Hyprland for years. But **Hyprland 0.51 rewrote
+the gesture system and removed the option**; the version in the image
+(0.51.1) produced a real config error when it saw it:
 
 ```
 Config error in file /var/roothome/.config/hypr/hyprland.conf at line 113:
 config option <gestures:workspace_swipe> does not exist.
 ```
 
-Bu hata kullanıcının ekranında **kırmızı bir hata afişi** olarak
-duruyordu. Yakalanmasının hiçbir yolu olmadığı için değil — üç ayrı
-kontrol vardı ve üçü de sessiz kaldı:
+This error sat on the user's screen as a **red error banner**. Not because
+there was no way to catch it — there were three separate checks, and all
+three stayed silent:
 
-1. Statik sözdizimi incelemesi: hyprlang'a göre geçerli, seçeneğin var
-   olup olmadığını bilmesi mümkün değil.
-2. CI'daki `hyprctl getoption` kontrolleri: sadece beş belirli seçeneği
-   soruyordu, hatalı olan onların arasında değildi.
-3. CI'daki `grep -i "config error" /root/hyprland.log`: **"(yok)" bastı**
-   — yani yanlış güvence verdi. Hyprland bu hatayı o log'a o ifadeyle
-   yazmıyor.
+1. The static syntax review: valid as far as hyprlang is concerned, and it
+   has no way of knowing whether an option exists.
+2. The `hyprctl getoption` checks in CI: they asked about only five specific
+   options, and the faulty one was not among them.
+3. `grep -i "config error" /root/hyprland.log` in CI: it **printed
+   "(none)"** — that is, it gave false assurance. Hyprland does not write
+   this error to that log with that wording.
 
-Ortaya çıkaran şey **görsel doğruluk testinin ilk ekran görüntüsü**
-oldu: afiş ekranın tepesinde duruyordu. Ders, bu projede genel olarak
-geçerli: bir bileşenin çıktısı görselse, metinsel kontroller "sessiz
-kaldı" diye doğru çalıştığını göstermez.
+What surfaced it was **the first screenshot from the visual correctness
+test**: the banner was sitting at the top of the screen. The lesson applies
+generally in this project: if a component's output is visual, textual checks
+staying silent does not show that it works.
 
-Düzeltme iki parçalı: config'te yeni sözdizimi
-(`gesture = 3, horizontal, workspace`), ve CI'daki işe yaramaz log
-grep'i yerine compositor'a doğrudan soran gerçek bir iddia
-(`hyprctl configerrors`).
+The fix was in two parts: the new syntax in the config
+(`gesture = 3, horizontal, workspace`), and a real assertion that asks the
+compositor directly (`hyprctl configerrors`) in place of the useless log
+grep in CI.
 
-**Ve o iddia ilk denemede yanlış yazıldı** — aynı hataya bir kez daha
-düşerek: çıktı biçimi ÖLÇÜLMEDEN "no errors" dizgesi bekleniyordu.
-Hyprland 0.51 temiz durumda hiçbir şey basmıyor (boş çıktı), dolayısıyla
-config düzeltilmiş olmasına rağmen kontrol kırmızı yandı. Kural artık
-ölçüme dayanıyor: **boş VEYA "no errors" = temiz.**
+**And that assertion was written wrong on the first attempt** — falling into
+the same trap once more: the output format was NOT MEASURED, and a "no
+errors" string was expected. Hyprland 0.51 prints nothing at all in the
+clean case (empty output), so the check went red even though the config had
+been fixed. The rule is now based on measurement: **empty OR "no errors" =
+clean.**
 
-Bu sefer kontrolün boş yeşil olmadığı da aynı run içinde kanıtlanıyor:
-config'e bilerek var olmayan bir seçenek eklenip `hyprctl reload`
-yapılıyor, `configerrors`'ın gerçekten konuştuğu doğrulanıyor, sonra
-geri alınıp temizliği yeniden kontrol ediliyor. "Boş çıktı = temiz"
-kuralı bu kendi kendini sınama olmadan, komut hiç çalışmasa bile yeşil
-kalırdı.
+This time the check is also proven not to be vacuously green within the same
+run: a non-existent option is deliberately added to the config and
+`hyprctl reload` is run, `configerrors` is verified to genuinely speak up,
+and then it is reverted and the cleanliness re-checked. Without that
+self-test, the "empty output = clean" rule would stay green even if the
+command never ran at all.
 
-**Açık bir not:** `mouse_down`/`mouse_up` ile workspace geçişi `e+1`/`e-1`
-kullanıyor (satır 184-185) — bu, "sıradaki workspace" değil "bir sonraki/
-önceki **boş** workspace'e git" anlamına gelir. Sıralı geçiş kastedilmişse
-`+1`/`-1` olarak değiştirilmesi gerekebilir; şu an kasıtlı mı yoksa
-düzeltilmesi mi gerekiyor netleşmedi, olduğu gibi bırakıldı.
+**An open note:** workspace switching with `mouse_down`/`mouse_up` uses
+`e+1`/`e-1` (lines 184-185) — that means "go to the next/previous **empty**
+workspace", not "the next workspace in order". If sequential switching was
+intended, it may need changing to `+1`/`-1`; it is not settled whether this
+is deliberate or needs fixing, so it was left as is.
 
-**O zamanki sınırlama (artık geçerli değil):** Bu statik bir inceleme,
-gerçek compositor çalıştırılmadı — runtime doğrulaması Faz 3'e
-bırakılmıştı. Aşağıya bkz.
+**The limitation at the time (no longer applicable):** this was a static
+review and no real compositor was run — runtime verification had been left
+to Phase 3. See below.
 
-## Faz 4 — gerçek compositor'da runtime doğrulaması (CI)
+## Phase 4 — runtime verification on a real compositor (CI)
 
-`.github/workflows/build-disk-and-boot-test.yml`'deki `hyprland-test`
-job'ı artık bu dosyayı (`hyprland.conf`) gerçek bir Navigator disk
-imajında, gerçek bir Hyprland compositor'a **gerçekten yüklüyor** —
-statik inceleme değil, çalışan bir compositor.
+The `hyprland-test` job in
+`.github/workflows/build-disk-and-boot-test.yml` now **genuinely loads**
+this file (`hyprland.conf`) into a real Hyprland compositor, inside a real
+Navigator disk image — a running compositor, not a static review.
 
-Katman 4'ten beri test edilen dosya **imajın kendi dosyası**: daha önce
-runner'dan VM'e `scp` ile kopyalanıyordu (bir "CI taklidi"), şimdi
-`/etc/skel/.config/hypr/hyprland.conf` içinden `/root/.config/hypr/`'a
-alınıyor (test root olarak çalışıyor; `/etc/skel` sadece yeni hesaplara
-kopyalandığından root için elle almak gerekiyor). Ayrı bir adım imajdaki
-dosyanın repodakiyle **birebir aynı** olduğunu da doğruluyor — yani imaj
-bayatsa test yeşil kalmıyor.
+Since Layer 4, the file under test is **the image's own file**: previously
+it was copied from the runner to the VM with `scp` (a "CI simulation"), and
+now it is taken from `/etc/skel/.config/hypr/hyprland.conf` into
+`/root/.config/hypr/` (the test runs as root; since `/etc/skel` is only
+copied to new accounts, it has to be taken by hand for root). A separate
+step also verifies that the file in the image is **byte-identical** to the
+one in the repository — so the test does not stay green if the image is
+stale.
 
-Doğrulama, config'teki Hyprland'ın kendi varsayılanlarından **farklı**
-değerlerin gerçekten etkili olup olmadığını `hyprctl getoption -j` ile
-kontrol ederek yapılıyor (varsayılanlar Hyprland kaynağında —
-`ConfigValues.cpp` — doğrulandı, böylece eşleşme tesadüf değil):
+Verification is done by checking with `hyprctl getoption -j` whether values
+in the config that **differ** from Hyprland's own defaults are genuinely in
+effect (the defaults were verified in the Hyprland source —
+`ConfigValues.cpp` — so that a match is not a coincidence):
 
-| Ayar | Varsayılan | `hyprland.conf` | CI'da gerçek sonuç |
+| Setting | Default | `hyprland.conf` | Real result in CI |
 |---|---|---|---|
 | `general:border_size` | 1 | 2 | ✅ 2 |
 | `decoration:rounding` | 0 | 10 | ✅ 10 |
@@ -197,20 +201,20 @@ kontrol ederek yapılıyor (varsayılanlar Hyprland kaynağında —
 | `general:resize_on_border` | false (0) | true | ✅ 1 |
 | `input:touchpad:natural_scroll` | false (0) | true | ✅ 1 |
 
-Ayrıca `hyprctl binds -j` ile `$mainMod, RETURN, exec, $terminal`
-bind'inin gerçekten yüklendiği (RETURN tuşu → `kitty` çalıştırma)
-doğrulandı, ve `/root/hyprland.log`'da hiçbir "config error"/"syntax
-error" satırı bulunmadı.
+In addition, `hyprctl binds -j` verified that the
+`$mainMod, RETURN, exec, $terminal` binding is genuinely loaded (the RETURN
+key running `kitty`), and no "config error"/"syntax error" line was found in
+`/root/hyprland.log`.
 
-**Bilinen kalan sınırlama:** Bu, config'in *parse edilip uygulandığının*
-kanıtı — gerçek klavye/fare girdisiyle bind'lerin fiilen tetiklendiği
-(ör. gerçekten Süper+Enter'a basıp kitty'nin açıldığı) veya görsel
-render'ın (blur/shadow/animasyon) doğru göründüğü ayrıca test edilmedi;
-VNC display üzerinden headless bir CI koşusunda bu, ek karmaşıklık
-gerektirir ve şimdilik gerekli görülmedi.
+**Known remaining limitation:** this is proof that the config is *parsed and
+applied* — it was not separately tested that the bindings actually fire on
+real keyboard/mouse input (e.g. really pressing Super+Enter and kitty
+opening), nor that the visual rendering (blur/shadow/animation) looks
+correct; over a VNC display in a headless CI run that requires extra
+complexity and was not considered necessary for now.
 
-## Durum
+## Status
 
-Faz 2 — statik sözdizimi incelemesinden geçti. Faz 4'te CI'da gerçek bir
-Hyprland compositor'a **gerçekten yüklendi ve doğrulandı** (yukarıya
-bkz.) — artık sadece statik bir inceleme değil.
+Phase 2 — passed the static syntax review. In Phase 4 it was **genuinely
+loaded into and verified against a real Hyprland compositor** in CI (see
+above) — it is no longer only a static review.

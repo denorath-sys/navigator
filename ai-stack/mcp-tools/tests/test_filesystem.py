@@ -53,14 +53,14 @@ class TestReadFile(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = self.tmp.name
         with open(os.path.join(self.root, "hello.txt"), "w") as f:
-            f.write("merhaba dünya")
+            f.write("hello world")
 
     def tearDown(self):
         self.tmp.cleanup()
 
     def test_reads_file_content(self):
         content = read_file("hello.txt", root=self.root)
-        self.assertEqual(content, "merhaba dünya")
+        self.assertEqual(content, "hello world")
 
     def test_missing_file_raises(self):
         with self.assertRaises(FilesystemError):
@@ -92,15 +92,15 @@ class TestWriteFile(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = self.tmp.name
         with open(os.path.join(self.root, "existing.txt"), "w") as f:
-            f.write("eski içerik")
+            f.write("old content")
 
     def tearDown(self):
         self.tmp.cleanup()
 
     def test_writes_new_file(self):
-        write_file("new.txt", "merhaba dünya", root=self.root)
+        write_file("new.txt", "hello world", root=self.root)
         with open(os.path.join(self.root, "new.txt"), encoding="utf-8") as f:
-            self.assertEqual(f.read(), "merhaba dünya")
+            self.assertEqual(f.read(), "hello world")
 
     def test_returns_byte_count_message(self):
         result = write_file("new.txt", "abc", root=self.root)
@@ -109,14 +109,14 @@ class TestWriteFile(unittest.TestCase):
 
     def test_existing_file_without_overwrite_raises(self):
         with self.assertRaises(FilesystemError):
-            write_file("existing.txt", "yeni içerik", root=self.root)
+            write_file("existing.txt", "new content", root=self.root)
         with open(os.path.join(self.root, "existing.txt"), encoding="utf-8") as f:
-            self.assertEqual(f.read(), "eski içerik")
+            self.assertEqual(f.read(), "old content")
 
     def test_existing_file_with_overwrite_succeeds(self):
-        write_file("existing.txt", "yeni içerik", overwrite=True, root=self.root)
+        write_file("existing.txt", "new content", overwrite=True, root=self.root)
         with open(os.path.join(self.root, "existing.txt"), encoding="utf-8") as f:
-            self.assertEqual(f.read(), "yeni içerik")
+            self.assertEqual(f.read(), "new content")
 
     def test_path_traversal_raises(self):
         with self.assertRaises(FilesystemError):
@@ -179,7 +179,7 @@ class TestRenameFile(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = self.tmp.name
         with open(os.path.join(self.root, "kaynak.txt"), "w") as f:
-            f.write("içerik")
+            f.write("content")
         with open(os.path.join(self.root, "hedef-var.txt"), "w") as f:
             f.write("eski hedef")
 
@@ -190,7 +190,7 @@ class TestRenameFile(unittest.TestCase):
         rename_file("kaynak.txt", "yeni-ad.txt", root=self.root)
         self.assertFalse(os.path.exists(os.path.join(self.root, "kaynak.txt")))
         with open(os.path.join(self.root, "yeni-ad.txt"), encoding="utf-8") as f:
-            self.assertEqual(f.read(), "içerik")
+            self.assertEqual(f.read(), "content")
 
     def test_missing_source_raises(self):
         with self.assertRaises(FilesystemError):
@@ -205,7 +205,7 @@ class TestRenameFile(unittest.TestCase):
         rename_file("kaynak.txt", "hedef-var.txt", overwrite=True, root=self.root)
         self.assertFalse(os.path.exists(os.path.join(self.root, "kaynak.txt")))
         with open(os.path.join(self.root, "hedef-var.txt"), encoding="utf-8") as f:
-            self.assertEqual(f.read(), "içerik")
+            self.assertEqual(f.read(), "content")
 
     def test_source_path_traversal_raises(self):
         with self.assertRaises(FilesystemError):

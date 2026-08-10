@@ -5,33 +5,43 @@ from router.decision import decide_route, estimate_complexity, mentions_tool_key
 
 class TestEstimateComplexity(unittest.TestCase):
     def test_short_prompt_is_simple(self):
-        self.assertEqual(estimate_complexity("merhaba nasılsın"), "simple")
+        self.assertEqual(estimate_complexity("hello how are you"), "simple")
 
     def test_long_prompt_is_complex(self):
-        prompt = " ".join(["kelime"] * 50)
+        prompt = " ".join(["word"] * 50)
         self.assertEqual(estimate_complexity(prompt), "complex")
 
     def test_multiline_prompt_is_complex(self):
-        self.assertEqual(estimate_complexity("satır1\nsatır2"), "complex")
+        self.assertEqual(estimate_complexity("line1\nline2"), "complex")
 
     def test_short_tool_prompt_is_complex(self):
-        self.assertEqual(estimate_complexity("Bu makinede kaç CPU çekirdeği var?"), "complex")
+        self.assertEqual(estimate_complexity("How many CPU cores does this machine have?"), "complex")
 
 
 class TestMentionsToolKeywords(unittest.TestCase):
     def test_hardware_keyword_detected(self):
-        self.assertTrue(mentions_tool_keywords("Bu makinede kaç CPU çekirdeği var?"))
+        self.assertTrue(mentions_tool_keywords("How many CPU cores does this machine have?"))
 
     def test_filesystem_keyword_detected(self):
-        self.assertTrue(mentions_tool_keywords("şu dosyayı okur musun"))
+        self.assertTrue(mentions_tool_keywords("could you read that file"))
 
     def test_window_keyword_detected(self):
-        self.assertTrue(mentions_tool_keywords("aktif pencere hangisi"))
+        self.assertTrue(mentions_tool_keywords("which window is active"))
 
     def test_case_insensitive(self):
-        self.assertTrue(mentions_tool_keywords("RAM ne kadar"))
+        self.assertTrue(mentions_tool_keywords("RAM how much"))
 
     def test_plain_conversation_not_detected(self):
+        self.assertFalse(mentions_tool_keywords("hello how are you, nice weather today"))
+
+    def test_turkish_prompt_reaches_the_same_decision(self):
+        """TOOL_KEYWORDS deliberately carries both languages: the assistant
+        answers in whatever language the user writes in, so a Turkish prompt
+        must be routed exactly like its English equivalent. If someone
+        replaces the Turkish keywords with English ones instead of adding
+        to them, this test is what breaks."""
+        self.assertTrue(mentions_tool_keywords("Bu makinede kaç CPU çekirdeği var?"))
+        self.assertTrue(mentions_tool_keywords("şu dosyayı okur musun"))
         self.assertFalse(mentions_tool_keywords("merhaba nasılsın, bugün havalar güzel"))
 
 

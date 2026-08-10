@@ -1,32 +1,32 @@
-"""assistant'ın konuşma orkestrasyonu.
+"""The assistant's conversation orchestration.
 
-`router --decide-only` ile route kararı alınır (local-runtime/cloud-bridge'i
-BOŞ YERE çalıştırmadan — bkz. router/status.py "decide_only"), sonra hem
-**cloud** hem **local** rotası GERÇEK bir tool-use döngüsü kurar:
-mcp-tools'un `tools/list` çıktısı ilgili sağlayıcının tool formatına
-çevrilir; model bir tool çağrısı döndürdükçe ilgili mcp-tools aracı
-GERÇEKTEN çalıştırılır (bkz. mcp_client.py), sonuç geri beslenir — model
-son bir metin yanıtı verene kadar tekrarlanır.
+The routing decision is taken with `router --decide-only` (without running
+local-runtime/cloud-bridge POINTLESSLY — see "decide_only" in
+router/status.py), and then both the **cloud** and the **local** route build a
+REAL tool-use loop: mcp-tools' `tools/list` output is converted to the
+relevant provider's tool format; every time the model returns a tool call the
+corresponding mcp-tools tool is GENUINELY executed (see mcp_client.py) and the
+result is fed back — repeating until the model gives a final text response.
 
-- **cloud**: Claude Messages API (`tool_use`/`tool_result` blokları). Tam
-  araç setine erişir.
-- **local**: Ollama `/api/chat` (OpenAI-benzeri `tool_calls` — gerçek
-  makinede `llama3.2:3b` ile doğrulandı, bkz. local-runtime/README.md).
-  Sadece SALT-OKUNUR araçlara erişir (`LOCAL_SAFE_TOOL_NAMES`) — gerçek
-  testte 3B model, "sadece 'merhaba' de" gibi zararsız bir istekte bile
-  kendiliğinden `write_file`'ı `overwrite=true` ile çağırmaya kalkıştı
-  (sadece hedef bir dizin olduğu için mcp-tools katmanında hata verdi,
-  başka bir yolda gerçekten dosya değiştirebilirdi). Bu, "sistemi
-  değiştiren her eylem açık onay ister" ilkesinin gerçek bir ihlal riski
-  olduğundan, yazma/silme/yeniden adlandırma araçları yerel modele HİÇ
-  gösterilmiyor — cloud (Claude) çok daha güvenilir olduğundan tam erişimi
-  koruyor.
+- **cloud**: the Claude Messages API (`tool_use`/`tool_result` blocks). It has
+  access to the full tool set.
+- **local**: Ollama `/api/chat` (OpenAI-like `tool_calls` — verified on the
+  real machine with `llama3.2:3b`, see local-runtime/README.md). It has access
+  to READ-ONLY tools only (`LOCAL_SAFE_TOOL_NAMES`) — in real testing the 3B
+  model spontaneously tried to call `write_file` with `overwrite=true` even on
+  a harmless request such as "just say 'hello'" (it only failed at the
+  mcp-tools layer because the target happened to be a directory; on another
+  path it really could have modified a file). Since that was a genuine risk of
+  violating the "every system-modifying action requires explicit confirmation"
+  principle, the write/delete/rename tools are NOT shown to the local model at
+  all — cloud (Claude) is far more reliable and keeps full access.
 
-**Konuşma geçmişi:** İkisi de aynı düz `history: [{"role", "content"}, ...]`
-biçimini kullanır (sadece kullanıcı/asistan METİN turları — ne Claude'un
-tool_use/tool_result blokları ne Ollama'nın tool_calls'ı geçmişe DAHİL
-EDİLİR, sadece o turun içinde kalır). Bu, route bir konuşma içinde değişse
-bile (örn. önce local, sonra cloud) geçmişin taşınabilir kalmasını sağlar.
+**Conversation history:** both use the same flat
+`history: [{"role", "content"}, ...]` format (user/assistant TEXT turns only —
+neither Claude's tool_use/tool_result blocks nor Ollama's tool_calls are
+INCLUDED in the history, they stay within their own turn). This keeps the
+history portable even if the route changes within a conversation (e.g. local
+first, then cloud).
 """
 import json
 import subprocess
@@ -37,20 +37,26 @@ ROUTER_CMD = ["python3", "-m", "router"]
 LOCAL_RUNTIME_CMD = ["python3", "-m", "local_runtime"]
 CLOUD_BRIDGE_CMD = ["python3", "-m", "cloud_bridge"]
 
+# The prompt is English, but it deliberately does NOT pin the answer to
+# English: Navigator's own author writes in Turkish, and an assistant that
+# replies in a language the user did not use is a worse assistant. Answering
+# in the user's language is therefore an explicit instruction rather than a
+# side effect of the prompt's language.
 SYSTEM_PROMPT = (
-    "Sen Navigator OS'un işletim sistemine gömülü asistanısın. Kullanıcının "
-    "SİSTEM/DONANIM hakkındaki sorularını sana verilen araçları kullanarak "
-    "gerçek verilerle cevapla — asla tahmin etme veya uydurma. Ama kullanıcı "
-    "önceki konuşmada söylediği bir şeyi (isim, tercih vb.) soruyorsa ARAÇ "
-    "KULLANMA — doğrudan konuşma geçmişinden cevapla. Türkçe cevap ver, "
-    "kısa ve net ol."
+    "You are Navigator OS's assistant, embedded in the operating system. "
+    "Answer the user's questions about the SYSTEM/HARDWARE with real data, "
+    "using the tools you are given — never guess or make anything up. But if "
+    "the user is asking about something they said earlier in the conversation "
+    "(a name, a preference and so on) DO NOT USE A TOOL — answer directly "
+    "from the conversation history. Always reply in the same language the "
+    "user wrote in. Be short and clear."
 )
 MAX_TOOL_ITERATIONS = 8
-MAX_HISTORY_MESSAGES = 20  # ~10 kullanıcı/asistan turu — sınırsız büyümeyi engeller
+MAX_HISTORY_MESSAGES = 20  # ~10 user/assistant turns — prevents unbounded growth
 
-# Yerel (güvenilirliği düşük, küçük) modele sadece salt-okunur araçlar
-# gösterilir — bkz. run_local_turn() docstring'i, gerçek testte yakalanan
-# halüsinasyon write_file çağrısı.
+# Only read-only tools are shown to the local (small, less reliable) model —
+# see the run_local_turn() docstring and the hallucinated write_file call
+# caught in real testing.
 LOCAL_SAFE_TOOL_NAMES = frozenset(
     {
         "hardware_tier",
@@ -65,7 +71,7 @@ LOCAL_SAFE_TOOL_NAMES = frozenset(
 
 
 class AssistantError(Exception):
-    """Konuşma döngüsü sırasında geri alınamaz bir hata oluştuğunda."""
+    """Raised when an unrecoverable error occurs during the conversation loop."""
 
 
 def decide_route(
@@ -138,12 +144,12 @@ def run_cloud_turn(
     max_tokens: int = 1024,
     max_iterations: int = MAX_TOOL_ITERATIONS,
 ) -> dict:
-    """Claude ile gerçek bir tool-use döngüsü çalıştırır. Dönen sözlük:
+    """Run a real tool-use loop with Claude. The returned dict:
     `{"content": str, "tool_calls": [...], "route": "cloud", "history": [...]}`.
 
-    `history` (varsa) Claude'un mesaj listesinin başına eklenir — Claude
-    önceki turları görür. Döndürülen `history`, bu turun düz metin
-    özetini (tool_use/tool_result OLMADAN) önceki geçmişe ekler.
+    `history` (if given) is prepended to Claude's message list — Claude sees
+    the earlier turns. The returned `history` appends this turn's plain-text
+    summary (WITHOUT tool_use/tool_result) to the previous history.
     """
     tools = _mcp_tools_to_claude_tools(mcp_client.list_tools())
     messages: list[dict] = list(history or []) + [{"role": "user", "content": prompt}]
@@ -161,9 +167,9 @@ def run_cloud_turn(
         )
 
         if response.get("status") == "unavailable":
-            raise AssistantError(f"cloud-bridge kullanılamıyor: {response.get('reason')}")
+            raise AssistantError(f"cloud-bridge unavailable: {response.get('reason')}")
         if response.get("status") == "error":
-            raise AssistantError(f"Claude API hata döndü: {response.get('error')}")
+            raise AssistantError(f"Claude API returned an error: {response.get('error')}")
 
         messages.append({"role": "assistant", "content": response["content"]})
 
@@ -190,7 +196,7 @@ def run_cloud_turn(
                 result_text = _extract_text(result["content"])
                 is_error = bool(result.get("isError", False))
             except Exception as e:
-                result_text = f"Araç çağrısı başarısız: {e}"
+                result_text = f"Tool call failed: {e}"
                 is_error = True
             tool_results.append(
                 {
@@ -203,8 +209,8 @@ def run_cloud_turn(
         messages.append({"role": "user", "content": tool_results})
 
     raise AssistantError(
-        f"{max_iterations} tur sonunda Claude hâlâ araç çağırmaya devam ediyor "
-        "(sonsuz döngü koruması)"
+        f"Claude is still calling tools after {max_iterations} turns "
+        "(infinite-loop protection)"
     )
 
 
@@ -215,18 +221,18 @@ def run_local_turn(
     local_runtime_cwd: str = "../local-runtime",
     max_iterations: int = MAX_TOOL_ITERATIONS,
 ) -> dict:
-    """Ollama (`/api/chat`) ile gerçek bir tool-use döngüsü çalıştırır —
-    `run_cloud_turn()` ile aynı desen, sadece tool format farklı (Ollama
-    OpenAI-benzeri `tool_calls` kullanır, Claude'un `tool_use` bloklarından
-    farklı). Dönen sözlük: `{"content": str, "tool_calls": [...],
+    """Run a real tool-use loop with Ollama (`/api/chat`) — the same pattern
+    as `run_cloud_turn()`, only the tool format differs (Ollama uses
+    OpenAI-like `tool_calls`, unlike Claude's `tool_use` blocks). The returned
+    dict: `{"content": str, "tool_calls": [...],
     "route": "local", "history": [...]}`.
     """
     safe_tools_list = [t for t in mcp_client.list_tools() if t["name"] in LOCAL_SAFE_TOOL_NAMES]
     tools = _mcp_tools_to_ollama_tools(safe_tools_list)
     schemas_by_name = {t["name"]: t["inputSchema"] for t in safe_tools_list}
-    # Sistem promptu olmadan (gerçek testte gözlendi) 3B model basit
-    # hafıza/sohbet sorularında bile gereksiz araç çağırmaya kalkışıyor —
-    # cloud yoluyla tutarlılık için aynı SYSTEM_PROMPT burada da veriliyor.
+    # Without a system prompt (observed in real testing) the 3B model tries to
+    # make unnecessary tool calls even on simple memory/chat questions — the
+    # same SYSTEM_PROMPT is given here too, for consistency with the cloud path.
     messages: list[dict] = (
         [{"role": "system", "content": SYSTEM_PROMPT}]
         + list(history or [])
@@ -240,9 +246,9 @@ def run_local_turn(
         )
 
         if response.get("status") == "unavailable":
-            raise AssistantError(f"local-runtime kullanılamıyor: {response.get('reason')}")
+            raise AssistantError(f"local-runtime unavailable: {response.get('reason')}")
         if response.get("status") == "error":
-            raise AssistantError(f"Ollama hata döndü: {response.get('error')}")
+            raise AssistantError(f"Ollama returned an error: {response.get('error')}")
 
         message = response["message"]
         messages.append(message)
@@ -264,21 +270,21 @@ def run_local_turn(
         for call in ollama_tool_calls:
             fn = call["function"]
             if fn["name"] not in schemas_by_name:
-                # Model, kendisine gösterilmeyen bir aracı (örn.
-                # write_file) halüsinasyonla çağırmaya kalkıştı — savunma
-                # katmanı, mcp_client.call_tool()'a hiç ulaşmadan reddeder.
+                # The model hallucinated a call to a tool it was not shown
+                # (e.g. write_file) — the defence layer rejects it before it
+                # ever reaches mcp_client.call_tool().
                 tool_calls.append({"name": fn["name"], "input": fn.get("arguments") or {}})
                 messages.append(
                     {
                         "role": "tool",
-                        "content": f"Araç çağrısı reddedildi: '{fn['name']}' yerel modele açık değil.",
+                        "content": f"Tool call rejected: '{fn['name']}' is not available to the local model.",
                     }
                 )
                 continue
-            # llama3.2:3b gerçek testte sıfır-parametreli araçlara bile
-            # halüsinasyon argümanlar uydurdu (örn. {"path": "..."},
-            # {"": "null"}) — aracın inputSchema'sında olmayan anahtarları
-            # eleyerek bu sınıf hatayı gerçekten önlüyoruz.
+            # In real testing llama3.2:3b made up hallucinated arguments even
+            # for zero-parameter tools (e.g. {"path": "..."}, {"": "null"}) —
+            # dropping keys that are not in the tool's inputSchema genuinely
+            # prevents this class of error.
             schema = schemas_by_name[fn["name"]]
             allowed = set(schema.get("properties", {}).keys())
             args = {k: v for k, v in (fn.get("arguments") or {}).items() if k in allowed}
@@ -287,14 +293,14 @@ def run_local_turn(
                 result = mcp_client.call_tool(fn["name"], args)
                 result_text = _extract_text(result["content"])
             except Exception as e:
-                result_text = f"Araç çağrısı başarısız: {e}"
-            # Ollama/llama3.2 tool_call_id eşleşmesi gerektirmiyor (gerçek
-            # makinede doğrulandı) — sadece role:"tool" + content yeterli.
+                result_text = f"Tool call failed: {e}"
+            # Ollama/llama3.2 does not require tool_call_id matching (verified
+            # on the real machine) — role:"tool" + content is enough.
             messages.append({"role": "tool", "content": result_text})
 
     raise AssistantError(
-        f"{max_iterations} tur sonunda model hâlâ araç çağırmaya devam ediyor "
-        "(sonsuz döngü koruması)"
+        f"The model is still calling tools after {max_iterations} turns "
+        "(infinite-loop protection)"
     )
 
 
@@ -308,11 +314,11 @@ def run_turn(
     cloud_bridge_cwd: str = "../cloud-bridge",
     max_tokens: int = 1024,
 ) -> dict:
-    """Tek bir kullanıcı isteğini uçtan uca işler: router kararı ->
-    (cloud veya local, ikisi de gerçek tool-use döngüsü). `history`
-    verilirse (ve `MAX_HISTORY_MESSAGES`'a kırpılırsa) her iki yolda da
-    bağlam olarak kullanılır; dönen sözlükteki `history` bir sonraki
-    `run_turn()` çağrısına aynen geçirilebilir."""
+    """Handle a single user request end to end: the router decision ->
+    (cloud or local, both a real tool-use loop). If `history` is given (and
+    trimmed to `MAX_HISTORY_MESSAGES`) it is used as context on both paths;
+    the `history` in the returned dict can be passed straight into the next
+    `run_turn()` call."""
     decision = decide_route(prompt, preference=preference, router_cwd=router_cwd)
     trimmed_history = (history or [])[-MAX_HISTORY_MESSAGES:]
 

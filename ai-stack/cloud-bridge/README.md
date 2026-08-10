@@ -1,196 +1,201 @@
 # ai-stack/cloud-bridge/
 
-## Ne yapıyor
+## What it does
 
-`router/` yerel modelin yetersiz olduğuna veya kullanıcının bulut tercih
-ettiğine karar verdiğinde devreye giren köprü. **Sağlayıcı: Anthropic Claude
-API** (`claude-opus-4-8` varsayılan model). Kimlik bilgisi çözümlemesi
-(`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` — ortam değişkeninden ya da
-`~/.config/navigator/env` dosyasından, bkz. "Kimlik bilgisi nereden
-geliyor") ve `/v1/messages` isteği gönderen bir istemci sağlar.
+The bridge that comes into play when `router/` decides the local model is
+insufficient or that the user prefers the cloud. **Provider: the Anthropic
+Claude API** (`claude-opus-4-8` as the default model). It provides credential
+resolution (`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` — from an
+environment variable or from the `~/.config/navigator/env` file, see "Where
+the credential comes from") and a client that sends `/v1/messages` requests.
 
-`mcp-tools/` üzerinden gelen araç çağrılarının bulut modeller için de aynı
-şekilde çalışmasını sağlamak (Faz 3+) bu modülün sorumluluğunda olacak.
+Making tool calls arriving via `mcp-tools/` work the same way for cloud
+models (Phase 3+) will be this module's responsibility.
 
-**`router` entegrasyonu (Faz 2):** `route: "cloud"` kararı verildiğinde
-`router/cloud.py` bu modülü subprocess ile `--prompt` bayrağıyla çağırır —
-bkz. `ai-stack/router/README.md` "Cloud-bridge entegrasyonu".
+**`router` integration (Phase 2):** when the `route: "cloud"` decision is
+made, `router/cloud.py` invokes this module as a subprocess with the
+`--prompt` flag — see `ai-stack/router/README.md`, "cloud-bridge
+integration".
 
-## Neden resmi SDK değil
+## Why not the official SDK
 
-Anthropic'in resmi `anthropic` Python SDK'sı (kimlik bilgisi çözümlemesi,
-OAuth profilleri, Workload Identity Federation dahil) genel amaçlı Claude
-entegrasyonları için önerilen yoldur. Burada bilinçli olarak **stdlib-only
-ham HTTP** tercih edildi çünkü:
+Anthropic's official `anthropic` Python SDK (including credential
+resolution, OAuth profiles and Workload Identity Federation) is the
+recommended path for general-purpose Claude integrations. **Stdlib-only raw
+HTTP** was deliberately chosen here because:
 
-- Diğer dört ai-stack modülü (`hardware-probe`, `local-runtime`, `router`,
-  `mcp-tools`) aynı ilkeyle yazıldı — tutarlılık.
-- Navigator OS nihayetinde `image/Containerfile` üzerinden rpm-ostree/dnf ile
-  paketlenecek; pip bağımlılıkları bu modele uymuyor (ayrı bir RPM paketleme
-  adımı gerektirir).
-- Sadece kimlik bilgisi durumu raporlanıyor, gerçek bir API çağrısı henüz
-  yapılmıyor — SDK'nın asıl değeri (tool use, streaming, retry mantığı)
-  şu an kullanılmıyor.
+- The other four ai-stack modules (`hardware-probe`, `local-runtime`,
+  `router`, `mcp-tools`) were written on the same principle — consistency.
+- Navigator OS will ultimately be packaged via `image/Containerfile` with
+  rpm-ostree/dnf; pip dependencies do not fit that model (they would require
+  a separate RPM packaging step).
+- Only the credential status is being reported, and no real API call is made
+  yet — the SDK's real value (tool use, streaming, retry logic) is not being
+  used at this point.
 
-**Bilinen sınırlama:** Sadece `ANTHROPIC_API_KEY` ve `ANTHROPIC_AUTH_TOKEN`
-destekleniyor — resmi SDK'nın yaptığı OAuth profili (`ant auth login`) veya
-Workload Identity Federation çözümlemesi YOK.
+**Known limitation:** only `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN`
+are supported — there is NO OAuth profile (`ant auth login`) or Workload
+Identity Federation resolution as the official SDK provides.
 
-## Kimlik bilgisi nereden geliyor
+## Where the credential comes from
 
-İki kaynak var, bu öncelikle (`cloud_bridge/config.py`):
+There are two sources, in this order of precedence
+(`cloud_bridge/config.py`):
 
-1. **Ortam değişkeni** — `ANTHROPIC_API_KEY`, yoksa `ANTHROPIC_AUTH_TOKEN`.
-   Biri tanımlıysa dosya HİÇ açılmaz.
-2. **`~/.config/navigator/env`** — kullanıcının kendi dosyası
-   (`$XDG_CONFIG_HOME` tanımlı ve mutlaksa oradan).
+1. **Environment variable** — `ANTHROPIC_API_KEY`, failing that
+   `ANTHROPIC_AUTH_TOKEN`. If either is defined, the file is NEVER opened.
+2. **`~/.config/navigator/env`** — the user's own file (from
+   `$XDG_CONFIG_HOME` if that is defined and absolute).
 
-### Neden bir dosya gerekiyordu
+### Why a file was needed
 
-Gerçek imajda `/usr` salt-okunurdur: `cloud-bridge`'in yanına bir
-`.env.local` konamaz, kimlik bilgisi imaja da gömülemez (imaj herkese
-açık). Geriye "kullanıcı değişkeni kendi oturum ortamına koysun" kalıyordu,
-ama asistanı çalıştıran zincir —
+In the real image `/usr` is read-only: no `.env.local` can be placed next to
+`cloud-bridge`, and the credential cannot be baked into the image either
+(the image is public). That left "let the user put the variable in their own
+session environment", but the chain that runs the assistant —
 
 ```
 Hyprland exec-once → Quickshell → Process → python3 -m router → python3 -m cloud_bridge
 ```
 
-— ortamı compositor'ın başlatıldığı ortamdan miras alıyor. Grafik oturumu
-bir greeter'dan ya da TTY login'den açıldığında oraya değişken koymanın
-taşınabilir bir yolu yok. Bu yüzden kimlik bilgisi **zincirin ucunda,
-ihtiyacı olan modül tarafından** okunuyor: dosya `HOME`'a göreli
-çözüldüğünden Quickshell'in ortamı bomboş olsa bile çalışır. Hiçbir
-ortam değişkeni plumbing'i, hiçbir shell profili gerekmiyor.
+— inherits the environment from the one the compositor was started in. When
+the graphical session is opened from a greeter or a TTY login there is no
+portable way to put a variable there. The credential is therefore read **at
+the end of the chain, by the module that needs it**: because the file is
+resolved relative to `HOME`, it works even when Quickshell's environment is
+completely empty. No environment variable plumbing and no shell profile are
+needed.
 
-Şablonu imaj kendisi koyuyor: `image/Containerfile` Katman 4
-`/etc/skel/.config/navigator/env` altına yorumlanmış, açıklamalı ve **boş**
-bir dosya (0600) yerleştiriyor — yani her yeni hesap dosyayı yerinde
-bulur, yolu tahmin etmesi gerekmez, ve imaj güncellemeleri onu ezmez
-(`/etc/skel` sadece hesap oluşturma anında okunur).
+The image places the template itself: Layer 4 of `image/Containerfile` puts
+a commented, documented and **empty** file (0600) at
+`/etc/skel/.config/navigator/env` — so every new account finds the file in
+place, does not have to guess the path, and image updates do not overwrite
+it (`/etc/skel` is read only at account creation time).
 
-Dosyanın 0600'ü deploy edilmiş imajda gerçekten tutuyor, **ve
-`bootc-image-builder`'ın oluşturduğu hesabın kopyasında da tutuyor** —
-ikisi de boot testinde ölçülüp iddiaya çevrildi ([run
+The file's 0600 genuinely holds in the deployed image, **and it also holds
+in the copy in the account created by `bootc-image-builder`** — both were
+measured in the boot test and promoted to assertions ([run
 30895377833](https://github.com/denorath-sys/navigator/actions/runs/30895377833)):
 
 ```
 /etc/skel/.config/navigator/env  mod=600
-TEŞHİS-SONUÇ: navtest kopyasının modu = 600
+DIAGNOSTIC RESULT: mode of the navtest copy = 600
 ```
 
-Yani kullanıcı `chmod`'a mecbur kalmıyor; anahtarını yazması yetiyor.
+So the user is not forced to run `chmod`; writing their key is enough.
 
-Dizin için hedeflenen 0700 ise **tutmuyor**: `/etc/skel/.config/navigator`
-755 olarak geliyor. Aynı run mekanizmayı da daralttı — `/usr/etc`'de de
-755, yani kayıp ostree'nin deployment sırasındaki `/etc` merge'ünde
-değil, imaj katmanı/commit aşamasında oluyor; aynı `RUN`'daki
-`chmod 600` dosyada tuttuğuna göre bu düz bir "chmod çalışmadı" da
-değil. Kesin mekanizma henüz bilinmiyor, bu yüzden dizin modu CI'da
-iddia değil teşhis olarak izleniyor.
+The 0700 intended for the directory, however, does **not** hold:
+`/etc/skel/.config/navigator` comes out as 755. The same run also narrowed
+down the mechanism — it is 755 in `/usr/etc` too, so the loss happens at the
+image layer/commit stage rather than in ostree's `/etc` merge during
+deployment; and since the `chmod 600` in the same `RUN` does hold for the
+file, this is not a plain "chmod didn't work" either. The exact mechanism is
+not yet known, so the directory mode is tracked in CI as a diagnostic rather
+than an assertion.
 
-Etkisi sınırlı: başkası dizini listeleyip `env` dosyasının varlığını
-görebilir ama içeriğini okuyamaz — sırrı koruyan şey dosyanın modu ve
-`cloud-bridge` de dizine değil dosyaya bakıyor.
+The impact is limited: someone else can list the directory and see that the
+`env` file exists, but cannot read its contents — what protects the secret
+is the file's mode, and `cloud-bridge` looks at the file, not the directory.
 
-### İzinler: gevşekse dosya BİLEREK yok sayılır
+### Permissions: if they are loose the file is DELIBERATELY ignored
 
-Dosya sahibi dışında herhangi birine (grup/diğer) açıksa okunmaz —
-ssh'ın özel anahtar davranışının aynısı. Sessizce okumak, kullanıcının
-API key'inin çok kullanıcılı bir makinede okunabilir olduğunu hiç fark
-etmemesi demek olurdu. Bu durumda `reason` ayırt edici olur:
+If the file is readable by anyone other than its owner (group/other) it is
+not read — exactly ssh's private-key behaviour. Reading it silently would
+mean the user never noticing that their API key is readable on a
+multi-user machine. In that case the `reason` is distinguishing:
 
-| durum | `reason` |
+| situation | `reason` |
 | --- | --- |
-| ne değişken ne dosya var | `credentials_not_configured` |
-| dosya var ama izinleri gevşek | `credentials_file_insecure` |
-| dosya okunamadı / UTF-8 değil | `credentials_file_unreadable` |
-| `KEY=VALUE` olmayan satır var ve hiç anahtar çıkmadı | `credentials_file_malformed` |
+| neither the variable nor the file exists | `credentials_not_configured` |
+| the file exists but its permissions are loose | `credentials_file_insecure` |
+| the file could not be read / is not UTF-8 | `credentials_file_unreadable` |
+| there is a non-`KEY=VALUE` line and no key was found at all | `credentials_file_malformed` |
 
-`shell/AssistantPanel.qml` bu dizgeleri kullanıcıya Türkçe cümlelere
-çeviriyor (`explainReason()`) — "chmod 600 ~/.config/navigator/env"
-tavsiyesi dahil.
+`shell/AssistantPanel.qml` translates these strings into sentences for the
+user (`explainReason()`) — including the "chmod 600 ~/.config/navigator/env"
+advice.
 
-### Biçim
+### Format
 
-Her satır `KEY=VALUE`; `#` ile başlayanlar yorum; isteğe bağlı `export `
-öneki; değer etrafındaki eşleşen tırnaklar soyulur. Biçim bilinçli olarak
-shell'e `source` edilebilir tutuldu, ama burada okuyan bir shell DEĞİL:
-**satır-içi yorum yok** (`#` sonrası değerin parçasıdır — bir API key'i
-sessizce kesmek teşhisi imkânsız bir 401 üretirdi), `$VAR` genişletmesi
-yok, komut ikamesi yok.
+Each line is `KEY=VALUE`; lines starting with `#` are comments; an optional
+`export ` prefix is allowed; matching quotes around the value are stripped.
+The format was deliberately kept `source`-able by a shell, but what reads it
+here is NOT a shell: there are **no inline comments** (anything after `#` is
+part of the value — silently truncating an API key would produce an
+impossible-to-diagnose 401), no `$VAR` expansion, and no command
+substitution.
 
-Bozuk bir satır ayrıştırmayı durdurmaz: geri kalan satırlardan geçerli bir
-anahtar çıkarsa kullanılır, ilk bozuk satırın numarası durum raporunda
-`credentials_file_problem: "malformed_line:N"` olarak görünür.
+A malformed line does not stop parsing: if a valid key can be found in the
+remaining lines it is used, and the number of the first malformed line
+appears in the status report as
+`credentials_file_problem: "malformed_line:N"`.
 
-Kimlik bilgisinin **kendisi** hiçbir zaman raporlanmaz/log'lanmaz; durum
-raporu sadece kaynağı (`credentials_source`), yolu (`credentials_file`) ve
-varsa problemi taşır.
+The credential **itself** is never reported or logged; the status report
+carries only its source (`credentials_source`), its path
+(`credentials_file`) and the problem, if any.
 
-## Kullanım
+## Usage
 
-Harici bağımlılık yok, sadece Python 3.11+ (stdlib).
+No external dependencies, only Python 3.11+ (stdlib).
 
 ```sh
 cd ai-stack/cloud-bridge
-python3 -m cloud_bridge --pretty                     # sadece kimlik bilgisi durumu
-python3 -m cloud_bridge --prompt "merhaba" --pretty   # gerçek istek (kimlik bilgisi varsa)
+python3 -m cloud_bridge --pretty                     # credential status only
+python3 -m cloud_bridge --prompt "hello" --pretty    # real request (if credentials exist)
 ```
 
-**`--converse`** (Faz 4'te `ai-stack/assistant` için eklendi): stdin'den
-tam bir mesaj listesi + isteğe bağlı `tools` şeması okur, Claude API'nin
-HAM yanıtını (`tool_use` blokları, `stop_reason` dahil — `--prompt`'un
-basitleştirilmiş raporunun aksine) stdout'a basar. Çok turlu tool-use
-döngüsü kuran çağıranlar için (`--prompt` tek turlu ve tool'suz kalmaya
-devam ediyor):
+**`--converse`** (added in Phase 4 for `ai-stack/assistant`): reads a full
+message list plus an optional `tools` schema from stdin, and prints the RAW
+Claude API response (including `tool_use` blocks and `stop_reason` — unlike
+`--prompt`'s simplified report) to stdout. It is for callers building a
+multi-turn tool-use loop (`--prompt` remains single-turn and tool-less):
 
 ```sh
-echo '{"messages": [{"role": "user", "content": "merhaba"}], "tools": [...]}' \
+echo '{"messages": [{"role": "user", "content": "hello"}], "tools": [...]}' \
   | python3 -m cloud_bridge --converse
 ```
 
-Testler:
+Tests:
 
 ```sh
 cd ai-stack/cloud-bridge
 python3 -m unittest discover -v -s tests
 ```
 
-### Kimlik bilgisini yerel olarak bağlamak (`.env.local`)
+### Wiring up the credential locally (`.env.local`)
 
-Bu makinede gerçek bir Anthropic API key `.env.local` dosyasına yazıldı
-(`.gitignore`'da `.env*` deseni ile hariç tutuluyor — asla commit
-edilmez, sadece bu geliştirme makinesinde var). Kullanmak için her
-zaman elle source edilmesi gerekiyor (Bash tool çağrıları arasında
-shell state kalıcı değil):
+A real Anthropic API key was written to `.env.local` on this machine
+(excluded by the `.env*` pattern in `.gitignore` — never committed, it
+exists only on this development machine). Using it requires sourcing it
+manually each time (shell state does not persist between Bash tool calls):
 
 ```sh
 cd ai-stack/cloud-bridge
 set -a && source .env.local && set +a
-python3 -m cloud_bridge --prompt "merhaba" --pretty
+python3 -m cloud_bridge --prompt "hello" --pretty
 ```
 
-`.env.local` bir GELİŞTİRME kolaylığı olarak kaldı; gerçek makinedeki yol
-`~/.config/navigator/env` (yukarı bkz.). Aralarındaki fark ortam
-değişkeni önceliğinden geliyor: `source` edilen `.env.local` ortama
-yazdığı için dosyanın önüne geçer.
+`.env.local` remains a DEVELOPMENT convenience; the path on a real machine
+is `~/.config/navigator/env` (see above). The difference between them comes
+from the environment variable's precedence: because a sourced `.env.local`
+writes into the environment, it takes priority over the file.
 
-Kimlik bilgisine bağlı testler (`test_prompt_cli.py`,
-`router/tests/test_integration.py`) kimlik bilgisi hiç yoksa otomatik
-`skip` olur (CI'da da böyle davranır — GitHub Actions'ta secret yok).
-Bu testlerin "kimlik bilgisi var mı" kapısı artık ortam değişkenine
-elle bakmıyor, üretimin kullandığı çözümlemenin AYNISINI çağırıyor
-(`resolve_credentials()`); router tarafı bunu `python3 -m cloud_bridge`
-subprocess'ine sorarak yapıyor, böylece kural iki yerde ayrışamaz.
+Credential-dependent tests (`test_prompt_cli.py`,
+`router/tests/test_integration.py`) skip automatically when there are no
+credentials at all (they behave this way in CI too — there are no secrets on
+GitHub Actions). The "do we have credentials?" gate in those tests no longer
+inspects the environment variable by hand; it calls the SAME resolution
+production uses (`resolve_credentials()`). The router side does this by
+asking the `python3 -m cloud_bridge` subprocess, so the rule cannot diverge
+in two places.
 
-Tersine, "kimlik bilgisi YOK" iddia eden testler artık `HOME`'u da boş
-bir dizine çekiyor — yoksa geliştiricinin kendi
-`~/.config/navigator/env`'i o testleri sessizce anlamsızlaştırırdı.
+Conversely, tests asserting that there are NO credentials now also point
+`HOME` at an empty directory — otherwise the developer's own
+`~/.config/navigator/env` would silently make those tests meaningless.
 
-## Çıktı örneği
+## Example output
 
-Kimlik bilgisi ayarlı değilken:
+With no credentials configured:
 
 ```json
 {
@@ -204,26 +209,27 @@ Kimlik bilgisi ayarlı değilken:
 }
 ```
 
-`credentials_file` dosya yokken bile yazılıyor: kullanıcının hangi yolu
-oluşturması gerektiğini `--pretty` çıktısından görebilmesi için.
-Kimlik bilgisi dosyadan çözüldüğünde `credentials_source: "file"`,
-ortamdan geldiğinde `"environment"` olur.
+`credentials_file` is printed even when the file does not exist: so that the
+user can see from the `--pretty` output which path they need to create. When
+the credential is resolved from the file, `credentials_source: "file"`; when
+it comes from the environment, `"environment"`.
 
-`--prompt` verildiğinde (kimlik bilgisi yokken):
+With `--prompt` (and no credentials):
 
 ```json
 {
   "schema_version": "0.1",
   "provider": "anthropic",
   "model": "claude-opus-4-8",
-  "prompt_preview": "merhaba",
+  "prompt_preview": "hello",
   "status": "unavailable",
   "reason": "credentials_not_configured"
 }
 ```
 
-`.env.local` source edilip kimlik bilgisi varken (bu makinede gerçek bir
-API çağrısıyla doğrulandı):
+With `.env.local` sourced and credentials present (verified on this machine
+with a real API call; the prompt is kept verbatim as captured, which is why
+it is in Turkish):
 
 ```json
 {
@@ -236,61 +242,62 @@ API çağrısıyla doğrulandı):
 }
 ```
 
-## `is_available()` neden ağ çağrısı yapmıyor
+## Why `is_available()` makes no network call
 
-`local-runtime`'ın `OllamaClient.is_available()`'ı `localhost:11434/api/version`'a
-gerçek bir çağrı yapar (ücretsiz, yerel). Anthropic API'sinde ücretsiz bir
-"ping" uç noktası yok — bu yüzden `AnthropicClient.is_available()` sadece
-kimlik bilgisinin çözülüp çözülmediğine bakıyor, gerçek bir istek
-göndermiyor.
+`local-runtime`'s `OllamaClient.is_available()` makes a real call to
+`localhost:11434/api/version` (free, local). The Anthropic API has no free
+"ping" endpoint — so `AnthropicClient.is_available()` only checks whether
+the credential resolves, and does not send a real request.
 
-Çözümleme her çağrıda yeniden yapılır, önbelleklenmez: kullanıcı dosyayı
-oluşturduktan ya da `chmod 600` ile düzelttikten sonra asistanı yeniden
-başlatmak zorunda kalmasın diye. Maliyeti çağrı başına birkaç yüz baytlık
-bir dosya okuması (dosya yoksa tek bir `stat`).
+Resolution is redone on every call and not cached: so that the user does not
+have to restart the assistant after creating the file or fixing it with
+`chmod 600`. The cost is reading a file of a few hundred bytes per call (a
+single `stat` if the file does not exist).
 
-## Kapsam dışı — henüz yapılmadı
+## Out of scope — not done yet
 
-- Gizlilik filtrelemesi (isteğe gönderilmeden önce hassas veri maskeleme) yok.
-- Streaming yok — her yanıt tek seferde, tam olarak döner.
-- CI'da kimlik bilgisi YOK ve bilinçli olarak olmayacak: ne `.env.local`
-  ne de gerçek bir `~/.config/navigator/env` commit ediliyor, GitHub
-  Actions'ta secret olarak da tanımlı değil. Dolayısıyla CI'da bulut yolu
-  hep "unavailable" raporlar. Buna rağmen kimlik bilgisi YOLU CI'da
-  gerçekten test ediliyor: boot testinde imajın içinde SAHTE bir anahtarla
-  bir `~/.config/navigator/env` kurulup çözümlemenin gerçekten çalıştığı,
-  izinler gevşetilince gerçekten reddedildiği doğrulanıyor — API'ye hiç
-  çıkmadan.
-- Dosyadaki kimlik bilgisi düz metin. Çekirdek keyring/gnome-keyring
-  entegrasyonu YOK; bu bilinçli bir ilk adım (stdlib-only, servis
-  bağımlılığı yok) ama gerçek bir sınırlama.
+- There is no privacy filtering (masking sensitive data before it is sent
+  with the request).
+- No streaming — every response is returned in full, in one go.
+- There are NO credentials in CI and deliberately never will be: neither
+  `.env.local` nor a real `~/.config/navigator/env` is committed, and none
+  is defined as a secret on GitHub Actions. The cloud path therefore always
+  reports "unavailable" in CI. Even so, the credential PATH is genuinely
+  tested in CI: in the boot test a `~/.config/navigator/env` is set up
+  inside the image with a FAKE key, and it is verified that resolution
+  really works and that it is really refused once the permissions are
+  loosened — without ever reaching out to the API.
+- The credential in the file is plain text. There is NO kernel
+  keyring/gnome-keyring integration; this is a deliberate first step
+  (stdlib-only, no service dependency) but a real limitation.
 
-## Durum
+## Status
 
-Faz 2 — kimlik bilgisi/istemci katmanı, `router` entegrasyonu VE gerçek
-bir Claude API kimlik bilgisi bağlantısı tamamlandı (`client.py`,
-`status.py`, `python3 -m cloud_bridge [--prompt ...]` CLI). Faz 4'te
-çok turlu mesaj + tool-use desteği eklendi (`send_messages()`,
-`--converse`) — `ai-stack/assistant`'ın gerçek bir tool-use döngüsü
-kurabilmesi için. Gerçek bir API key `.env.local`'a yazıldı (gitignore'lı)
-ve gerçek isteklerle uçtan uca doğrulandı — hem doğrudan `cloud_bridge`
-CLI'ı hem `router → cloud_bridge` zinciri hem de `assistant`'ın gerçek
-tool-use döngüsü üzerinden (mcp-tools'un `hardware_tier` aracını gerçekten
-çağırıp doğru donanım verisiyle cevap üretti).
+Phase 2 — the credential/client layer, the `router` integration AND a real
+Claude API credential connection are complete (`client.py`, `status.py`, and
+the `python3 -m cloud_bridge [--prompt ...]` CLI). Multi-turn message and
+tool-use support were added in Phase 4 (`send_messages()`, `--converse`) —
+so that `ai-stack/assistant` can build a real tool-use loop. A real API key
+was written to `.env.local` (gitignored) and verified end to end with real
+requests — through the direct `cloud_bridge` CLI, the
+`router → cloud_bridge` chain, and `assistant`'s real tool-use loop (which
+genuinely called mcp-tools' `hardware_tier` tool and produced an answer with
+correct hardware data).
 
-**Kullanıcı seviyesinde kimlik bilgisi yolu eklendi** (`config.py`):
-gerçek bir masaüstünde asistanın kullanılabilir olmasını engelleyen son
-parça buydu — `/usr` salt-okunur, Quickshell'in ortamına değişken koymanın
-taşınabilir yolu yok. Artık `~/.config/navigator/env` okunuyor, şablonu
-imaj `/etc/skel` üzerinden koyuyor. Gerçek bir API key'le uçtan uca
-doğrulandı: ortamda hiçbir `ANTHROPIC_*` değişkeni yokken hem doğrudan
-`cloud_bridge --prompt` hem de `router → cloud_bridge` zinciri sadece
-dosyadan çözülen kimlik bilgisiyle gerçek bir Claude yanıtı üretti
-("Ankara"). İzin reddi de gerçek bir denemeyle doğrulandı: aynı dosya
-`chmod 644` yapıldığında `reason: credentials_file_insecure`.
+**A user-level credential path was added** (`config.py`): this was the last
+piece preventing the assistant from being usable on a real desktop — `/usr`
+is read-only, and there is no portable way to put a variable into
+Quickshell's environment. `~/.config/navigator/env` is now read, and the
+image places the template via `/etc/skel`. It was verified end to end with a
+real API key: with no `ANTHROPIC_*` variable in the environment at all, both
+`cloud_bridge --prompt` directly and the `router → cloud_bridge` chain
+produced a real Claude response ("Ankara") using only the credential
+resolved from the file. The permission refusal was verified with a real
+attempt too: with the same file set to `chmod 644`,
+`reason: credentials_file_insecure`.
 
-50 test geçiyor (mock'lanmış HTTP + gerçek CLI entegrasyon testleri +
-kimlik bilgisi çözümlemesinin geçici bir `HOME` altında gerçek dosya ve
-gerçek izinlerle test edildiği `test_config.py`; kimlik bilgisiz yol her
-zaman çalışır, kimlik bilgili gerçek-API testleri kimlik bilgisi
-bulunamadığında otomatik `skip` olur).
+50 tests pass (mocked HTTP + real CLI integration tests + `test_config.py`,
+where credential resolution is tested with real files and real permissions
+under a temporary `HOME`; the credential-less path always runs, and the
+real-API tests requiring credentials skip automatically when none can be
+found).

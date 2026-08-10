@@ -1,20 +1,20 @@
-"""MCP HTTP+SSE transport (2024-11-05 spesifikasyonu) — stdlib-only.
+"""MCP HTTP+SSE transport (the 2024-11-05 specification) — stdlib-only.
 
-Klasik iki uç noktalı model:
-  - GET /sse: SSE akışı açar, bir session_id üretir, ilk 'endpoint' event'i
-    ile istemcinin POST edeceği URI'yi bildirir, sonra o session'a ait
-    kuyruğa giren yanıtları 'message' event'i olarak akıtır.
-  - POST /messages?session_id=<id>: JSON-RPC isteğini stdio ile aynı
-    MCPServer.handle_message() ile işler, yanıtı ilgili session'ın
-    kuyruğuna ekler; HTTP olarak sadece 202 Accepted döner — yanıtın
-    kendisi SSE akışı üzerinden asenkron gelir.
+The classic two-endpoint model:
+  - GET /sse: opens an SSE stream, generates a session_id, announces the URI
+    the client should POST to via a first 'endpoint' event, and then streams
+    the responses queued for that session as 'message' events.
+  - POST /messages?session_id=<id>: handles the JSON-RPC request with the same
+    MCPServer.handle_message() as stdio and adds the response to that
+    session's queue; over HTTP it returns only 202 Accepted — the response
+    itself arrives asynchronously over the SSE stream.
 
-Her iki uç nokta da Bearer token kimlik doğrulaması gerektirir (bkz.
-auth.py) — `Authorization: Bearer <token>` eksik/yanlışsa 401.
+Both endpoints require Bearer token authentication (see auth.py) — a missing
+or wrong `Authorization: Bearer <token>` gives a 401.
 
-Not: Bu, MCP'nin daha yeni "Streamable HTTP" transport'u değil, orijinal
-2024-11-05 spesifikasyonundaki HTTP+SSE transport'u — server.py'daki
-protocolVersion ile tutarlı.
+Note: this is not MCP's newer "Streamable HTTP" transport but the original
+HTTP+SSE transport from the 2024-11-05 specification — consistent with the
+protocolVersion advertised in server.py.
 """
 import json
 import queue
@@ -32,7 +32,7 @@ HEARTBEAT_INTERVAL = 15.0
 
 
 class SSESessionRegistry:
-    """session_id -> yanıt kuyruğu eşlemesini thread-safe tutar."""
+    """Keeps the session_id -> response queue mapping thread-safe."""
 
     def __init__(self):
         self._lock = threading.Lock()
@@ -59,7 +59,7 @@ def _make_handler(mcp_server, registry: SSESessionRegistry, token: str):
         protocol_version = "HTTP/1.1"
 
         def log_message(self, format, *args):
-            pass  # stdout/stderr'i kirletmemek için sessiz
+            pass  # silent, so as not to pollute stdout/stderr
 
         def _authenticated(self) -> bool:
             provided = extract_bearer_token(self.headers.get("Authorization"))
@@ -96,7 +96,7 @@ def _make_handler(mcp_server, registry: SSESessionRegistry, token: str):
                         self.wfile.write(b": ping\n\n")
                         self.wfile.flush()
                         continue
-                    if message is None:  # kapatma sinyali
+                    if message is None:  # shutdown signal
                         break
                     self._write_event("message", json.dumps(message, ensure_ascii=False))
             except (BrokenPipeError, ConnectionResetError):
@@ -154,15 +154,15 @@ def _make_handler(mcp_server, registry: SSESessionRegistry, token: str):
 def run_http_server(
     mcp_server, host: str = "127.0.0.1", port: int = 8765, token: str | None = None
 ) -> None:
-    """HTTP+SSE sunucusunu başlatır (bloklar). `token` verilmezse otomatik
-    üretilir ve stderr'e yazdırılır — kimliksiz çalışma hiçbir zaman
-    mümkün değildir."""
+    """Start the HTTP+SSE server (blocks). If `token` is not given one is
+    generated automatically and printed to stderr — running without
+    authentication is never possible."""
     if token is None:
         token = generate_token()
-        print(f"[mcp-tools] Kimlik doğrulama token'ı otomatik üretildi: {token}", file=sys.stderr)
+        print(f"[mcp-tools] Authentication token generated automatically: {token}", file=sys.stderr)
         print(
-            "[mcp-tools] İstekler 'Authorization: Bearer <token>' header'ı içermeli "
-            "(sabit bir token için --token veya NAVIGATOR_MCP_HTTP_TOKEN kullanın).",
+            "[mcp-tools] Requests must include an 'Authorization: Bearer <token>' header "
+            "(use --token or NAVIGATOR_MCP_HTTP_TOKEN for a fixed token).",
             file=sys.stderr,
         )
 

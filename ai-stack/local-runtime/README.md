@@ -1,60 +1,61 @@
 # ai-stack/local-runtime/
 
-## Ne yapıyor
+## What it does
 
-`hardware-probe/`'un belirlediği tier'a uygun bir yerel LLM'i cihaz üzerinde
-çalıştırır. **Mimari karar (Faz 2): [Ollama](https://ollama.com)** —
-llama.cpp yerine tercih edildi çünkü temiz bir REST API (`localhost:11434`)
-ve isme göre model çekme/yönetme sağlıyor; `router/`'ın tek bir HTTP
-istemcisiyle konuşması yeterli, ayrı bir model dosyası/quantization yönetimi
-gerekmiyor. Amaç, internet bağlantısı olmadan da temel asistan işlevlerinin
-çalışabilmesi.
+Runs a local LLM on the device, matching the tier determined by
+`hardware-probe/`. **Architectural decision (Phase 2):
+[Ollama](https://ollama.com)** — preferred over llama.cpp because it
+provides a clean REST API (`localhost:11434`) and model pulling/management
+by name; it is enough for `router/` to speak to a single HTTP client, and no
+separate model file or quantization management is needed. The goal is for
+basic assistant functionality to work without an internet connection.
 
-**Bu makinede artık tam çalışır durumda**: Ollama kurulu + `llama3.2:3b`
-indirilmiş → `model_ready: true` → gerçek yerel üretim yapılabiliyor.
+**It is now fully working on this machine**: Ollama installed +
+`llama3.2:3b` pulled → `model_ready: true` → real local generation is
+possible.
 
-**`router` entegrasyonu (Faz 2):** `route: "local"` kararı verildiğinde
-`router/local.py` bu modülü subprocess ile `--prompt` bayrağıyla çağırır —
-bkz. `ai-stack/router/README.md` "local-runtime entegrasyonu".
+**`router` integration (Phase 2):** when the `route: "local"` decision is
+made, `router/local.py` invokes this module as a subprocess with the
+`--prompt` flag — see `ai-stack/router/README.md`, "local-runtime
+integration".
 
-**`assistant` entegrasyonu (Faz 4):** `chat()`/`--converse` eklendi —
-Ollama'nın `/api/chat` uç noktası (OpenAI-benzeri `tool_calls`) üzerinden
-çok turlu, tool-calling destekli istekler gönderir. `ai-stack/assistant`
-bunu gerçek bir tool-use döngüsü kurmak için kullanıyor — bkz.
-`ai-stack/assistant/README.md` "Yerel tool-use".
+**`assistant` integration (Phase 4):** `chat()`/`--converse` were added — it
+sends multi-turn, tool-calling-capable requests via Ollama's `/api/chat`
+endpoint (OpenAI-like `tool_calls`). `ai-stack/assistant` uses this to build
+a real tool-use loop — see `ai-stack/assistant/README.md`, "Local tool-use".
 
-## Kullanım
+## Usage
 
-Harici bağımlılık yok, sadece Python 3.11+ (stdlib). `hardware-probe`'un
-yanında (kardeş dizin olarak) bulunması gerekiyor.
+No external dependencies, only Python 3.11+ (stdlib). It must sit next to
+`hardware-probe` (as a sibling directory).
 
 ```sh
 cd ai-stack/local-runtime
-python3 -m local_runtime --pretty                     # sadece durum
-python3 -m local_runtime --prompt "merhaba" --pretty   # gerçek istek (önerilen modelle)
+python3 -m local_runtime --pretty                      # status only
+python3 -m local_runtime --prompt "hello" --pretty     # real request (with the recommended model)
 ```
 
-**`--converse`** (Faz 4'te `ai-stack/assistant` için eklendi): stdin'den
-tam bir mesaj listesi + isteğe bağlı `tools` şeması okur (OpenAI-benzeri
-`{"type": "function", "function": {...}}` formatında), Ollama `/api/chat`'in
-HAM yanıtını (`tool_calls` dahil) stdout'a basar:
+**`--converse`** (added in Phase 4 for `ai-stack/assistant`): reads a full
+message list plus an optional `tools` schema from stdin (in the OpenAI-like
+`{"type": "function", "function": {...}}` format) and prints the RAW
+`/api/chat` response from Ollama (including `tool_calls`) to stdout:
 
 ```sh
-echo '{"messages": [{"role": "user", "content": "merhaba"}], "tools": [...]}' \
+echo '{"messages": [{"role": "user", "content": "hello"}], "tools": [...]}' \
   | python3 -m local_runtime --converse
 ```
 
-Testler:
+Tests:
 
 ```sh
 cd ai-stack/local-runtime
 python3 -m unittest discover -v -s tests
 ```
 
-## Çıktı örneği
+## Example output
 
-Bu makinede (Ollama kurulu ve çalışıyor, `llama3.2:3b` indirilmiş —
-`hardware-probe` tier="low" tespit etti):
+On this machine (Ollama installed and running, `llama3.2:3b` pulled —
+`hardware-probe` detected tier="low"):
 
 ```json
 {
@@ -67,8 +68,9 @@ Bu makinede (Ollama kurulu ve çalışıyor, `llama3.2:3b` indirilmiş —
 }
 ```
 
-`--prompt` verildiğinde — **gerçek bir yerel üretim** (bu makinede test
-edildi):
+With `--prompt` — **a real local generation** (tested on this machine). The
+prompt and the reply are kept verbatim as they were captured, which is why
+they are in Turkish:
 
 ```json
 {
@@ -82,53 +84,55 @@ edildi):
 }
 ```
 
-Model kurulu değilken/Ollama kapalıyken `status: "unavailable"` ve şu üç
-`reason` değerinden biri döner: `no_local_model_recommended` (tier
-"minimal"), `ollama_not_running` (Ollama kapalı), `model_not_installed`
-(Ollama açık ama model çekilmemiş).
+When the model is not installed or Ollama is down, it returns
+`status: "unavailable"` and one of these three `reason` values:
+`no_local_model_recommended` (tier "minimal"), `ollama_not_running` (Ollama
+is down), `model_not_installed` (Ollama is up but the model has not been
+pulled).
 
-## Tier → model eşlemesi (taslak, `local_runtime/models.py`)
+## Tier → model mapping (draft, `local_runtime/models.py`)
 
-| Tier | Önerilen model | Yaklaşık boyut |
+| Tier | Recommended model | Approx. size |
 |---|---|---|
-| `minimal` | *(yok — cloud-bridge'e yönlendirilmeli)* | — |
+| `minimal` | *(none — should be routed to cloud-bridge)* | — |
 | `low` | `llama3.2:3b` | ~2 GB |
 | `mid` | `llama3.1:8b` | ~4.7 GB |
 | `high` | `llama3.1:70b` | ~40 GB |
 
-Bu eşleme taslaktır, gerçek kullanım/benchmark verisi biriktikçe Faz 3+'ta
-revize edilecek. Bu makinede sadece `low` tier'ın modeli (`llama3.2:3b`)
-indirildi — `mid`/`high` bu donanıma hiç uygulanmıyor.
+This mapping is a draft and will be revised in Phase 3+ as real usage and
+benchmark data accumulate. Only the `low` tier's model (`llama3.2:3b`) was
+pulled on this machine — `mid`/`high` do not apply to this hardware at all.
 
-## İndirme tamamlandı (kullanıcı onayıyla, iki ayrı adımda)
+## The download is done (with the owner's approval, in two separate steps)
 
-1. **Ollama'nın kendisi**: `curl -fsSL https://ollama.com/install.sh | sh`
-   (~1.37 GB, resmi kurulum betiği, sudo ile systemd servisi olarak). Bu
-   makinede ayrık GPU olmadığından CPU-only modda kuruldu.
-2. **Model ağırlığı**: `ollama pull llama3.2:3b` (~2 GB).
+1. **Ollama itself**: `curl -fsSL https://ollama.com/install.sh | sh`
+   (~1.37 GB, the official install script, as a systemd service via sudo).
+   Since this machine has no discrete GPU, it was installed in CPU-only mode.
+2. **The model weights**: `ollama pull llama3.2:3b` (~2 GB).
 
-İkisi de ayrı, açık onaylarla yapıldı (proje kısıtı: 200 MB üstü indirme
-onaysız başlatılmaz).
+Both were done with separate, explicit approvals (a project constraint:
+downloads over 200 MB are not started without approval).
 
-## Bilinen sınırlama — zaman aşımı
+## Known limitation — timeouts
 
-`OllamaClient.generate()`'ın varsayılan timeout'u 300 saniye —
-`is_available()`/`list_models()` gibi hafif metadata çağrılarından çok daha
-yüksek, çünkü model ilk çağrıda belleğe yüklenip CPU'da çıkarım yapması
-dakikalar sürebilir (bu hata gerçek makinede yakalanıp düzeltildi: ilk
-denemede varsayılan 5 saniyelik timeout'la `"error": "timed out"` alınmıştı).
+The default timeout of `OllamaClient.generate()` is 300 seconds — far higher
+than for lightweight metadata calls such as `is_available()`/`list_models()`,
+because on the first call the model has to be loaded into memory and
+inference on CPU can take minutes (this bug was caught and fixed on the real
+machine: the first attempt returned `"error": "timed out"` with the default
+5-second timeout).
 
-## Durum
+## Status
 
-Faz 2 — orkestrasyon/istemci katmanı, `router` entegrasyonu, **gerçek
-Ollama kurulumu VE gerçek model indirme** tamamlandı (`models.py`,
-`client.py`, `status.py`, `python3 -m local_runtime [--prompt ...]` CLI).
-Faz 4'te `chat()`/`--converse` eklendi — gerçek testte `llama3.2:3b`'nin
-tool-calling'i (Ollama `/api/chat` üzerinden) doğrulandı: model gerçekten
-yapılandırılmış bir `tool_calls` bloğu üretti (`{"name": "hardware_tier",
-"arguments": {}}`). 20 test geçiyor — ikisi gerçek çağrılar (`generate()`
-ve `chat()` ile tool-calling, model belleğe yüklenip gerçek çalışıyor).
-`route: "local"` artık bu makinede hem düz üretimde hem tool-use'da
-gerçekten uçtan uca çalışıyor (tool-use kalitesi/güvenilirliği için bkz.
-`ai-stack/assistant/README.md` "Yerel tool-use — bilinen güvenilirlik
-sınırlaması").
+Phase 2 — the orchestration/client layer, the `router` integration, and
+**the real Ollama installation AND the real model download** are complete
+(`models.py`, `client.py`, `status.py`, and the
+`python3 -m local_runtime [--prompt ...]` CLI). `chat()`/`--converse` were
+added in Phase 4 — real testing verified `llama3.2:3b`'s tool-calling (via
+Ollama `/api/chat`): the model genuinely produced a structured `tool_calls`
+block (`{"name": "hardware_tier", "arguments": {}}`). 20 tests pass — two of
+them real calls (`generate()` and tool-calling via `chat()`, with the model
+loaded into memory and really running). `route: "local"` now genuinely works
+end to end on this machine, for both plain generation and tool-use (for
+tool-use quality and reliability see `ai-stack/assistant/README.md`, "Local
+tool-use — known reliability limitation").

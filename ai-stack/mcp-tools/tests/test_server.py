@@ -53,11 +53,11 @@ class TestMCPServer(unittest.TestCase):
                 "jsonrpc": "2.0",
                 "id": 5,
                 "method": "tools/call",
-                "params": {"name": "echo", "arguments": {"text": "merhaba"}},
+                "params": {"name": "echo", "arguments": {"text": "hello"}},
             }
         )
         self.assertFalse(response["result"]["isError"])
-        self.assertEqual(response["result"]["content"][0]["text"], "echo: merhaba")
+        self.assertEqual(response["result"]["content"][0]["text"], "echo: hello")
 
     def test_tools_call_unknown_tool_is_error(self):
         response = self.server.handle_message(
@@ -72,14 +72,14 @@ class TestMCPServer(unittest.TestCase):
 
     def test_tools_call_handler_exception_is_error(self):
         def boom():
-            raise RuntimeError("patladı")
+            raise RuntimeError("boom")
 
         self.server.register_tool("boom", "Patlar", {"type": "object"}, boom)
         response = self.server.handle_message(
             {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "boom", "arguments": {}}}
         )
         self.assertTrue(response["result"]["isError"])
-        self.assertIn("patladı", response["result"]["content"][0]["text"])
+        self.assertIn("boom", response["result"]["content"][0]["text"])
 
 
 if __name__ == "__main__":

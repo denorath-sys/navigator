@@ -2,17 +2,17 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 
-// Navigator OS — Quickshell giriş noktası.
+// Navigator OS — the Quickshell entry point.
 //
-// Faz 4'te CI'da gerçek bir Hyprland compositor'a karşı çalıştırılıp
-// doğrulandı (bkz. shell/README.md, build-disk-and-boot-test.yml
-// "hyprland-test" job'ı) — artık sadece statik incelemeden ibaret değil.
+// In Phase 4 it was run against and verified on a real Hyprland compositor in
+// CI (see shell/README.md and the "hyprland-test" job in
+// build-disk-and-boot-test.yml) — it is no longer only a static review.
 ShellRoot {
     id: root
 
-    // AssistantPanel'in görünürlüğü — AssistantToggle tıklaması (Bar.qml)
-    // veya Hyprland Super+Space kısayolu (qs ipc call assistant toggle,
-    // bkz. hyprland/hyprland.conf) ile değişir.
+    // AssistantPanel's visibility — changed by clicking AssistantToggle
+    // (Bar.qml) or by the Hyprland Super+Space shortcut (qs ipc call assistant
+    // toggle, see hyprland/hyprland.conf).
     property bool assistantVisible: false
 
     IpcHandler {
@@ -36,19 +36,18 @@ ShellRoot {
         }
     }
 
-    // WorkspaceIndicator'ın bağlandığı Hyprland verisini dışarıdan
-    // okunabilir yapar. `assistant` handler'ının getResponse/isLoading'i
-    // gibi: gösterge grafiksel olduğundan, gerçek bir compositor'a karşı
-    // doğru veriyi gösterdiğini kanıtlamanın başka yolu yok
-    // (bkz. build-disk-and-boot-test.yml, "WorkspaceIndicator gerçek
-    // Hyprland verisine bağlı mı" adımı). Aynı zamanda shell durumunu
-    // script'lenebilir kılıyor.
+    // Makes the Hyprland data WorkspaceIndicator binds to readable from
+    // outside. Like getResponse/isLoading on the `assistant` handler: because
+    // the indicator is graphical, there is no other way to prove it shows the
+    // right data against a real compositor (see the "is WorkspaceIndicator
+    // bound to real Hyprland data" step in build-disk-and-boot-test.yml). It
+    // also makes the shell's state scriptable.
     IpcHandler {
         target: "workspaces"
 
         function list(): string {
-            // `Hyprland.workspaces` bir ObjectModel; JS'ten içeriğine
-            // `values` ile erişilir (doğrudan indeksleme reaktif değil).
+            // `Hyprland.workspaces` is an ObjectModel; its contents are
+            // reached from JS via `values` (direct indexing is not reactive).
             const out = []
             for (const ws of Hyprland.workspaces.values) {
                 out.push({

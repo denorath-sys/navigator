@@ -1,115 +1,118 @@
 # theme/
 
-Navigator'ın görsel kimliği: pusula, deniz feneri, Orion takımyıldızı ve
-Kuzey Yıldızı temalı nautical/gökyüzü estetiği.
+Navigator's visual identity: a nautical/sky aesthetic themed around the
+compass, the lighthouse, the Orion constellation and the North Star.
 
-## İçerik
+## Contents
 
-- `palette.json` — Marka renk paleti (teal `#4fd1c5`, mor `#8b7cf6`,
-  altın `#e8d9a8`, lacivert taban `#0b0f1a`) ve gradyan tanımları.
-  `hyprland/hyprland.conf` ile manuel senkron tutulur.
-- `gtk/` — GTK3/GTK4 tema varlıkları için yer tutucu (Faz 2).
-- `qt/` — Qt5/Qt6 (qt5ct/qt6ct) tema varlıkları için yer tutucu (Faz 2).
+- `palette.json` — the brand colour palette (teal `#4fd1c5`, purple
+  `#8b7cf6`, gold `#e8d9a8`, navy base `#0b0f1a`) and gradient definitions.
+  Kept in manual sync with `hyprland/hyprland.conf`.
+- `gtk/` — placeholder for GTK3/GTK4 theme assets (Phase 2).
+- `qt/` — placeholder for Qt5/Qt6 (qt5ct/qt6ct) theme assets (Phase 2).
 
-## İmajdaki kurulum yolu (Katman 3)
+## Installation path in the image (Layer 3)
 
-`image/Containerfile` Katman 3, buradan imaja **sadece `palette.json`**'u
-alıyor → `/usr/share/navigator/theme/palette.json`. `gtk/` ve `qt/` hâlâ
-boş iskelet (içlerinde yalnızca `.gitkeep`) olduğundan katmanlanmıyor:
-boş dizinleri imaja koymak, olmayan bir GTK/Qt temasının varmış gibi
-görünmesine yol açardı.
+Layer 3 of `image/Containerfile` takes **only `palette.json`** from here into
+the image → `/usr/share/navigator/theme/palette.json`. `gtk/` and `qt/` are
+still empty skeletons (containing only a `.gitkeep`) and so are not layered:
+putting empty directories into the image would make a non-existent GTK/Qt
+theme look as though it were there.
 
-### Renk tekrarı artık gerçekten doğrulanıyor
+### The colour duplication is now genuinely verified
 
-`palette.json` makine-okunur tek kaynak, ama aynı hex değerleri
-`hyprland/hyprland.conf` ve `shell/Theme.qml` içinde **elle** tekrar
-ediliyor. Bu sessizce sapabilecek bir tekrardı; CI artık her koşuda
-karşılaştırıyor (`build-disk-and-boot-test.yml`, "Katman 3/4/7" adımı):
+`palette.json` is the machine-readable single source, but the same hex
+values are repeated **by hand** in `hyprland/hyprland.conf` and
+`shell/Theme.qml`. That was a duplication that could drift silently; CI now
+compares them on every run (`build-disk-and-boot-test.yml`, the
+"Layer 3/4/7" step):
 
-- `col.active_border` gradyan durakları **ve** açısı ↔
+- `col.active_border` gradient stops **and** angle ↔
   `gradients.assistant.stops` / `.angle`
 - `decoration:shadow:color` ↔ `colors.navy`
-- `shell/Theme.qml`'deki `teal`/`purple`/`gold`/`navy` ↔ `colors.*`
+- `teal`/`purple`/`gold`/`navy` in `shell/Theme.qml` ↔ `colors.*`
 
-Katman 7'den beri **üçü de imajdan** okunuyor (`palette.json`,
-`hyprland.conf`, `Theme.qml`) — yani karşılaştırılan şey kullanıcının
-gerçekten çalıştıracağı içerik. Kontrolün gerçekten iş gördüğü kasıtlı
-sapma enjekte edilerek doğrulandı — gradyan durağı, açı ve `Theme.qml`
-sapmalarının üçü de yakalandı.
+Since Layer 7, **all three are read from the image** (`palette.json`,
+`hyprland.conf`, `Theme.qml`) — meaning what is compared is the content the
+user will actually run. The check was proven to do real work by injecting a
+deliberate deviation — all three of the gradient stop, the angle and the
+`Theme.qml` deviations were caught.
 
-Gerçek CI sonucu
+Real CI result
 ([run 30664668160](https://github.com/denorath-sys/navigator/actions/runs/30664668160)):
 
 ```
-OK: ikisi de repodaki dosyalarla birebir aynı (imaj bayat değil).
-OK: palette.json <-> hyprland.conf (imajdan) <-> shell/Theme.qml senkron.
-    teal=4fd1c5 purple=8b7cf6 gold=e8d9a8 navy=0b0f1a, gradyan açısı=45deg
+OK: both are byte-identical to the files in the repo (image is not stale).
+OK: palette.json <-> hyprland.conf (from image) <-> shell/Theme.qml in sync.
+    teal=4fd1c5 purple=8b7cf6 gold=e8d9a8 navy=0b0f1a, gradient angle=45deg
 ```
 
-## Duvar kâğıdı
+## Wallpaper
 
-`wallpaper.png` (1672x941) Navigator'ın marka görseli: gece göğü,
-takımyıldız, dağ siluetleri ve teal-yeşil bir dalga; sağ kenarda
-"Navigator OS" logotipi. `palette.json`'daki nautical/gökyüzü kimliğinin
-görsel karşılığı.
+`wallpaper.png` (1672x941) is Navigator's brand image: a night sky, a
+constellation, mountain silhouettes and a teal-green wave, with the
+"Navigator OS" logotype on the right-hand edge. It is the visual counterpart
+of the nautical/sky identity in `palette.json`.
 
-İmajda: `image/Containerfile` **Katman 3** dosyayı
-`/usr/share/navigator/theme/wallpaper.png` altına koyuyor.
-`hyprland/hyprpaper.conf` (Katman 4, `/etc/skel` üzerinden) onu
-yüklüyor, `hyprland.conf`'a eklenen `exec-once = hyprpaper` hyprpaper'ı
-başlatıyor.
+In the image: **Layer 3** of `image/Containerfile` places the file at
+`/usr/share/navigator/theme/wallpaper.png`. `hyprland/hyprpaper.conf`
+(Layer 4, via `/etc/skel`) loads it, and the `exec-once = hyprpaper` added to
+`hyprland.conf` starts hyprpaper.
 
-**Neden gerekti:** Navigator bu ana kadar **stok Hyprland duvar
-kâğıdını** gösteriyordu ("A day without Hyprland is a day wasted"), yani
-masaüstü markasız görünüyordu. Bunu hiçbir metinsel test göremezdi; ilk
-gerçek ekran görüntüsü alınınca ortaya çıktı.
+**Why it was needed:** until this point Navigator was showing the **stock
+Hyprland wallpaper** ("A day without Hyprland is a day wasted"), meaning the
+desktop looked unbranded. No textual test could have seen this; it surfaced
+the moment the first real screenshot was taken.
 
-### Kısa süre prosedürel bir üretici vardı
+### There was briefly a procedural generator
 
-Marka görseli gelmeden önce duvar kâğıdı `generate-wallpaper.py` ile
-prosedürel olarak üretiliyordu (gece göğü gradyanı + Orion + Kuzey
-Yıldızı, renkleri `palette.json`'dan okuyarak, deterministik).
-Gerçek marka görseli sağlanınca üretici **kaldırıldı** — iki ayrı
-"duvar kâğıdı kaynağı" tutmak yanıltıcı olurdu. Git geçmişinde duruyor
-(commit `0a3c4fd`), geri istenirse tek revert.
+Before the brand image arrived, the wallpaper was generated procedurally by
+`generate-wallpaper.py` (a night-sky gradient plus Orion and the North Star,
+reading its colours from `palette.json`, deterministic). Once the real brand
+image was supplied, the generator was **removed** — keeping two separate
+"wallpaper sources" would have been misleading. It remains in git history
+(commit `0a3c4fd`), a single revert away if wanted back.
 
-### Ekranda gerçekten göründüğü nasıl doğrulanıyor
+### How it is verified to really appear on screen
 
-Duvar kâğıdının yüklendiğini iddia etmek yetmez; CI **ekran
-görüntüsünü** bu dosyayla karşılaştırıyor
+Claiming the wallpaper is loaded is not enough; CI compares the
+**screenshot** against this file
 (`.github/scripts/analyze-screenshot.py --reference=theme/wallpaper.png`).
-Yöntem: her iki görüntü 24x15 bloğa bölünüp blok ortalama renkleri
-karşılaştırılıyor ve farkların **medyanı** alınıyor. Medyan, üst bar ve
-asistan paneli gibi ekranı kaplayan pencerelere karşı dayanıklı; onlar
-blokların azınlığını bozuyor. hyprpaper'ın "cover" kırpması da hesaba
-katılıyor (ekran 16:10, görsel 16:9 → yanlardan %5 kırpılıyor).
+The method: both images are divided into 24x15 blocks, the block average
+colours are compared, and the **median** of the differences is taken. The
+median is robust against windows covering the screen, such as the top bar
+and the assistant panel; those spoil a minority of the blocks. hyprpaper's
+"cover" cropping is accounted for as well (screen 16:10, image 16:9 → 5% is
+cropped from the sides).
 
-Eşik (15) tahmin değil, üç gerçek ölçümden geliyor:
+The threshold (15) is not a guess, it comes from three real measurements:
 
-| senaryo | medyan blok farkı |
+| scenario | median block difference |
 |---|---|
-| aynı duvar kâğıdı (gerçek ekran görüntüsü vs kaynağı) | **0.1** |
-| yanlış Navigator duvar kâğıdı | 37.9 |
-| stok Hyprland duvar kâğıdı | 68.7 |
+| the same wallpaper (real screenshot vs its source) | **0.1** |
+| a wrong Navigator wallpaper | 37.9 |
+| the stock Hyprland wallpaper | 68.7 |
 
-**Neden parlaklık değil:** ilk sürüm "masaüstü koyu mu" diye soruyordu
-(stok 85.3, üretilmiş duvar kâğıdı 21.6). Gerçek marka görseli gelince o
-ölçü çöktü — ortasındaki parlak dalga yüzünden aynı bandın luma'sı 73.0,
-yani stok'un 85.3'üne komşu. Parlaklık duvar kâğıdının KİMLİĞİNİ değil
-yalnızca bir özetini ölçüyordu; blok karşılaştırması kimliği ölçüyor.
+**Why not brightness:** the first version asked "is the desktop dark?"
+(stock 85.3, the generated wallpaper 21.6). When the real brand image
+arrived that measure collapsed — because of the bright wave in its middle,
+the same band's luma is 73.0, i.e. adjacent to stock's 85.3. Brightness was
+measuring only a summary of the wallpaper, not its IDENTITY; the block
+comparison measures the identity.
 
-### Bilinen sınırlama: geniş olmayan ekranlarda logotip kırpılıyor
+### Known limitation: the logotype is cropped on non-wide screens
 
-Görsel 16:9 (1672x941, oran 1.777). hyprpaper "cover" ile ölçeklediği
-için **16:10 ekranda yanlardan %5 kırpılıyor** ve "Navigator OS"
-logotipi x≈%92-97 aralığında olduğundan sağ kısmı kesiliyor (CI'daki
-1280x800 VM tam olarak bu durumda). 16:9 ekranlarda sorun yok.
-Çözüm istenirse: logotipi biraz sola almak ya da kenarda daha fazla
-güvenli alan bırakan bir sürüm.
+The image is 16:9 (1672x941, ratio 1.777). Because hyprpaper scales with
+"cover", **5% is cropped from the sides on a 16:10 screen**, and since the
+"Navigator OS" logotype sits at x≈92-97% its right-hand part is cut off (the
+1280x800 VM in CI is exactly this case). There is no problem on 16:9
+screens. If a fix is wanted: move the logotype slightly left, or use a
+version that leaves more safe area at the edge.
 
-## Durum
+## Status
 
-Faz 1 — palet tanımı gerçek ve artık imajda; duvar kâğıdı da gerçek
-(marka görseli, imajda, ekran görüntüsüyle doğrulanan). `gtk/`, `qt/` hâlâ
-boş iskelet. Gerçek GTK/Qt tema üretimi (ikon seti, cursor teması, GTK
-CSS, Qt Kvantum/QQC2 stili) Faz 2 kapsamında ele alınacak.
+Phase 1 — the palette definition is real and now in the image; the wallpaper
+is real too (the brand image, in the image, verified by screenshot). `gtk/`
+and `qt/` are still empty skeletons. Real GTK/Qt theme production (icon set,
+cursor theme, GTK CSS, Qt Kvantum/QQC2 style) will be tackled as part of
+Phase 2.

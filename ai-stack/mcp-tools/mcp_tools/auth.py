@@ -1,9 +1,9 @@
-"""HTTP+SSE transport için Bearer token kimlik doğrulaması — stdlib-only.
+"""Bearer token authentication for the HTTP+SSE transport — stdlib-only.
 
-Tasarım ilkesi: kimliksiz çalışma YOK. `http_transport.run_http_server()`
-bir token verilmediğinde otomatik üretir ve stderr'e yazdırır — sunucunun
-sessizce açık kapı olarak çalışması hiçbir zaman mümkün değil (Jupyter'ın
-notebook token'ı gibi).
+Design principle: NO unauthenticated operation. When no token is given,
+`http_transport.run_http_server()` generates one automatically and prints it
+to stderr — it is never possible for the server to run silently as an open
+door (the same idea as Jupyter's notebook token).
 """
 import hmac
 import secrets
@@ -14,7 +14,7 @@ def generate_token() -> str:
 
 
 def extract_bearer_token(authorization_header: str | None) -> str | None:
-    """`Authorization: Bearer <token>` header'ından token'ı çıkarır."""
+    """Extract the token from an `Authorization: Bearer <token>` header."""
     if not authorization_header:
         return None
     parts = authorization_header.split(" ", 1)
@@ -25,7 +25,7 @@ def extract_bearer_token(authorization_header: str | None) -> str | None:
 
 
 def tokens_match(provided: str | None, expected: str) -> bool:
-    """Zamanlama saldırısına dayanıklı karşılaştırma (`hmac.compare_digest`)."""
+    """A timing-attack-resistant comparison (`hmac.compare_digest`)."""
     if provided is None:
         return False
     return hmac.compare_digest(provided, expected)

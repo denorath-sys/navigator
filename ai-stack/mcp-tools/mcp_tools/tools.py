@@ -1,9 +1,9 @@
-"""Navigator'ın ilk MCP araçları — hardware-probe ve router'ı sarmalar.
+"""Navigator's first MCP tools — wrapping hardware-probe and router.
 
-Her iki araç da subprocess üzerinden ilgili modülün CLI'ını çağırır (bkz.
-ai-stack/router/router/status.py'daki aynı desen) — Python import yerine
-CLI kullanmak, gerçek sistemde ayrı süreçler olarak çalışacakları şekle
-daha yakın.
+Both tools invoke the relevant module's CLI over a subprocess (the same
+pattern as in ai-stack/router/router/status.py) — using the CLI rather than a
+Python import is closer to how they will run as separate processes on a real
+system.
 """
 import subprocess
 
@@ -37,8 +37,8 @@ def register_default_tools(
     server.register_tool(
         name="hardware_tier",
         description=(
-            "Navigator'ın çalıştığı donanımın AI model tier'ını "
-            "(minimal/low/mid/high) ve CPU/RAM/GPU sinyallerini döner."
+            "Returns the AI model tier (minimal/low/mid/high) of the "
+            "hardware Navigator runs on, plus the CPU/RAM/GPU signals."
         ),
         input_schema={"type": "object", "properties": {}},
         handler=lambda: hardware_tier_tool(hardware_probe_path),
@@ -46,13 +46,13 @@ def register_default_tools(
     server.register_tool(
         name="route_request",
         description=(
-            "Bir kullanıcı isteğinin yerel model mi yoksa bulut mu ile "
-            "karşılanması gerektiğine karar verir."
+            "Decides whether a user request should be served by the local "
+            "model or by the cloud."
         ),
         input_schema={
             "type": "object",
             "properties": {
-                "prompt": {"type": "string", "description": "Yönlendirilecek istek"},
+                "prompt": {"type": "string", "description": "The request to route"},
                 "prefer": {
                     "type": "string",
                     "enum": ["balanced", "privacy", "cost", "speed"],

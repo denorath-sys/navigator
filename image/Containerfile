@@ -1,79 +1,75 @@
-# Navigator OS — Fedora Atomic imaj tanımı (Faz 1 taslağı)
+# Navigator OS — Fedora Atomic image definition (Phase 1 draft)
 #
-# Bu Containerfile, bootc/rpm-ostree ile inşa edilebilen, immutable bir
-# Navigator masaüstü imajı üretir. Universal Blue'nun ublue-os/base-main base
-# image'ı referans alınmıştır (bootc uyumlu, aylık güncellenen Fedora Atomic
-# türevi, DE içermeyen minimal taban — Hyprland'ı üzerine biz katmanlıyoruz).
+# This Containerfile produces an immutable Navigator desktop image that can be
+# built with bootc/rpm-ostree. It is based on Universal Blue's
+# ublue-os/base-main base image (bootc-compatible, a monthly-updated Fedora
+# Atomic derivative, a minimal base with no DE — we layer Hyprland on top).
 #
-# ÖNEMLİ: Bu dosya Faz 1 kapsamında SADECE TANIM amaçlıdır.
-# Yerel ortamda `podman build` / `rpm-ostree compose` ÇALIŞTIRILMAMALIDIR —
-# gerçek build işlemi .github/workflows/build-image.yml üzerinden GitHub
-# Actions'ta yapılır (bkz. proje kısıtları: roaming/kısıtlı internet).
+# IMPORTANT: within Phase 1 this file is a DEFINITION ONLY.
+# `podman build` / `rpm-ostree compose` MUST NOT BE RUN locally — the real
+# build happens on GitHub Actions via .github/workflows/build-image.yml (see
+# the project constraints: metered/roaming internet).
 
 ARG BASE_IMAGE="ghcr.io/ublue-os/base-main"
-# Fedora 44. Önceden 43'e sabitliydi: solopasha/hyprland COPR'ının fc44
-# chroot'u yeniden DERLENMİŞ değildi, paketler fc43'ten kopyalanmıştı
-# (COPR'da "forked" durumu), dolayısıyla aquamarine hâlâ
-# libdisplay-info.so.2 istiyordu ve F44'ün taşıdığı .so.3 ile depsolve
-# olmuyordu. Katman 1 artık kendi COPR'umuzu kullanıyor (aşağıya bkz.),
-# o engel kalktı.
+# Fedora 44. It used to be pinned to 43: the fc44 chroot of the
+# solopasha/hyprland COPR had not actually been REBUILT, the packages had been
+# copied from fc43 ("forked" status in COPR), so aquamarine still wanted
+# libdisplay-info.so.2 and would not depsolve against the .so.3 that F44 ships.
+# Layer 1 now uses our own COPR (see below), so that obstacle is gone.
 ARG BASE_TAG="44"
 
 FROM ${BASE_IMAGE}:${BASE_TAG}
 
 # ---------------------------------------------------------------------------
-# Katman 1: Temel masaüstü paketleri + Hyprland (Wayland compositor)
+# Layer 1: base desktop packages + Hyprland (Wayland compositor)
 # ---------------------------------------------------------------------------
-# hyprland, hypridle, hyprlock, hyprpaper, xdg-desktop-portal-hyprland resmi
-# Fedora depolarında bulunmuyor. Önceden solopasha/hyprland COPR'ı
-# kullanılıyordu; artık denorath/navigator-hyprland kullanılıyor: aynı spec
-# deposundan (github.com/solopasha/hyprlandRPM) fedora-44'e karşı GERÇEKTEN
-# yeniden derlenmiş 13 paket.
+# hyprland, hypridle, hyprlock, hyprpaper and xdg-desktop-portal-hyprland are
+# not in the official Fedora repositories. The solopasha/hyprland COPR used to
+# be used; now denorath/navigator-hyprland is: 13 packages GENUINELY rebuilt
+# against fedora-44 from the same spec repository
+# (github.com/solopasha/hyprlandRPM).
 #
-# solopasha/hyprland burada BİLEREK etkinleştirilmiyor — ikisi birden açık
-# olursa dnf bozuk olanı seçer. Bizde hyprland-0.51.1-1.fc44 var, onların
-# fc44 chroot'unda kopyalanmış 0.51.1-3.fc43 duruyor ve rpm önce release'i
-# karşılaştırdığı için (3 > 1) onlarınki kazanır. Katman 1'in ihtiyaç
-# duyduğu diğer paketler (kitty, wofi, waybar, mate-polkit, seatd,
-# NetworkManager, pipewire, wireplumber) zaten resmi Fedora deposunda,
-# yani o COPR'a hiç ihtiyaç kalmıyor.
+# solopasha/hyprland is DELIBERATELY not enabled here — with both enabled, dnf
+# picks the broken one. We have hyprland-0.51.1-1.fc44, while their fc44 chroot
+# holds a copied 0.51.1-3.fc43, and because rpm compares the release first
+# (3 > 1) theirs would win. The other packages Layer 1 needs (kitty, wofi,
+# waybar, mate-polkit, seatd, NetworkManager, pipewire, wireplumber) are
+# already in the official Fedora repository, so that COPR is not needed at all.
 #
-# hyprland 0.51.1 F44'te tek bir kaynak yaması gerektiriyor: WG21 P3953R3
-# std::runtime_format'ı std::dynamic_format olarak yeniden adlandırdı ve F44
-# libstdc++ 16 taşıyor (F43'te 15 vardı). Yama denorath-sys/hyprlandRPM
-# deposunun navigator-f44 dalında; upstream bu çağrıları 0.51.1'den sonra
-# kaldırdığı için sürüm yükseltmesinde düşürülmeli.
+# hyprland 0.51.1 requires a single source patch on F44: WG21 P3953R3 renamed
+# std::runtime_format to std::dynamic_format, and F44 ships libstdc++ 16 (F43
+# had 15). The patch is on the navigator-f44 branch of the
+# denorath-sys/hyprlandRPM repository; since upstream removed these calls after
+# 0.51.1, it must be dropped on a version bump.
 #
-# polkit-gnome yerine (upstream'de bakımsız, Fedora depolarından kaldırılmış)
-# mate-polkit kullanılıyor — resmi Fedora deposunda, GTK tabanlı, Qt6'ya
-# bağımlı değil. Hyprland'a özel hyprpolkitagent DENENMEDİ: hyprland-qt-support
-# bağımlılığı aylardır Qt 6.9 private API'sine sabitli kalmış (build log'da
-# doğrulandı) ve Katman 2'deki quickshell'in gerektirdiği Qt 6.11 ile
-# çakışıyor. Bu bizi bağlamıyor: hyprland'ın kendisi hyprland-qtutils'i
-# GEREKTİRMİYOR (depo metadata'sında doğrulandı), o yüzden hyprland-qt-support
-# zinciri imaja hiç girmiyor.
+# mate-polkit is used instead of polkit-gnome (unmaintained upstream, removed
+# from the Fedora repositories) — it is in the official Fedora repository, is
+# GTK-based and does not depend on Qt6. The Hyprland-specific hyprpolkitagent
+# was NOT TRIED: its hyprland-qt-support dependency has been pinned to Qt 6.9
+# private API for months (verified in the build log) and conflicts with the
+# Qt 6.11 that Layer 2's quickshell requires. This does not constrain us:
+# hyprland itself does NOT REQUIRE hyprland-qtutils (verified in the repository
+# metadata), so the hyprland-qt-support chain never enters the image.
 #
-# seatd: CI'da gerçek bir VM'de Hyprland'ı başlatma denemesinde (bkz.
-# .github/workflows/build-disk-and-boot-test.yml, hyprland-test job)
-# Hyprland "CBackend::create() failed!" ile çöktü. aquamarine kaynağında
-# doğrulandı: DRM backend libseat_open_seat() ile bir seat açmaya
-# çalışıyor; base image'da sadece libseat (kütüphane) var, seatd (daemon)
-# yok — `rpm -q seatd` "package seatd is not installed" döndü ve
-# `loginctl` gerçek oturumların SEAT sütununu "-" gösterdi (systemd-logind
-# seat ataması yapmıyor). seatd, gerçek bir VT/seat olmadan da (ör. bu
-# QEMU VM'i, ileride uzak/headless kullanım senaryoları) cihaz erişimini
-# kendi yönetebiliyor.
+# seatd: when trying to start Hyprland in a real VM in CI (see
+# .github/workflows/build-disk-and-boot-test.yml, the hyprland-test job)
+# Hyprland crashed with "CBackend::create() failed!". Verified in the
+# aquamarine source: the DRM backend tries to open a seat with
+# libseat_open_seat(); the base image only has libseat (the library), not seatd
+# (the daemon) — `rpm -q seatd` returned "package seatd is not installed" and
+# `loginctl` showed "-" in the SEAT column for real sessions (systemd-logind
+# assigns no seat). seatd can manage device access itself even without a real
+# VT/seat (e.g. this QEMU VM, and future remote/headless usage scenarios).
 #
-# hyprland-qtutils: eksikken Hyprland masaüstünde sarı bir bilgi afişi
-# gösteriyordu ("This is a runtime dependency for some dialogs") ve afiş
-# üst panelin sağını (asistan düğmesi + saat) kapatıyordu. Bir config
-# hatası olmadığı için `hyprctl configerrors` temizdi; ilk ekran
-# görüntüleri alınana kadar hiç görülmedi. Paket Fedora'da HİÇ YOK
-# (dist-git'te bile), sadece COPR'larda — bu yüzden çalışma zamanı
-# bağımlılığı hyprland-qt-support ile birlikte kendi COPR'umuza eklendi
-# (ikisi de solopasha/hyprlandRPM spec'lerinden fedora-44'e karşı
-# derlendi; solopasha'nın deposunu açmak seçenek değil, bkz. yukarıdaki
-# "forked chroot" notu).
+# hyprland-qtutils: while missing, Hyprland showed a yellow info banner on the
+# desktop ("This is a runtime dependency for some dialogs") and the banner
+# covered the right-hand side of the top panel (the assistant button + clock).
+# Because it was not a config error, `hyprctl configerrors` was clean; it was
+# never seen until the first screenshots were taken. The package does not exist
+# in Fedora AT ALL (not even in dist-git), only in COPRs — so it was added to
+# our own COPR together with its runtime dependency hyprland-qt-support (both
+# built against fedora-44 from solopasha/hyprlandRPM specs; enabling
+# solopasha's repository is not an option, see the "forked chroot" note above).
 RUN dnf5 -y copr enable denorath/navigator-hyprland \
     && rpm-ostree install \
         hyprland \
@@ -93,140 +89,142 @@ RUN dnf5 -y copr enable denorath/navigator-hyprland \
     && ostree container commit
 
 # ---------------------------------------------------------------------------
-# Katman 2: Quickshell (Navigator'ın özgün shell'i — bkz. shell/README.md)
+# Layer 2: Quickshell (Navigator's custom shell — see shell/README.md)
 # ---------------------------------------------------------------------------
-# Quickshell resmi Fedora depolarında yok; errornointernet/quickshell COPR'ı
-# Fedora 43/44 için aktif bakımlı, otomatik rebuild edilen tek kaynak.
-# Katman 1'in aksine bu COPR fc44 chroot'unu GERÇEKTEN derliyor: paket
-# 0.3.0-3.fc44 ve `Qt_6.11_PRIVATE_API` istiyor, F44'ün resmi deposundaki
-# qt6-qtbase ise 6.11.1 — yani eşleşiyorlar (depo metadata'sında doğrulandı).
+# Quickshell is not in the official Fedora repositories; the
+# errornointernet/quickshell COPR is the only actively maintained,
+# automatically rebuilt source for Fedora 43/44. Unlike Layer 1's case, this
+# COPR GENUINELY builds its fc44 chroot: the package is 0.3.0-3.fc44 and wants
+# `Qt_6.11_PRIVATE_API`, while the qt6-qtbase in F44's official repository is
+# 6.11.1 — so they match (verified in the repository metadata).
 #
-# Aşağıdaki `dnf5 install` tercihi F43 dönemine ait: o zaman bu build Qt 6.10
-# ABI'sine karşı derlenmişti ve base-main imajında katmanlı halde daha eski
-# qt6-qtbase (6.9.2) bulunduğundan depsolve çakışıyordu. `rpm-ostree install`
-# taban katmandaki bir paketi yükseltemiyor, `rpm-ostree override replace`
-# ise bu container-build akışında "Non-local replacement overrides not
-# implemented yet" hatası veriyor (--experimental ile bile). Bu yüzden bu
-# katmanda düz `dnf5 install` kullanılıyor — dnf5'in normal bağımlılık
-# çözücüsü rpm-ostree'nin aksine gerekli paketleri sorunsuz yükseltebiliyor.
-# F44 tabanında bu gerekçe ortadan kalkmış görünüyor: ilk F44 build'inin
-# log'unda qt6-qtbase-6.11.1 YÜKSELTİLMEDEN, doğrudan `updates` deposundan
-# kuruldu — yani tabanda çakışacak eski bir Qt yok. Buna rağmen
-# `rpm-ostree install`'a dönmek DENENMEDİ: `dnf5 install` çalışıyor ve bu
-# ayrı bir değişiklik olmalı. F44 geçişiyle aynı build'de iki değişken
-# birden değiştirilmedi ki bir şey kırılsa hangisi olduğu belli olsun.
+# The `dnf5 install` choice below dates from the F43 era: back then this build
+# was compiled against the Qt 6.10 ABI, and because the base-main image carried
+# an older layered qt6-qtbase (6.9.2) the depsolve conflicted.
+# `rpm-ostree install` cannot upgrade a package in the base layer, and
+# `rpm-ostree override replace` fails in this container-build flow with
+# "Non-local replacement overrides not implemented yet" (even with
+# --experimental). This layer therefore uses a plain `dnf5 install` — dnf5's
+# normal dependency solver can upgrade the necessary packages without trouble,
+# unlike rpm-ostree. On the F44 base this rationale appears to have
+# disappeared: in the log of the first F44 build, qt6-qtbase-6.11.1 was
+# installed directly from the `updates` repository WITHOUT an upgrade — meaning
+# there is no old Qt in the base to conflict with. Even so, returning to
+# `rpm-ostree install` was NOT TRIED: `dnf5 install` works and that should be a
+# separate change. Two variables were not changed in the same build as the F44
+# migration, so that if something broke it would be clear which one it was.
 RUN dnf5 -y copr enable errornointernet/quickshell \
     && dnf5 -y install quickshell \
     && ostree container commit
 
 # ---------------------------------------------------------------------------
-# Katman 3: Navigator marka/tema varlıkları
+# Layer 3: Navigator brand/theme assets
 # ---------------------------------------------------------------------------
-# `theme/`den imaja SADECE `palette.json` giriyor, çünkü şu an gerçek olan
-# tek varlık o: `theme/gtk/` ve `theme/qt/` hâlâ boş iskelet (içlerinde
-# sadece `.gitkeep` var, bkz. theme/README.md "Durum"). Boş dizinleri
-# katmanlamak, olmayan bir GTK/Qt temasının varmış gibi görünmesine yol
-# açardı — gerçek varlıklar üretildiğinde buraya eklenecekler.
+# ONLY `palette.json` goes into the image from `theme/`, because it is the only
+# asset that is currently real: `theme/gtk/` and `theme/qt/` are still empty
+# skeletons (containing only a `.gitkeep`, see theme/README.md "Status").
+# Layering empty directories would make a non-existent GTK/Qt theme look as
+# though it were there — they will be added here once real assets exist.
 #
-# palette.json, marka renklerinin makine-okunur tek kaynağı: hem
-# `hyprland/hyprland.conf` (col.active_border, shadow) hem
-# `shell/Theme.qml` aynı hex değerlerini ELLE tekrar ediyor (ikisi de bunu
-# kendi yorumunda belirtiyor). Bu tekrar bir sapma riski; imajdaki
-# palette.json ile imajdaki hyprland.conf'un tutarlılığı artık CI'da
-# gerçekten doğrulanıyor (bkz. build-disk-and-boot-test.yml, "Katman 3/4"
-# adımı).
+# palette.json is the machine-readable single source of the brand colours: both
+# `hyprland/hyprland.conf` (col.active_border, shadow) and `shell/Theme.qml`
+# repeat the same hex values BY HAND (both note this in their own comments).
+# That duplication is a drift risk; the consistency between the palette.json in
+# the image and the hyprland.conf in the image is now genuinely verified in CI
+# (see build-disk-and-boot-test.yml, the "Layer 3/4" step).
 COPY theme/palette.json /usr/share/navigator/theme/palette.json
 
-# Duvar kâğıdı: Navigator'ın marka görseli (1672x941). Bir ara prosedürel
-# olarak üretiliyordu (theme/generate-wallpaper.py); proje sahibi gerçek
-# marka görselini sağlayınca o üretici düştü — iki ayrı "duvar kâğıdı
-# kaynağı" tutmak yanıltıcı olurdu.
+# Wallpaper: Navigator's brand image (1672x941). It was generated procedurally
+# for a while (theme/generate-wallpaper.py); once the owner supplied the real
+# brand image that generator was dropped — keeping two separate "wallpaper
+# sources" would have been misleading.
 #
-# CI bunun ekranda GERÇEKTEN göründüğünü doğruluyor: boot testi ekran
-# görüntüsünü bu dosyayla blok bazında karşılaştırıyor (bkz.
-# .github/scripts/analyze-screenshot.py). Yani "hyprpaper çalıştı mı"
-# değil, "kullanıcı bu görseli mi görüyor" sorusu yanıtlanıyor.
+# CI verifies that this GENUINELY appears on screen: the boot test compares the
+# screenshot against this file block by block (see
+# .github/scripts/analyze-screenshot.py). So the question answered is not "did
+# hyprpaper run" but "is the user seeing this image".
 COPY theme/wallpaper.png /usr/share/navigator/theme/wallpaper.png
 
 # ---------------------------------------------------------------------------
-# Katman 4: Navigator sistem config'leri
+# Layer 4: Navigator system configs
 # ---------------------------------------------------------------------------
-# hyprland.conf sistem geneli varsayılan olarak /etc/skel altına giriyor:
-# useradd yeni bir kullanıcı oluştururken /etc/skel'i ev dizinine kopyalar,
-# yani her yeni Navigator kullanıcısı bu config ile başlar ama sonrasında
-# kendi ~/.config/hypr/hyprland.conf'unu serbestçe değiştirebilir (imaj
-# güncellemeleri kullanıcının dosyasını EZMEZ — /etc/skel sadece hesap
-# oluşturma anında okunur).
+# hyprland.conf goes under /etc/skel as the system-wide default: useradd copies
+# /etc/skel into the home directory when creating a new user, so every new
+# Navigator user starts with this config but can afterwards freely modify their
+# own ~/.config/hypr/hyprland.conf (image updates DO NOT OVERWRITE the user's
+# file — /etc/skel is read only at account creation time).
 #
-# Bu katmandan önce hyprland.conf gerçek imajda hiç yoktu; CI onu
-# runner'dan VM'e scp ile kopyalayıp test ediyordu (Katman 5 öncesi
-# ai-stack'te olduğu gibi bir "CI taklidi"). Artık test, imajın kendi
-# dosyasını kullanıyor.
+# Before this layer, hyprland.conf did not exist in the real image at all; CI
+# copied it from the runner to the VM with scp and tested that (a "CI
+# simulation", as with ai-stack before Layer 5). The test now uses the image's
+# own file.
 COPY hyprland/hyprland.conf /etc/skel/.config/hypr/hyprland.conf
 
-# hyprpaper config'i aynı gerekçeyle /etc/skel altında: duvar kâğıdını
-# değiştirmek kullanıcının hakkı ve imaj güncellemeleri onun seçimini
-# ezmemeli. hyprland.conf artık `exec-once = hyprpaper` içeriyor;
-# config'siz başlatılan hyprpaper ilk saniyede pes ederdi, bu yüzden
-# ikisi birlikte girdi.
+# The hyprpaper config lives under /etc/skel for the same reason: changing the
+# wallpaper is the user's right and image updates must not overwrite their
+# choice. hyprland.conf now contains `exec-once = hyprpaper`; a hyprpaper
+# started without a config would give up in the first second, so the two went
+# in together.
 COPY hyprland/hyprpaper.conf /etc/skel/.config/hypr/hyprpaper.conf
 
-# Kimlik bilgisi yapılandırma dosyası — İÇİ BOŞ bir şablon (hiçbir sır
-# imaja girmez, girmesi de mümkün değil: imaj herkese açık).
+# The credential configuration file — an EMPTY template (no secret enters the
+# image, nor could it: the image is public).
 #
-# Neden imajda bir şablon var: /usr salt-okunur olduğu için cloud-bridge'in
-# kimlik bilgisini kullanıcı ev dizininden okuması gerekiyor
-# (~/.config/navigator/env — bkz. cloud_bridge/config.py). Var olmayan bir
-# dosyanın yolunu kullanıcının tahmin etmesi yerine, hesap açılırken
-# yorumlanmış ve açıklamalı olarak yerine konuyor.
+# Why there is a template in the image: because /usr is read-only, cloud-bridge
+# has to read the credential from the user's home directory
+# (~/.config/navigator/env — see cloud_bridge/config.py). Rather than making
+# the user guess the path of a file that does not exist, it is put in place,
+# commented and documented, when the account is created.
 #
-# chmod 600 zorunlu ve BURADA yapılıyor: git dosya modunu (exec biti
-# dışında) saklamaz, dolayısıyla COPY 0644 bırakırdı — ve cloud-bridge
-# sahibi dışına açık bir kimlik bilgisi dosyasını bilerek reddediyor.
-# Dosya modunun deploy edilmiş imajda gerçekten tuttuğu ölçüldü
-# (boot testi, "İDDİA: şablon DOSYASI sahibine kapalı olmalı").
+# chmod 600 is mandatory and is done HERE: git does not store the file mode
+# (apart from the exec bit), so COPY would leave 0644 — and cloud-bridge
+# deliberately refuses a credential file that is readable beyond its owner.
+# The file mode was measured to genuinely hold in the deployed image (the boot
+# test, "ASSERTION: the template FILE must be closed to others").
 #
-# Dizinin 0700'ü ise TUTMUYOR: aynı ölçümde /etc/skel/.config/navigator
-# 755 olarak geldi (run 30893404648). chmod satırı yine de duruyor —
-# niyet doğru ve container katmanında etkili — ama buna dayanılmıyor:
-# sırrı koruyan şey dosyanın modu, cloud-bridge de dizine değil dosyaya
-# bakıyor. Dizin modu boot testinde iddia değil TEŞHİS olarak izleniyor;
-# mekanizma (ostree /etc merge'ü mü, katmanda mı kayboluyor) henüz
-# ayırt edilmedi.
+# The directory's 0700, however, does NOT hold: in the same measurement
+# /etc/skel/.config/navigator came out as 755 (run 30893404648). The chmod line
+# still stands — the intent is right and it is effective at the container layer
+# — but nothing relies on it: what protects the secret is the file's mode, and
+# cloud-bridge looks at the file, not the directory. The directory mode is
+# tracked in the boot test as a DIAGNOSTIC rather than an assertion; the
+# mechanism (ostree's /etc merge, or loss at the layer) has not been pinned
+# down yet.
 COPY image/skel/.config/navigator/env /etc/skel/.config/navigator/env
 RUN chmod 700 /etc/skel/.config/navigator \
     && chmod 600 /etc/skel/.config/navigator/env
 
 # ---------------------------------------------------------------------------
-# Katman 5: Navigator AI stack (ai-stack/ — altı Python modülü)
+# Layer 5: Navigator AI stack (ai-stack/ — six Python modules)
 # ---------------------------------------------------------------------------
-# ai-stack'in altı modülü /usr/share/navigator/ai-stack/ altına, repodaki
-# dizin adlarıyla BİREBİR AYNI düz kardeş hiyerarşiyle kopyalanır. Bu
-# hiyerarşi keyfi değil, çalışma zamanı sözleşmesinin parçası: modüller
-# birbirini `python3 -m <modül>` subprocess'i olarak, cwd'ye göreli
-# kardeş yollarla çağırıyor (router → ../local-runtime, ../cloud-bridge;
-# local-runtime → ../hardware-probe; assistant → ../router, ../mcp-tools —
-# bkz. ilgili __main__.py'lerdeki varsayılanlar). Dizin adları değişirse
-# veya düzleşme bozulursa zincir sessizce kırılır; gerçek bir CI
-# denemesinde tam olarak bu oldu (hardware-probe eksikti, router boş
-# stdout döndürdü).
+# ai-stack's six modules are copied under /usr/share/navigator/ai-stack/ in a
+# flat sibling hierarchy with EXACTLY the same directory names as in the
+# repository. That hierarchy is not arbitrary but part of the runtime contract:
+# the modules invoke each other as `python3 -m <module>` subprocesses using
+# sibling paths relative to the cwd (router → ../local-runtime,
+# ../cloud-bridge; local-runtime → ../hardware-probe; assistant → ../router,
+# ../mcp-tools — see the defaults in the respective __main__.py files). If the
+# directory names change, or the flatness is broken, the chain breaks silently;
+# that is exactly what happened in a real CI attempt (hardware-probe was
+# missing and router returned empty stdout).
 #
-# `shell/AssistantPanel.qml`'in `workingDirectory`'si de bu yolu
-# (/usr/share/navigator/ai-stack/router) kullanıyor; bu katman eklenene
-# kadar o yol CI'da scp + `rpm-ostree usroverlay` ile taklit ediliyordu.
-# Artık imajın kendisinde, /usr salt-okunur haldeyken mevcut.
+# `shell/AssistantPanel.qml`'s `workingDirectory` also uses this path
+# (/usr/share/navigator/ai-stack/router); until this layer was added, that path
+# was simulated in CI with scp + `rpm-ostree usroverlay`. It is now present in
+# the image itself, with /usr read-only.
 #
-# Sadece çalışma zamanında gerekli olanlar kopyalanıyor: paket dizini +
-# pyproject.toml (metadata/entry point tanımı). `tests/` kasıtlı olarak
-# imaja girmiyor; `.env.local` (gerçek API key, gitignore'lı) da öyle —
-# kimlik bilgisi imaja gömülmez. Çalışma zamanında iki kaynaktan gelir:
-# ortam değişkeni (ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN) ya da
-# kullanıcının kendi ~/.config/navigator/env dosyası (şablonu Katman 4'te
-# /etc/skel altına konuyor — bkz. cloud_bridge/config.py).
+# Only what is needed at runtime is copied: the package directory +
+# pyproject.toml (metadata/entry point definition). `tests/` deliberately does
+# not enter the image, and neither does `.env.local` (the real API key,
+# gitignored) — the credential is never baked into the image. At runtime it
+# comes from two sources: an environment variable
+# (ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN) or the user's own
+# ~/.config/navigator/env file (whose template Layer 4 places under /etc/skel —
+# see cloud_bridge/config.py).
 #
-# Altı modülün hiçbirinin üçüncü parti bağımlılığı yok (hepsinde
-# `dependencies = []`, stdlib-only) — bu yüzden bu katmanda pip/venv
-# gerekmiyor, ek bir paket kurulmuyor.
+# None of the six modules has any third-party dependency (all have
+# `dependencies = []`, stdlib-only) — so this layer needs no pip or venv and
+# installs no extra package.
 COPY ai-stack/hardware-probe/hardware_probe/ /usr/share/navigator/ai-stack/hardware-probe/hardware_probe/
 COPY ai-stack/hardware-probe/pyproject.toml  /usr/share/navigator/ai-stack/hardware-probe/
 COPY ai-stack/local-runtime/local_runtime/   /usr/share/navigator/ai-stack/local-runtime/local_runtime/
@@ -240,64 +238,63 @@ COPY ai-stack/router/pyproject.toml          /usr/share/navigator/ai-stack/route
 COPY ai-stack/assistant/assistant/           /usr/share/navigator/ai-stack/assistant/assistant/
 COPY ai-stack/assistant/pyproject.toml       /usr/share/navigator/ai-stack/assistant/
 
-# python3, base-main imajında zaten var (CI'da `which python3` ile
-# doğrulandı) ama ai-stack'in tek çalışma zamanı bağımlılığı olduğu için
-# örtük bırakılmıyor: sürüm burada, build sırasında iddia ediliyor.
-# Böylece taban imaj ileride python3'ü düşürse veya 3.11'in altına inse
-# build kırılır — çalışma zamanında sessizce bozulmuş bir asistan yerine.
+# python3 already exists in the base-main image (verified in CI with
+# `which python3`), but it is not left implicit, since it is ai-stack's only
+# runtime dependency: the version is asserted here, at build time. That way, if
+# the base image later drops python3 or falls below 3.11, the build breaks —
+# rather than leaving a silently broken assistant at runtime.
 #
-# compileall: /usr, çalışan sistemde salt-okunur olduğundan Python
-# __pycache__'i çalışma zamanında yazamaz ve her çağrıda kaynağı yeniden
-# derler (bu zincirde her istek 3-4 subprocess demek). Bytecode build
-# sırasında üretiliyor. `checked-hash` bilinçli bir seçim: ostree commit
-# tüm dosya mtime'larını normalize ediyor, dolayısıyla varsayılan
-# timestamp tabanlı geçersizleştirme .pyc'leri bayat sayardı — hash
-# tabanlı doğrulama mtime'dan bağımsızdır.
-RUN python3 -c "import sys; assert sys.version_info >= (3, 11), f'ai-stack Python >= 3.11 gerektiriyor, bulunan: {sys.version}'" \
+# compileall: because /usr is read-only on a running system, Python cannot
+# write __pycache__ at runtime and recompiles the source on every invocation
+# (in this chain every request means 3-4 subprocesses). The bytecode is
+# generated at build time. `checked-hash` is a deliberate choice: the ostree
+# commit normalises all file mtimes, so the default timestamp-based
+# invalidation would consider the .pyc files stale — hash-based validation is
+# independent of mtime.
+RUN python3 -c "import sys; assert sys.version_info >= (3, 11), f'ai-stack requires Python >= 3.11, found: {sys.version}'" \
     && python3 -m compileall -q --invalidation-mode checked-hash /usr/share/navigator/ai-stack \
     && ostree container commit
 
 # ---------------------------------------------------------------------------
-# Katman 6: Yerel model runtime (Ollama) — PLACEHOLDER
+# Layer 6: local model runtime (Ollama) — PLACEHOLDER
 # ---------------------------------------------------------------------------
-# llama.cpp / Ollama gibi büyük ikililer, boyut kısıtı nedeniyle hâlâ
-# katmanlanmıyor. Katman 5'teki `local-runtime` bu runtime'ın VARLIĞINI
-# gerektirmiyor: Ollama yoksa `model_ready: false` döndürüyor ve router
-# isteği buluta yönlendiriyor (CI'da gerçekten doğrulanan yol). Ollama
-# katmanlandığında yerel yol kendiliğinden devreye girer.
+# Large binaries such as llama.cpp / Ollama are still not layered, because of
+# the size constraint. `local-runtime` in Layer 5 does not require this runtime
+# to be PRESENT: with no Ollama it returns `model_ready: false` and the router
+# routes the request to the cloud (a path genuinely verified in CI). Once
+# Ollama is layered, the local path engages on its own.
 
 # ---------------------------------------------------------------------------
-# Katman 7: Navigator shell (Quickshell QML — bkz. shell/README.md)
+# Layer 7: Navigator shell (Quickshell QML — see shell/README.md)
 # ---------------------------------------------------------------------------
-# Katman 2 Quickshell'in KENDİSİNİ (çalıştırıcı) kuruyor; bu katman
-# Navigator'ın kendi QML shell'ini koyuyor. Çalıştırma:
+# Layer 2 installs Quickshell ITSELF (the runner); this layer places
+# Navigator's own QML shell. To run it:
 #   qs -p /usr/share/navigator/shell/shell.qml
 #
-# Neden /usr/share/navigator/shell/ (Quickshell'in alışılmış
-# ~/.config/quickshell/ yolu değil): bunlar kullanıcı yapılandırması değil
-# PROGRAM KODU. /etc/skel'e konsaydı her kullanıcı kendi donmuş kopyasını
-# alır ve imaj güncellemeleri shell'i hiç güncelleyemezdi (hyprland.conf
-# için istediğimizin tam tersi — orada kullanıcının dosyasını EZMEMEK
-# doğruydu, burada güncelleyebilmek doğru). Kendi shell'ini çalıştırmak
-# isteyen kullanıcı bu dizini kopyalayıp `qs -p` ile kendi yolunu
-# gösterebilir.
+# Why /usr/share/navigator/shell/ (and not Quickshell's customary
+# ~/.config/quickshell/ path): these are PROGRAM CODE, not user configuration.
+# Had they been placed in /etc/skel, every user would get their own frozen copy
+# and image updates could never update the shell (the exact opposite of what we
+# want for hyprland.conf — there NOT OVERWRITING the user's file was right,
+# here being able to update is right). A user who wants to run their own shell
+# can copy this directory and point `qs -p` at their own path.
 #
-# Katman numarası sırası, katmanların GERÇEK olma sırasını izliyor; bir
-# bağımlılık sırası değil. Sona konması ayrıca kasıtlı: shell/ en sık
-# değişen COPY içeriği, en sonda olması üstündeki katmanların build
-# cache'ini korur.
+# The layer numbering follows the order in which the layers became REAL; it is
+# not a dependency order. Placing it last is also deliberate: shell/ is the
+# most frequently changing COPY content, and having it last preserves the build
+# cache of the layers above it.
 #
-# Sadece .qml dosyaları giriyor; shell/README.md geliştirici belgesi,
-# imajda işi yok.
+# Only the .qml files go in; shell/README.md is developer documentation and has
+# no business in the image.
 COPY shell/*.qml /usr/share/navigator/shell/
 
 # ---------------------------------------------------------------------------
 # Metadata
 # ---------------------------------------------------------------------------
 LABEL org.opencontainers.image.title="Navigator OS"
-LABEL org.opencontainers.image.description="AI-native Linux masaüstü dağıtımı — Fedora Atomic + Hyprland tabanlı"
+LABEL org.opencontainers.image.description="AI-native Linux desktop distribution — based on Fedora Atomic + Hyprland"
 LABEL org.opencontainers.image.vendor="Navigator OS Project"
 LABEL org.opencontainers.image.licenses="GPL-3.0-only"
 
-# bootc uyumluluğu için gerekli standart etiket
+# The standard label required for bootc compatibility
 LABEL containers.bootc="1"

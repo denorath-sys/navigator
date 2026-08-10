@@ -26,7 +26,7 @@ class TestSSESessionRegistry(unittest.TestCase):
         self.assertIsNone(self.registry.get(session_id))
 
     def test_remove_unknown_session_does_not_raise(self):
-        self.registry.remove("hiç-var-olmadı")  # sessizce yok sayılmalı
+        self.registry.remove("never-existed")  # must be ignored silently
 
     def test_queue_delivers_put_items(self):
         _, q = self.registry.create()

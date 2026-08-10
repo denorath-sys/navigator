@@ -25,7 +25,7 @@ class TestProtocol(unittest.TestCase):
         out = io.StringIO()
         write_message({"jsonrpc": "2.0", "id": 1, "result": {"text": "a\\nb"}}, stream=out)
         line = out.getvalue()
-        # tek satır + trailing newline dışında newline olmamalı
+        # there must be no newline other than the single line + trailing newline
         self.assertEqual(line.count("\n"), 1)
 
 

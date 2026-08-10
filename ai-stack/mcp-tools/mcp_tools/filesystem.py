@@ -1,125 +1,124 @@
-"""Navigator'ın dosya sistemi araçları — sandbox'lanmış.
+"""Navigator's filesystem tools — sandboxed.
 
-Güvenlik: Tüm yollar bir kök dizine (varsayılan: kullanıcının ev dizini,
-`NAVIGATOR_MCP_FS_ROOT` ortam değişkeniyle geçersiz kılınabilir — testler
-bunu kullanır) göre çözümlenir ve kanonik forma (`os.path.realpath`)
-indirgenip kökün dışına çıkmadığı doğrulanır — path traversal (`..`,
-symlink) saldırılarını engeller. `write_file` ek olarak: var olan bir
-dosyanın üzerine ancak `overwrite=true` ile yazılabilir (yanlışlıkla
-üzerine yazmayı engellemek için) ve üst dizin zaten var olmalı (araç
-kendiliğinden dizin oluşturmaz — kapsamı dosya içeriğiyle sınırlı tutmak
-için). `delete_file` geri alınamaz olduğundan `confirm=true` olmadan
-çalışmaz. `rename_file` hem kaynak hem hedef için aynı sandbox
-kontrolünü uygular ve hedef zaten varsa `overwrite=true` ister
-(`write_file` ile tutarlı). Tüm araçlar sadece dosyalarla çalışır —
-dizin silme/yeniden adlandırma desteklenmiyor (kapsam bilinçli olarak
-dar tutuluyor).
+Security: all paths are resolved relative to a root directory (default: the
+user's home directory, overridable with the `NAVIGATOR_MCP_FS_ROOT`
+environment variable — the tests use this), reduced to canonical form
+(`os.path.realpath`) and verified not to escape the root — which blocks path
+traversal (`..`, symlink) attacks. `write_file` additionally: can only write
+over an existing file with `overwrite=true` (to prevent accidental
+overwrites), and the parent directory must already exist (the tool does not
+create directories on its own — to keep its scope limited to file content).
+`delete_file` is irreversible and so does nothing without `confirm=true`.
+`rename_file` applies the same sandbox check to both source and destination
+and requires `overwrite=true` if the destination already exists (consistent
+with `write_file`). All tools work on files only — deleting or renaming
+directories is not supported (the scope is deliberately kept narrow).
 """
 import json
 import os
 
 DEFAULT_ROOT = os.environ.get("NAVIGATOR_MCP_FS_ROOT", os.path.expanduser("~"))
-MAX_READ_BYTES = 1_000_000  # ~1 MB — büyük dosyaları context'e boğmamak için
+MAX_READ_BYTES = 1_000_000  # ~1 MB — so large files don't drown the context
 MAX_WRITE_BYTES = 1_000_000
 MAX_LIST_ENTRIES = 500
 
 
 class FilesystemError(Exception):
-    """Dosya sistemi aracı bir hata ile karşılaştığında (bulunamadı, kök dışı, çok büyük vb.)."""
+    """Raised when a filesystem tool hits an error (not found, outside the root, too large, ...)."""
 
 
 def _resolve_within_root(path: str, root: str) -> str:
-    """`path`'i `root`'a göre çözümler; kök dışına çıkarsa hata fırlatır."""
+    """Resolve `path` against `root`; raise if it escapes the root."""
     root_real = os.path.realpath(root)
     candidate = path if os.path.isabs(path) else os.path.join(root_real, path)
     resolved = os.path.realpath(candidate)
     if resolved != root_real and not resolved.startswith(root_real + os.sep):
-        raise FilesystemError(f"'{path}' izin verilen kök dizinin ({root}) dışına çıkıyor")
+        raise FilesystemError(f"'{path}' escapes the permitted root directory ({root})")
     return resolved
 
 
 def read_file(path: str, root: str = DEFAULT_ROOT) -> str:
     resolved = _resolve_within_root(path, root)
     if not os.path.isfile(resolved):
-        raise FilesystemError(f"Dosya bulunamadı: {path}")
+        raise FilesystemError(f"File not found: {path}")
     size = os.path.getsize(resolved)
     if size > MAX_READ_BYTES:
-        raise FilesystemError(f"Dosya çok büyük ({size} bayt > {MAX_READ_BYTES} bayt sınırı): {path}")
+        raise FilesystemError(f"File too large ({size} bytes > {MAX_READ_BYTES} byte limit): {path}")
     try:
         with open(resolved, "r", encoding="utf-8", errors="replace") as f:
             return f.read()
     except OSError as e:
-        raise FilesystemError(f"Dosya okunamadı: {path} ({e})") from e
+        raise FilesystemError(f"Could not read file: {path} ({e})") from e
 
 
 def write_file(path: str, content: str, overwrite: bool = False, root: str = DEFAULT_ROOT) -> str:
     resolved = _resolve_within_root(path, root)
     if os.path.isdir(resolved):
-        raise FilesystemError(f"'{path}' bir dizin, dosya değil")
+        raise FilesystemError(f"'{path}' is a directory, not a file")
     if os.path.exists(resolved) and not overwrite:
-        raise FilesystemError(f"Dosya zaten var: {path} (üzerine yazmak için overwrite=true gerekir)")
+        raise FilesystemError(f"File already exists: {path} (overwrite=true is required to write over it)")
     parent = os.path.dirname(resolved)
     if not os.path.isdir(parent):
-        raise FilesystemError(f"Üst dizin yok: {path}")
+        raise FilesystemError(f"Parent directory does not exist: {path}")
 
     encoded = content.encode("utf-8")
     if len(encoded) > MAX_WRITE_BYTES:
-        raise FilesystemError(f"İçerik çok büyük ({len(encoded)} bayt > {MAX_WRITE_BYTES} bayt sınırı): {path}")
+        raise FilesystemError(f"Content too large ({len(encoded)} bytes > {MAX_WRITE_BYTES} byte limit): {path}")
 
     try:
         with open(resolved, "w", encoding="utf-8") as f:
             f.write(content)
     except OSError as e:
-        raise FilesystemError(f"Dosya yazılamadı: {path} ({e})") from e
-    return f"{len(encoded)} bayt yazıldı: {path}"
+        raise FilesystemError(f"Could not write file: {path} ({e})") from e
+    return f"{len(encoded)} bytes written: {path}"
 
 
 def delete_file(path: str, confirm: bool = False, root: str = DEFAULT_ROOT) -> str:
     resolved = _resolve_within_root(path, root)
     if not os.path.exists(resolved):
-        raise FilesystemError(f"Dosya bulunamadı: {path}")
+        raise FilesystemError(f"File not found: {path}")
     if os.path.isdir(resolved):
-        raise FilesystemError(f"'{path}' bir dizin, dosya değil (dizin silme desteklenmiyor)")
+        raise FilesystemError(f"'{path}' is a directory, not a file (deleting directories is not supported)")
     if not confirm:
-        raise FilesystemError(f"Silme geri alınamaz — onaylamak için confirm=true gerekir: {path}")
+        raise FilesystemError(f"Deletion is irreversible — confirm=true is required to confirm: {path}")
 
     try:
         os.remove(resolved)
     except OSError as e:
-        raise FilesystemError(f"Dosya silinemedi: {path} ({e})") from e
-    return f"Silindi: {path}"
+        raise FilesystemError(f"Could not delete file: {path} ({e})") from e
+    return f"Deleted: {path}"
 
 
 def rename_file(path: str, new_path: str, overwrite: bool = False, root: str = DEFAULT_ROOT) -> str:
     resolved = _resolve_within_root(path, root)
     resolved_new = _resolve_within_root(new_path, root)
     if not os.path.isfile(resolved):
-        raise FilesystemError(f"Dosya bulunamadı: {path}")
+        raise FilesystemError(f"File not found: {path}")
     if os.path.isdir(resolved_new):
-        raise FilesystemError(f"'{new_path}' bir dizin, hedef dosya olamaz")
+        raise FilesystemError(f"'{new_path}' is a directory, it cannot be the destination file")
     if os.path.exists(resolved_new) and not overwrite:
         raise FilesystemError(
-            f"Hedef dosya zaten var: {new_path} (üzerine yazmak için overwrite=true gerekir)"
+            f"Destination file already exists: {new_path} (overwrite=true is required to write over it)"
         )
     parent = os.path.dirname(resolved_new)
     if not os.path.isdir(parent):
-        raise FilesystemError(f"Üst dizin yok: {new_path}")
+        raise FilesystemError(f"Parent directory does not exist: {new_path}")
 
     try:
         os.replace(resolved, resolved_new)
     except OSError as e:
-        raise FilesystemError(f"Dosya yeniden adlandırılamadı: {path} -> {new_path} ({e})") from e
-    return f"Yeniden adlandırıldı: {path} -> {new_path}"
+        raise FilesystemError(f"Could not rename file: {path} -> {new_path} ({e})") from e
+    return f"Renamed: {path} -> {new_path}"
 
 
 def list_directory(path: str = ".", root: str = DEFAULT_ROOT) -> list[dict]:
     resolved = _resolve_within_root(path, root)
     if not os.path.isdir(resolved):
-        raise FilesystemError(f"Dizin bulunamadı: {path}")
+        raise FilesystemError(f"Directory not found: {path}")
     try:
         names = sorted(os.listdir(resolved))
     except OSError as e:
-        raise FilesystemError(f"Dizin listelenemedi: {path} ({e})") from e
+        raise FilesystemError(f"Could not list directory: {path} ({e})") from e
 
     entries = []
     for name in names[:MAX_LIST_ENTRIES]:
@@ -138,15 +137,15 @@ def register_filesystem_tools(server, root: str = DEFAULT_ROOT) -> None:
     server.register_tool(
         name="read_file",
         description=(
-            "Bir dosyanın içeriğini okur (salt-okunur, sandbox'lı — sadece "
-            f"'{root}' kök dizini altında, en fazla {MAX_READ_BYTES} bayt)."
+            "Reads the contents of a file (read-only, sandboxed — only under "
+            f"the '{root}' root directory, at most {MAX_READ_BYTES} bytes)."
         ),
         input_schema={
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Kök dizine göre göreli veya kök içinde mutlak dosya yolu",
+                    "description": "A file path relative to the root, or absolute within the root",
                 },
             },
             "required": ["path"],
@@ -156,15 +155,15 @@ def register_filesystem_tools(server, root: str = DEFAULT_ROOT) -> None:
     server.register_tool(
         name="list_directory",
         description=(
-            "Bir dizinin içeriğini listeler (salt-okunur, sandbox'lı — sadece "
-            f"'{root}' kök dizini altında)."
+            "Lists the contents of a directory (read-only, sandboxed — only "
+            f"under the '{root}' root directory)."
         ),
         input_schema={
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Kök dizine göre göreli veya kök içinde mutlak dizin yolu (varsayılan: '.')",
+                    "description": "A directory path relative to the root, or absolute within the root (default: '.')",
                 },
             },
             "required": [],
@@ -174,25 +173,25 @@ def register_filesystem_tools(server, root: str = DEFAULT_ROOT) -> None:
     server.register_tool(
         name="write_file",
         description=(
-            "Bir dosyaya metin içerik yazar (sandbox'lı — sadece "
-            f"'{root}' kök dizini altında, en fazla {MAX_WRITE_BYTES} bayt). "
-            "Üst dizin zaten var olmalı; var olan bir dosyanın üzerine yazmak "
-            "için overwrite=true gerekir."
+            "Writes text content to a file (sandboxed — only under the "
+            f"'{root}' root directory, at most {MAX_WRITE_BYTES} bytes). "
+            "The parent directory must already exist; overwrite=true is "
+            "required to write over an existing file."
         ),
         input_schema={
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Kök dizine göre göreli veya kök içinde mutlak dosya yolu",
+                    "description": "A file path relative to the root, or absolute within the root",
                 },
                 "content": {
                     "type": "string",
-                    "description": "Dosyaya yazılacak metin içerik",
+                    "description": "The text content to write to the file",
                 },
                 "overwrite": {
                     "type": "boolean",
-                    "description": "Var olan bir dosyanın üzerine yazmaya izin ver (varsayılan: false)",
+                    "description": "Allow writing over an existing file (default: false)",
                 },
             },
             "required": ["path", "content"],
@@ -204,21 +203,21 @@ def register_filesystem_tools(server, root: str = DEFAULT_ROOT) -> None:
     server.register_tool(
         name="delete_file",
         description=(
-            "Bir dosyayı siler (sandbox'lı — sadece "
-            f"'{root}' kök dizini altında). Bu işlem GERİ ALINAMAZ; "
-            "confirm=true olmadan çalışmaz. Sadece dosyalar silinebilir, "
-            "dizinler değil."
+            "Deletes a file (sandboxed — only under the "
+            f"'{root}' root directory). This operation is IRREVERSIBLE; it "
+            "does nothing without confirm=true. Only files can be deleted, "
+            "not directories."
         ),
         input_schema={
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Kök dizine göre göreli veya kök içinde mutlak dosya yolu",
+                    "description": "A file path relative to the root, or absolute within the root",
                 },
                 "confirm": {
                     "type": "boolean",
-                    "description": "Silmeyi onayla (varsayılan: false — onaylanmadan hiçbir şey silinmez)",
+                    "description": "Confirm the deletion (default: false — nothing is deleted without confirmation)",
                 },
             },
             "required": ["path"],
@@ -228,24 +227,25 @@ def register_filesystem_tools(server, root: str = DEFAULT_ROOT) -> None:
     server.register_tool(
         name="rename_file",
         description=(
-            "Bir dosyayı yeniden adlandırır/taşır (sandbox'lı — hem kaynak "
-            f"hem hedef '{root}' kök dizini altında olmalı). Hedef zaten "
-            "varsa overwrite=true gerekir. Sadece dosyalar için, dizinler için değil."
+            "Renames/moves a file (sandboxed — both source and destination "
+            f"must be under the '{root}' root directory). overwrite=true is "
+            "required if the destination already exists. For files only, not "
+            "directories."
         ),
         input_schema={
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Kaynak dosya yolu",
+                    "description": "The source file path",
                 },
                 "new_path": {
                     "type": "string",
-                    "description": "Hedef dosya yolu",
+                    "description": "The destination file path",
                 },
                 "overwrite": {
                     "type": "boolean",
-                    "description": "Hedef dosya zaten varsa üzerine yaz (varsayılan: false)",
+                    "description": "Write over the destination file if it already exists (default: false)",
                 },
             },
             "required": ["path", "new_path"],

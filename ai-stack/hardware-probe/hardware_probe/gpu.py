@@ -1,12 +1,12 @@
-"""GPU detection via /sys/class/drm — vendor, sürücü ve (mümkünse) VRAM.
+"""GPU detection via /sys/class/drm — vendor, driver and (where possible) VRAM.
 
-Bilinen sınırlamalar (Faz 2 taslağı):
-  - NVIDIA VRAM miktarı sysfs üzerinden güvenilir okunamıyor (proprietary
-    sürücü nvidia-smi gerektirir); bu yüzden nvidia kartlarda vram_gb=None
-    döner ama yine de "dedicated" (ayrık) kabul edilir.
-  - AMD entegre GPU'lar (APU) da amdgpu sürücüsünü kullandığından, ayrık bir
-    Radeon kart ile aynı şekilde "dedicated" işaretlenebilir — bu ayrım
-    ileride PCI device-id listesiyle netleştirilecek.
+Known limitations (Phase 2 draft):
+  - NVIDIA VRAM size cannot be read reliably from sysfs (the proprietary
+    driver requires nvidia-smi); nvidia cards therefore return vram_gb=None
+    but are still counted as "dedicated".
+  - AMD integrated GPUs (APUs) also use the amdgpu driver, so they can be
+    marked "dedicated" the same way a discrete Radeon card is — this
+    distinction will be clarified later with a PCI device-id list.
 """
 import os
 import re
@@ -31,13 +31,13 @@ def read_vram_gb(device_path: str, vendor: str) -> float | None:
                 return round(int(f.read().strip()) / (1024**3), 1)
         except (FileNotFoundError, ValueError):
             return None
-    # nvidia: sysfs'te güvenilir VRAM bilgisi yok (bkz. modül docstring'i)
-    # intel: entegre GPU, ayrık VRAM'ı yok (sistem RAM'ini paylaşır)
+    # nvidia: no reliable VRAM information in sysfs (see the module docstring)
+    # intel: integrated GPU, no dedicated VRAM (it shares system RAM)
     return None
 
 
 def probe_gpu_devices(drm_path: str = "/sys/class/drm") -> list[dict]:
-    """/sys/class/drm altındaki cardN girişlerini tarar (connector'ları hariç tutar)."""
+    """Scan the cardN entries under /sys/class/drm (excluding connectors)."""
     devices = []
     if not os.path.isdir(drm_path):
         return devices

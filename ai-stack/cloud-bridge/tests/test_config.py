@@ -24,7 +24,7 @@ class TestConfigPath(unittest.TestCase):
         self.assertEqual(path, Path("/tmp/xdg/navigator/env"))
 
     def test_relative_xdg_config_home_is_ignored(self):
-        """XDG spec: mutlak olmayan XDG_CONFIG_HOME yok sayılır."""
+        """XDG spec: a non-absolute XDG_CONFIG_HOME is ignored."""
         path = config_path({"HOME": "/var/home/navtest", "XDG_CONFIG_HOME": "relative/dir"})
         self.assertEqual(path, Path("/var/home/navtest/.config/navigator/env"))
 
@@ -51,16 +51,17 @@ class TestParseEnvText(unittest.TestCase):
         self.assertIsNone(problem)
 
     def test_quotes_are_stripped(self):
-        values, _ = parse_env_text('A="çift"\nB=\'tek\'\n')
-        self.assertEqual(values, {"A": "çift", "B": "tek"})
+        values, _ = parse_env_text('A="double"\nB=\'tek\'\n')
+        self.assertEqual(values, {"A": "double", "B": "tek"})
 
     def test_spaces_around_equals_are_stripped(self):
         values, _ = parse_env_text("  ANTHROPIC_API_KEY = sk-ant-3  \n")
         self.assertEqual(values, {"ANTHROPIC_API_KEY": "sk-ant-3"})
 
     def test_value_may_contain_equals_and_hash(self):
-        """Satır-içi yorum YOK: `#` sonrası değerin parçasıdır (bir API
-        key'i sessizce kesmek, teşhisi imkânsız bir 401 üretirdi)."""
+        """NO inline comments: anything after `#` is part of the value
+        (silently truncating an API key would produce an
+        impossible-to-diagnose 401)."""
         values, problem = parse_env_text("K=a=b#c\n")
         self.assertEqual(values, {"K": "a=b#c"})
         self.assertIsNone(problem)
@@ -70,7 +71,7 @@ class TestParseEnvText(unittest.TestCase):
         self.assertEqual(values, {"K": "$HOME/x"})
 
     def test_malformed_line_reports_line_number_but_keeps_rest(self):
-        values, problem = parse_env_text("# yorum\nbozuk satır\nANTHROPIC_API_KEY=sk-ant-4\n")
+        values, problem = parse_env_text("# comment\nmalformed line\nANTHROPIC_API_KEY=sk-ant-4\n")
         self.assertEqual(values, {"ANTHROPIC_API_KEY": "sk-ant-4"})
         self.assertEqual(problem, "malformed_line:2")
 
@@ -85,7 +86,7 @@ class TestParseEnvText(unittest.TestCase):
 
 
 class CredentialFileTestCase(unittest.TestCase):
-    """`~/.config/navigator/env`'i geçici bir HOME altında gerçekten kurar."""
+    """Genuinely sets up `~/.config/navigator/env` under a temporary HOME."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -97,7 +98,7 @@ class CredentialFileTestCase(unittest.TestCase):
     def write_config(self, text: str, mode: int = 0o600) -> Path:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if self.path.exists():
-            os.chmod(self.path, 0o600)  # önceki subTest 0o400 bırakmış olabilir
+            os.chmod(self.path, 0o600)  # a previous subTest may have left 0o400
         self.path.write_text(text, encoding="utf-8")
         os.chmod(self.path, mode)
         return self.path
@@ -125,8 +126,8 @@ class TestResolveCredentials(CredentialFileTestCase):
         self.assertEqual(res.values, {"ANTHROPIC_AUTH_TOKEN": "oauth-file"})
 
     def test_environment_wins_and_file_is_not_read(self):
-        """Ortam değişkeni varken dosya HİÇ açılmaz — bu yüzden dünyaya
-        açık izinli bir dosya bile hata üretmez."""
+        """With an environment variable present the file is NEVER opened — so
+        even a world-readable file produces no error."""
         self.write_config("ANTHROPIC_API_KEY=sk-ant-file\n", mode=0o644)
         env = {**self.environ, "ANTHROPIC_API_KEY": "sk-ant-env"}
         res = resolve_credentials(environ=env)

@@ -4,17 +4,17 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 
-// Navigator AI asistan paneli — ai-stack/router'a gerçekten bağlı.
-// AssistantToggle (Bar.qml) tıklamasıyla veya Hyprland Super+Space
-// kısayoluyla (qs ipc call assistant toggle, bkz. hyprland/hyprland.conf
-// ve shell.qml'deki IpcHandler) açılıp kapanır.
+// The Navigator AI assistant panel — genuinely wired to ai-stack/router.
+// Toggled by clicking AssistantToggle (Bar.qml) or by the Hyprland Super+Space
+// shortcut (qs ipc call assistant toggle, see hyprland/hyprland.conf and the
+// IpcHandler in shell.qml).
 //
-// Aşağıdaki workingDirectory artık bir varsayım değil: image/Containerfile
-// Katman 5, ai-stack'in altı modülünü /usr/share/navigator/ai-stack/ altına
-// gerçekten kopyalıyor. CI, bu yolun imajın kendisinden geldiğini
-// (/usr salt-okunur, hiçbir scp/usroverlay devrede değil) doğruluyor —
-// bkz. build-disk-and-boot-test.yml, "ai-stack'in imajın kendisinde
-// olduğunu doğrula" adımı.
+// The workingDirectory below is no longer an assumption: Layer 5 of
+// image/Containerfile genuinely copies ai-stack's six modules under
+// /usr/share/navigator/ai-stack/. CI verifies that this path comes from the
+// image itself (/usr read-only, with no scp/usroverlay involved) — see the
+// "Verify that ai-stack is in the image itself" step in
+// build-disk-and-boot-test.yml.
 PanelWindow {
     id: panel
 
@@ -36,23 +36,23 @@ PanelWindow {
 
     Theme { id: theme }
 
-    // ai-stack'in makine-okunur `reason` dizgelerini kullanıcıya bir şey
-    // ifade eden cümlelere çevirir. Bilinmeyen sebepler OLDUĞU GİBİ
-    // gösteriliyor — burada eşleşmeyen bir sebebi "bilinmeyen hata"ya
-    // yuvarlamak, teşhis için gereken tek bilgiyi silmek olurdu.
-    // Kimlik bilgisi yolu için bkz. ai-stack/cloud-bridge/cloud_bridge/config.py.
+    // Translates ai-stack's machine-readable `reason` strings into sentences
+    // that mean something to the user. Unknown reasons are shown AS IS —
+    // rounding an unmatched reason to "unknown error" here would delete the
+    // one piece of information needed to diagnose it.
+    // For the credential path see ai-stack/cloud-bridge/cloud_bridge/config.py.
     function explainReason(reason) {
         switch (reason) {
         case "credentials_not_configured":
-            return "Claude kimlik bilgisi yok — ~/.config/navigator/env dosyasına "
-                 + "ANTHROPIC_API_KEY=... yazıp dosyayı chmod 600 yapın."
+            return "No Claude credentials — write ANTHROPIC_API_KEY=... into "
+                 + "~/.config/navigator/env and chmod 600 the file."
         case "credentials_file_insecure":
-            return "~/.config/navigator/env başkaları tarafından okunabilir, bu yüzden "
-                 + "yok sayıldı — chmod 600 ~/.config/navigator/env çalıştırın."
+            return "~/.config/navigator/env is readable by others, so it was "
+                 + "ignored — run chmod 600 ~/.config/navigator/env."
         case "credentials_file_unreadable":
-            return "~/.config/navigator/env okunamadı (izin veya bozuk metin?)."
+            return "~/.config/navigator/env could not be read (permissions, or corrupt text?)."
         case "credentials_file_malformed":
-            return "~/.config/navigator/env ayrıştırılamadı — her satır KEY=VALUE olmalı."
+            return "~/.config/navigator/env could not be parsed — every line must be KEY=VALUE."
         default:
             return reason
         }
@@ -87,10 +87,10 @@ PanelWindow {
                 panel.loading = false
                 const out = outCollector.text
                 if (out.length === 0) {
-                    // Boş stdout — çıkış kodu ve stderr'i olduğu gibi göster,
-                    // sessizce "Ayrıştırma hatası" deyip stderr'i gizleme.
-                    panel.responseText = "HATA: router'dan çıktı gelmedi (exit=" + routerProcess.lastExitCode
-                        + ", stderr=" + (errCollector.text.length > 0 ? errCollector.text : "(boş)") + ")"
+                    // Empty stdout — show the exit code and stderr as they are;
+                    // do not silently say "Parse error" and hide stderr.
+                    panel.responseText = "ERROR: no output from router (exit=" + routerProcess.lastExitCode
+                        + ", stderr=" + (errCollector.text.length > 0 ? errCollector.text : "(empty)") + ")"
                     return
                 }
                 try {
@@ -99,13 +99,13 @@ PanelWindow {
                     if (result && result.status === "ok") {
                         panel.responseText = result.content
                     } else if (result) {
-                        panel.responseText = "[" + parsed.route + "] " + (result.status || "hata") + ": "
-                            + panel.explainReason(result.reason || result.error || "bilinmeyen")
+                        panel.responseText = "[" + parsed.route + "] " + (result.status || "error") + ": "
+                            + panel.explainReason(result.reason || result.error || "unknown")
                     } else {
-                        panel.responseText = "Beklenmeyen yanıt: " + out
+                        panel.responseText = "Unexpected response: " + out
                     }
                 } catch (e) {
-                    panel.responseText = "Ayrıştırma hatası (" + e + "): " + out
+                    panel.responseText = "Parse error (" + e + "): " + out
                 }
             }
         }
@@ -169,7 +169,7 @@ PanelWindow {
             wrapMode: Text.WordWrap
             color: theme.textPrimary
             font.pixelSize: 12
-            text: panel.loading ? "Düşünüyor..." : (panel.responseText.length > 0 ? panel.responseText : "Bir soru sor.")
+            text: panel.loading ? "Thinking..." : (panel.responseText.length > 0 ? panel.responseText : "Ask a question.")
         }
     }
 }

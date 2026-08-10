@@ -8,7 +8,7 @@ import unittest
 import urllib.error
 import urllib.request
 
-TEST_TOKEN = "test-token-sadece-testler-icin"
+TEST_TOKEN = "test-token-for-tests-only"
 
 
 def _find_free_port() -> int:
@@ -18,10 +18,10 @@ def _find_free_port() -> int:
 
 
 class TestHTTPTransportIntegration(unittest.TestCase):
-    """Gerçek HTTP+SSE transport'una karşı uçtan uca çalışır — gerçek
-    subprocess, gerçek TCP soketleri (mock yok). Deterministik test için
-    sabit bir --token ile başlatılıyor (otomatik üretim ayrı test edilir,
-    bkz. test_auth.py + manuel doğrulama)."""
+    """Runs end to end against the real HTTP+SSE transport — a real
+    subprocess and real TCP sockets (no mocks). It is started with a fixed
+    --token for a deterministic test (automatic generation is tested
+    separately, see test_auth.py + manual verification)."""
 
     def setUp(self):
         self.port = _find_free_port()
@@ -53,7 +53,7 @@ class TestHTTPTransportIntegration(unittest.TestCase):
                     return
             except OSError:
                 time.sleep(0.05)
-        raise RuntimeError("HTTP sunucusu zamanında ayağa kalkmadı")
+        raise RuntimeError("The HTTP server did not come up in time")
 
     def _auth_headers(self, token: str | None = TEST_TOKEN) -> dict:
         return {"Authorization": f"Bearer {token}"} if token else {}
@@ -76,7 +76,7 @@ class TestHTTPTransportIntegration(unittest.TestCase):
         while True:
             raw = response.readline()
             if not raw:
-                raise RuntimeError("SSE akışı endpoint event'i gelmeden kapandı")
+                raise RuntimeError("The SSE stream closed before the endpoint event arrived")
             line = raw.decode("utf-8").rstrip("\n")
             if line.startswith("event:"):
                 event_name = line.split(":", 1)[1].strip()

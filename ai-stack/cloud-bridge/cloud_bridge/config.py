@@ -1,45 +1,46 @@
-"""Kullanıcı seviyesinde kimlik bilgisi yapılandırması — `~/.config/navigator/env`.
+"""User-level credential configuration — `~/.config/navigator/env`.
 
-Neden var: Navigator imajında `/usr` salt-okunurdur, yani
-`/usr/share/navigator/ai-stack/cloud-bridge/.env.local` gibi bir dosya
-oluşturulamaz; kimlik bilgisi imaja da gömülmez. Geriye tek yol olarak
-"kullanıcı değişkeni kendi oturum ortamına koysun" kalıyordu, ama asistanı
-başlatan zincir (Hyprland `exec-once` → Quickshell → `Process` →
-`python3 -m router` → `python3 -m cloud_bridge`) ortamı compositor'ın
-başlatıldığı ortamdan miras alıyor: grafik oturumu bir greeter'dan veya
-TTY login'den açıldığında oraya değişken koymanın taşınabilir bir yolu yok.
+Why it exists: `/usr` is read-only in the Navigator image, so a file such as
+`/usr/share/navigator/ai-stack/cloud-bridge/.env.local` cannot be created, and
+the credential is not baked into the image either. That left "let the user put
+the variable in their own session environment" as the only route, but the
+chain that starts the assistant (Hyprland `exec-once` → Quickshell →
+`Process` → `python3 -m router` → `python3 -m cloud_bridge`) inherits the
+environment from the one the compositor was started in: when the graphical
+session is opened from a greeter or a TTY login there is no portable way to
+put a variable there.
 
-Bu yüzden kimlik bilgisi ZİNCİRİN UCUNDA, ihtiyacı olan modül tarafından
-dosyadan okunuyor. Ortam değişkeni plumbing'i gerektirmez: dosya HOME'a
-göreli çözüldüğü için Quickshell'in ortamı boş olsa bile çalışır.
+The credential is therefore read from a file AT THE END OF THE CHAIN, by the
+module that needs it. It requires no environment variable plumbing: because
+the file is resolved relative to HOME, it works even when Quickshell's
+environment is empty.
 
-Dosya biçimi bilinçli olarak shell ile `source` edilebilir tutuldu
-(`KEY=VALUE`, `#` yorum, isteğe bağlı `export ` öneki) — böylece aynı dosya
-hem buradan okunabilir hem de bir terminalde `set -a && source ~/.config/
-navigator/env && set +a` ile kullanılabilir. Ama burada okunan bir SHELL
-DEĞİL: `$VAR` genişletmesi, komut ikamesi ve satır-içi yorum YOKTUR; değer,
-`=`'den satır sonuna kadar olan (kırpılmış, gerekirse tırnakları soyulmuş)
-metnin tamamıdır.
+The file format was deliberately kept `source`-able by a shell (`KEY=VALUE`,
+`#` comments, an optional `export ` prefix) — so the same file can both be
+read here and be used in a terminal with
+`set -a && source ~/.config/navigator/env && set +a`. But what reads it here
+is NOT A SHELL: there is NO `$VAR` expansion, no command substitution and no
+inline comment; the value is the whole of the text from `=` to the end of the
+line (trimmed, with quotes stripped where present).
 """
 import os
 import re
 from pathlib import Path
 from typing import NamedTuple
 
-# Dosya adı "env" — bir gün kimlik bilgisi dışında Navigator ayarları da
-# gerekirse onlar ayrı bir dosyaya (ör. config.toml) girmeli; burası
-# "shell'e source edilebilir ortam değişkenleri" sözleşmesini korusun.
+# The file is named "env" — if Navigator settings beyond credentials are ever
+# needed they should go in a separate file (e.g. config.toml); this one should
+# keep the "environment variables source-able by a shell" contract.
 CONFIG_RELATIVE_PATH = Path("navigator") / "env"
 
-# Bugün SADECE bu iki anahtar okunuyor. Dosyadaki diğer satırlar
-# ayrıştırılır ama yok sayılır — bu dosya bir ortam dosyası taklidi değil,
-# cloud-bridge'in kimlik bilgisi kaynağı.
+# Today ONLY these two keys are read. Other lines in the file are parsed but
+# ignored — this file is not an imitation environment file, it is
+# cloud-bridge's credential source.
 CREDENTIAL_KEYS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
 
-# Dosya bir sırrı barındırıyor: grup/diğer için herhangi bir bit açıksa
-# okumayı REDDEDİYORUZ (ssh'ın özel anahtar davranışı). Sessizce okumak,
-# kullanıcının API key'inin çok kullanıcılı bir makinede okunabilir
-# olduğunu fark etmemesi demek olurdu.
+# The file holds a secret: if any bit is set for group/other we REFUSE to read
+# it (ssh's private-key behaviour). Reading it silently would mean the user
+# never noticing that their API key is readable on a multi-user machine.
 INSECURE_MODE_MASK = 0o077
 
 _KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -48,10 +49,10 @@ PROBLEM_INSECURE = "insecure_permissions"
 PROBLEM_UNREADABLE = "unreadable"
 PROBLEM_MALFORMED = "malformed_line"
 
-# Kimlik bilgisi bulunamadığında CLI/durum raporunun döndürdüğü sebep.
-# Panel bu dizgeyi kullanıcıya gösterdiği için "neden olmadı" ayırt
-# edilebilir olmalı: yapılandırılmamış olmakla, yanlış izinler yüzünden
-# REDDEDİLMİŞ olmak aynı şey değil.
+# The reason returned by the CLI/status report when no credential is found.
+# Because the panel shows this string to the user, "why there wasn't one" must
+# be distinguishable: not being configured is not the same thing as having been
+# REFUSED because of wrong permissions.
 _PROBLEM_REASONS = {
     PROBLEM_INSECURE: "credentials_file_insecure",
     PROBLEM_UNREADABLE: "credentials_file_unreadable",
@@ -64,11 +65,11 @@ SOURCE_FILE = "file"
 
 
 class CredentialResolution(NamedTuple):
-    """Kimlik bilgisinin nereden geldiği (veya neden gelmediği).
+    """Where the credential came from (or why it did not).
 
-    `values` sadece CREDENTIAL_KEYS'ten gerçekten bulunanları içerir;
-    hiçbir zaman log'lanmaz/raporlanmaz — çağıranlar `source`, `path` ve
-    `problem`'i raporlar, değerleri değil.
+    `values` contains only those CREDENTIAL_KEYS actually found; it is never
+    logged or reported — callers report `source`, `path` and `problem`, not the
+    values.
     """
 
     values: dict
@@ -78,7 +79,7 @@ class CredentialResolution(NamedTuple):
 
     @property
     def unavailable_reason(self) -> str:
-        """Kimlik bilgisi yokken raporlanacak makine-okunur sebep."""
+        """The machine-readable reason reported when there is no credential."""
         if self.problem:
             base = self.problem.split(":", 1)[0]
             return _PROBLEM_REASONS.get(base, REASON_NOT_CONFIGURED)
@@ -88,8 +89,8 @@ class CredentialResolution(NamedTuple):
 def config_path(environ: dict | None = None) -> Path:
     """`$XDG_CONFIG_HOME/navigator/env`, yoksa `~/.config/navigator/env`.
 
-    XDG Base Directory spec'i: XDG_CONFIG_HOME tanımsız, boş VEYA mutlak
-    değilse yok sayılıp varsayılan kullanılır.
+    The XDG Base Directory spec: if XDG_CONFIG_HOME is undefined, empty OR not
+    absolute, it is ignored and the default is used.
     """
     environ = os.environ if environ is None else environ
     xdg = environ.get("XDG_CONFIG_HOME", "")
@@ -98,11 +99,11 @@ def config_path(environ: dict | None = None) -> Path:
 
 
 def parse_env_text(text: str) -> tuple[dict, str | None]:
-    """`KEY=VALUE` satırlarını ayrıştırır → (değerler, problem).
+    """Parse `KEY=VALUE` lines → (values, problem).
 
-    Bozuk bir satır ayrıştırmayı DURDURMAZ (kullanıcı geri kalanı doğru
-    yazmış olabilir) ama ilk bozuk satırın numarası problem olarak
-    döndürülür ki durum raporunda görünsün.
+    A malformed line does NOT STOP parsing (the user may have written the rest
+    correctly), but the number of the first malformed line is returned as the
+    problem so that it appears in the status report.
     """
     values: dict = {}
     problem: str | None = None
@@ -132,13 +133,15 @@ def parse_env_text(text: str) -> tuple[dict, str | None]:
 def resolve_credentials(
     environ: dict | None = None, path: Path | None = None
 ) -> CredentialResolution:
-    """Kimlik bilgisini ortamdan, yoksa yapılandırma dosyasından çözer.
+    """Resolve the credential from the environment, failing that from the
+    configuration file.
 
-    Öncelik ORTAM: CREDENTIAL_KEYS'ten herhangi biri ortamda tanımlıysa
-    dosya hiç açılmaz. Böylece `set -a && source .env.local` ile çalışan
-    geliştirme akışı, CI ve tek seferlik `ANTHROPIC_API_KEY=... komut`
-    kullanımları dosyadan bağımsız kalır; ayrıca ortamı bilerek ayarlamış
-    bir kullanıcı, dosyanın izin uyarısıyla karşılaşmaz.
+    The ENVIRONMENT takes precedence: if any of CREDENTIAL_KEYS is defined in
+    the environment, the file is never opened. That keeps the development flow
+    using `set -a && source .env.local`, CI, and one-off
+    `ANTHROPIC_API_KEY=... command` usages independent of the file; and a user
+    who deliberately set the environment does not meet the file's permission
+    warning.
     """
     environ = os.environ if environ is None else environ
     path = config_path(environ) if path is None else path

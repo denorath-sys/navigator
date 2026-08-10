@@ -3,19 +3,18 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell.Hyprland
 
-// Workspace göstergesi — gerçek Hyprland IPC'sine bağlı.
+// The workspace indicator — bound to real Hyprland IPC.
 //
-// Quickshell'in `Quickshell.Hyprland` modülü compositor'ın event soketini
-// (socket2) kendisi dinliyor, yani burada polling YOK: workspace açılıp
-// kapandığında veya odak değiştiğinde `Hyprland.workspaces` ve
-// `focused`/`active` özellikleri kendiliğinden güncelleniyor.
+// Quickshell's `Quickshell.Hyprland` module listens to the compositor's event
+// socket (socket2) itself, so there is NO polling here: when a workspace is
+// created or destroyed, or the focus changes, `Hyprland.workspaces` and the
+// `focused`/`active` properties update on their own.
 //
-// Önceki hali 1-10 arası statik, tıklanamayan pillerdi. Gerçek veriye
-// bağlanmanın görünür bir sonucu var: artık SADECE VAR OLAN workspace'ler
-// gösteriliyor (Hyprland boş workspace'leri raporlamaz), yani liste
-// kullanımla birlikte büyüyüp küçülüyor. hyprland.conf'taki
-// Super+[1-9,0] kısayolları 1-10'u oluşturmaya devam ediyor; gösterge
-// onları oluştuklarında gösterir.
+// It used to be static, unclickable pills numbered 1-10. Binding to real data
+// has a visible consequence: only workspaces that EXIST are now shown
+// (Hyprland does not report empty workspaces), so the list grows and shrinks
+// with use. The Super+[1-9,0] shortcuts in hyprland.conf still create 1-10;
+// the indicator shows them as they are created.
 RowLayout {
     id: root
     spacing: 4
@@ -29,18 +28,19 @@ RowLayout {
             id: pill
             required property var modelData
 
-            // Özel workspace'ler (scratchpad vb.) negatif id taşır ve
-            // numaralı listeye ait değil. Görünmeyen öğeler QtQuick
-            // Layouts tarafından zaten atlanır, ayrıca yer tutmazlar.
+            // Special workspaces (scratchpad and the like) carry a negative
+            // id and do not belong in the numbered list. Invisible items are
+            // already skipped by QtQuick Layouts and take up no space.
             visible: pill.modelData.id > 0
 
             implicitWidth: Math.max(20, label.implicitWidth + 8)
             implicitHeight: 20
             radius: theme.radius / 2
 
-            // `focused` = bu workspace kendi monitöründe aktif VE o monitör
-            // odakta. `active` = kendi monitöründe aktif ama monitör odakta
-            // olmayabilir (çok monitörlü kurulumda ikisi ayrışır).
+            // `focused` = this workspace is active on its own monitor AND
+            // that monitor has focus. `active` = active on its own monitor but
+            // the monitor may not be focused (the two diverge on multi-monitor
+            // setups).
             color: pill.modelData.focused ? theme.teal : "transparent"
             border.color: pill.modelData.active ? theme.teal : theme.textMuted
             border.width: pill.modelData.focused ? 0 : 1
@@ -48,9 +48,9 @@ RowLayout {
             Text {
                 id: label
                 anchors.centerIn: parent
-                // Hyprland workspace adları her zaman sayı değildir
-                // (`workspace name:web` gibi adlandırılmış olabilirler),
-                // bu yüzden id değil name gösteriliyor.
+                // Hyprland workspace names are not always numbers (they can
+                // be named, as in `workspace name:web`), so the name is shown
+                // rather than the id.
                 text: pill.modelData.name
                 font.pixelSize: 11
                 color: pill.modelData.focused ? theme.navy : theme.textMuted

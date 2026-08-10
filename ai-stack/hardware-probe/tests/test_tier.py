@@ -23,8 +23,8 @@ class TestDecideTier(unittest.TestCase):
         self.assertEqual(result["tier"], "minimal")
 
     def test_integrated_gpu_does_not_count_as_vram_source(self):
-        # dedicated=False (Intel iGPU) olduğu için vram_gb dolu olsa bile
-        # tier hesaplamasına katılmamalı.
+        # Because dedicated=False (an Intel iGPU), it must not count towards
+        # the tier calculation even when vram_gb is populated.
         gpus = [{"dedicated": False, "vram_gb": None}]
         result = decide_tier(16.0, gpus)
         self.assertEqual(result["tier"], "low")

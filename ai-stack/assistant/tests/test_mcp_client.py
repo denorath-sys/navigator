@@ -80,7 +80,7 @@ class TestMCPClient(unittest.TestCase):
 
     def test_close_is_idempotent_when_already_exited(self):
         client, mock_proc = self._make_client()
-        mock_proc.poll.return_value = 0  # süreç zaten kapanmış
+        mock_proc.poll.return_value = 0  # the process has already exited
         client.close()
         mock_proc.stdin.close.assert_not_called()
 

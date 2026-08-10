@@ -1,6 +1,6 @@
 import QtQuick
 
-// Basit saat göstergesi — sistem saatini her saniye günceller.
+// A simple clock display — updates the system time every second.
 Text {
     id: root
 

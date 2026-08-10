@@ -5,14 +5,14 @@ import unittest
 
 
 class TestHyprlandToolsIntegration(unittest.TestCase):
-    """Gerçek stdio MCP sunucu sürecine karşı Hyprland araçlarını doğrular.
+    """Verifies the Hyprland tools against a real stdio MCP server process.
 
-    Bu makinede (Debian geliştirme ortamı) Hyprland kurulu/çalışır
-    durumda DEĞİL — bu yüzden burada doğrulanan şey "gerçek pencere
-    verisi dönüyor" değil, "Hyprland yokken araç çökmeden, net bir
-    hatayla (isError: true) graceful şekilde başarısız oluyor" —
-    cloud-bridge'in kimlik bilgisiz yolunun doğrulanmasıyla aynı desen.
-    Gerçek pencere/workspace verisiyle doğrulama Faz 3'e kaldı."""
+    On this machine (a Debian development environment) Hyprland is NOT
+    installed or running — so what is verified here is not "real window data
+    comes back" but "with no Hyprland, the tool fails gracefully with a clear
+    error (isError: true) rather than crashing" — the same pattern as
+    verifying cloud-bridge's credential-less path. Verification with real
+    window/workspace data was deferred to Phase 3."""
 
     def _send(self, proc, message):
         proc.stdin.write(json.dumps(message) + "\n")
@@ -55,7 +55,7 @@ class TestHyprlandToolsIntegration(unittest.TestCase):
                 response = self._recv(proc)
                 self.assertTrue(response["result"]["isError"])
                 text = response["result"]["content"][0]["text"]
-                self.assertIn("Araç hatası:", text)
+                self.assertIn("Tool error:", text)
         finally:
             proc.stdin.close()
             proc.terminate()

@@ -1,8 +1,8 @@
 import QtQuick
 
-// Navigator AI asistan paneli anahtarı — AssistantPanel.qml'i (ai-stack/router'a
-// gerçekten bağlı) açıp kapatır. hyprland/hyprland.conf'taki Super+Space
-// kısayolu da aynı paneli Quickshell IPC üzerinden açar (bkz. shell.qml).
+// The Navigator AI assistant panel toggle — opens and closes AssistantPanel.qml
+// (which is genuinely wired to ai-stack/router). The Super+Space shortcut in
+// hyprland/hyprland.conf opens the same panel over Quickshell IPC (see shell.qml).
 Rectangle {
     id: root
 

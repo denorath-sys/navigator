@@ -1,8 +1,8 @@
 """CLI: `python3 -m cloud_bridge [--pretty]` (durum),
 `python3 -m cloud_bridge --prompt "..." [--system ...] [--max-tokens N]` (tek turlu
-basitleştirilmiş rapor) veya
+a simplified report) or
 `echo '{"messages": [...], "tools": [...]}' | python3 -m cloud_bridge --converse`
-(çok turlu, HAM API yanıtı — tool-use döngüsü kuran çağıranlar için, bkz.
+(multi-turn, the RAW API response — for callers building a tool-use loop, see
 ai-stack/assistant).
 """
 import argparse
@@ -23,24 +23,24 @@ def _extract_text(response: dict) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Navigator OS cloud-bridge — Anthropic Claude API durumu veya isteği."
+        description="Navigator OS cloud-bridge — Anthropic Claude API status or request."
     )
-    parser.add_argument("--pretty", action="store_true", help="JSON çıktısını girintili yazdır")
+    parser.add_argument("--pretty", action="store_true", help="Print the JSON output indented")
     parser.add_argument(
         "--prompt",
         default=None,
-        help="Verilirse gerçek bir Claude API isteği gönderir (yoksa sadece kimlik bilgisi durumu raporlanır)",
+        help="If given, sends a real Claude API request (otherwise only the credential status is reported)",
     )
-    parser.add_argument("--system", default=None, help="Sistem promptu (isteğe bağlı)")
+    parser.add_argument("--system", default=None, help="System prompt (optional)")
     parser.add_argument("--max-tokens", type=int, default=1024)
     parser.add_argument(
         "--converse",
         action="store_true",
         help=(
-            'stdin\'den {"messages": [...], "system": ..., "tools": [...], '
-            '"model": ..., "max_tokens": ...} JSON\'u okur, Claude API\'ye '
-            "gönderir, HAM yanıtı (tool_use blokları/stop_reason dahil) stdout'a "
-            "JSON basar."
+            'Read {"messages": [...], "system": ..., "tools": [...], '
+            '"model": ..., "max_tokens": ...} JSON from stdin, send it to the '
+            "Claude API, and print the RAW response (including tool_use blocks "
+            "and stop_reason) as JSON to stdout."
         ),
     )
     args = parser.parse_args()
@@ -88,9 +88,9 @@ def main() -> int:
     resolution = client.resolve_credentials()
     if not resolution.values:
         report["status"] = "unavailable"
-        # Sadece "yapılandırılmamış" değil: dosya yanlış izinlerle
-        # REDDEDİLMİŞ de olabilir. Bu dizge AssistantPanel'de kullanıcıya
-        # görünüyor, bu yüzden ayırt edici olması gerçek bir fark yaratıyor.
+        # Not merely "not configured": the file may also have been REFUSED
+        # because of wrong permissions. This string is shown to the user in
+        # AssistantPanel, so being distinguishing makes a real difference.
         report["reason"] = resolution.unavailable_reason
         print(json.dumps(report, indent=indent, ensure_ascii=False))
         return 0

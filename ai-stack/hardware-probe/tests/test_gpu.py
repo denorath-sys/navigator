@@ -21,8 +21,8 @@ class TestProbeGpuDevices(unittest.TestCase):
         os.makedirs(device_dir)
         with open(os.path.join(device_dir, "vendor"), "w") as f:
             f.write(vendor_id + "\n")
-        # Gerçek sysfs'te driver symlink'i /sys/bus/pci/drivers/<isim> gibi bir
-        # yola işaret eder; son bileşen sürücü adının kendisidir.
+        # In real sysfs the driver symlink points at a path such as
+        # /sys/bus/pci/drivers/<name>; the last component is the driver name.
         driver_target = os.path.join(drm_root, "_drivers_root", driver_name)
         os.makedirs(driver_target)
         os.symlink(driver_target, os.path.join(device_dir, "driver"))

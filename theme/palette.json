@@ -1,39 +1,39 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "name": "Navigator",
-  "description": "Navigator OS marka renk paleti — pusula/deniz feneri/Orion/Kuzey Yıldızı temalı nautical & gökyüzü kimliği.",
+  "description": "The Navigator OS brand colour palette — a nautical & sky identity themed around the compass, lighthouse, Orion and the North Star.",
   "version": "0.1.0",
   "colors": {
     "teal": {
       "hex": "#4fd1c5",
       "role": "primary-accent",
-      "description": "Birincil vurgu rengi — interaktif öğeler, odak durumları, asistan paneli"
+      "description": "The primary accent colour — interactive elements, focus states, the assistant panel"
     },
     "purple": {
       "hex": "#8b7cf6",
       "role": "secondary-accent",
-      "description": "İkincil vurgu rengi — gradyanlarda teal ile eşleşir, AI/asistan bağlamı"
+      "description": "The secondary accent colour — pairs with teal in gradients, the AI/assistant context"
     },
     "gold": {
       "hex": "#e8d9a8",
       "role": "highlight",
-      "description": "Kuzey Yıldızı vurgusu — bildirimler, uyarılar, marka detayları"
+      "description": "The North Star accent — notifications, warnings, brand details"
     },
     "navy": {
       "hex": "#0b0f1a",
       "role": "base",
-      "description": "Lacivert taban — gece gökyüzü zemini, pencere arkaplanları, panel zemini"
+      "description": "The navy base — the night-sky ground, window backgrounds, the panel ground"
     }
   },
   "gradients": {
     "assistant": {
       "stops": ["#4fd1c5", "#8b7cf6"],
       "angle": 45,
-      "usage": "Aktif pencere kenarlığı, asistan paneli vurgusu (bkz. hyprland/hyprland.conf)"
+      "usage": "The active window border, the assistant panel accent (see hyprland/hyprland.conf)"
     }
   },
   "notes": [
-    "Bu palet Faz 1 taslağıdır; GTK/Qt tema üretimi Faz 2'de theme/gtk ve theme/qt altında somutlaşacak.",
-    "hyprland/hyprland.conf içindeki renk değerleri bu dosya ile manuel senkron tutulmaktadır."
+    "This palette is a Phase 1 draft; GTK/Qt theme production will take shape under theme/gtk and theme/qt in Phase 2.",
+    "The colour values inside hyprland/hyprland.conf are kept in manual sync with this file."
   ]
 }

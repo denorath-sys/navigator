@@ -9,7 +9,7 @@ def parse_meminfo(text: str) -> dict:
             break
 
     if total_kb is None:
-        raise ValueError("MemTotal alanı meminfo içinde bulunamadı")
+        raise ValueError("MemTotal field not found in meminfo")
 
     return {
         "total_kb": total_kb,

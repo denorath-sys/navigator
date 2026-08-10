@@ -1,4 +1,4 @@
-"""Tüm alt-probe'ları tek bir tier raporunda birleştirir."""
+"""Combines all the sub-probes into a single tier report."""
 from . import cpu, gpu, memory, npu, tier
 
 SCHEMA_VERSION = "0.1"

@@ -5,7 +5,7 @@ import unittest
 
 
 class TestMCPToolsIntegration(unittest.TestCase):
-    """Gerçek stdio MCP sunucu sürecine karşı uçtan uca protokol testi."""
+    """An end-to-end protocol test against a real stdio MCP server process."""
 
     def _send(self, proc, message):
         proc.stdin.write(json.dumps(message) + "\n")

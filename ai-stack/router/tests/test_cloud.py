@@ -12,11 +12,11 @@ class TestCallCloudBridge(unittest.TestCase):
         mock_run.return_value = MagicMock(
             stdout=json.dumps({"status": "unavailable", "reason": "credentials_not_configured"})
         )
-        result = call_cloud_bridge("merhaba", cwd="../cloud-bridge")
+        result = call_cloud_bridge("hello", cwd="../cloud-bridge")
 
         self.assertEqual(result["status"], "unavailable")
         args, kwargs = mock_run.call_args
-        self.assertEqual(args[0], ["python3", "-m", "cloud_bridge", "--prompt", "merhaba"])
+        self.assertEqual(args[0], ["python3", "-m", "cloud_bridge", "--prompt", "hello"])
         self.assertEqual(kwargs["cwd"], "../cloud-bridge")
         self.assertTrue(kwargs["check"])
 
@@ -24,7 +24,7 @@ class TestCallCloudBridge(unittest.TestCase):
     def test_propagates_called_process_error(self, mock_run):
         mock_run.side_effect = subprocess.CalledProcessError(1, "cloud_bridge")
         with self.assertRaises(subprocess.CalledProcessError):
-            call_cloud_bridge("merhaba")
+            call_cloud_bridge("hello")
 
 
 if __name__ == "__main__":

@@ -12,11 +12,11 @@ class TestCallLocalRuntime(unittest.TestCase):
         mock_run.return_value = MagicMock(
             stdout=json.dumps({"status": "unavailable", "reason": "ollama_not_running"})
         )
-        result = call_local_runtime("merhaba", cwd="../local-runtime")
+        result = call_local_runtime("hello", cwd="../local-runtime")
 
         self.assertEqual(result["status"], "unavailable")
         args, kwargs = mock_run.call_args
-        self.assertEqual(args[0], ["python3", "-m", "local_runtime", "--prompt", "merhaba"])
+        self.assertEqual(args[0], ["python3", "-m", "local_runtime", "--prompt", "hello"])
         self.assertEqual(kwargs["cwd"], "../local-runtime")
         self.assertTrue(kwargs["check"])
 
@@ -24,7 +24,7 @@ class TestCallLocalRuntime(unittest.TestCase):
     def test_propagates_called_process_error(self, mock_run):
         mock_run.side_effect = subprocess.CalledProcessError(1, "local_runtime")
         with self.assertRaises(subprocess.CalledProcessError):
-            call_local_runtime("merhaba")
+            call_local_runtime("hello")
 
 
 if __name__ == "__main__":

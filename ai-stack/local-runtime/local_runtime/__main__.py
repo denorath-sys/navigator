@@ -1,9 +1,9 @@
 """CLI: `python3 -m local_runtime [--pretty] [--hardware-probe-path PATH]` (durum),
 `python3 -m local_runtime --prompt "..." [--hardware-probe-path PATH]` (tek turlu
-basitleştirilmiş rapor) veya
+a simplified report) or
 `echo '{"messages": [...], "tools": [...]}' | python3 -m local_runtime --converse`
-(çok turlu, HAM Ollama /api/chat yanıtı — tool-use döngüsü kuran çağıranlar
-için, bkz. ai-stack/assistant).
+(multi-turn, the RAW Ollama /api/chat response — for callers building a
+tool-use loop, see ai-stack/assistant).
 """
 import argparse
 import json
@@ -15,26 +15,26 @@ from .status import SCHEMA_VERSION, build_status_report
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Navigator OS yerel model runtime durumu veya isteği (Ollama + hardware tier)."
+        description="Navigator OS local model runtime status or request (Ollama + hardware tier)."
     )
-    parser.add_argument("--pretty", action="store_true", help="JSON çıktısını girintili yazdır")
+    parser.add_argument("--pretty", action="store_true", help="Print the JSON output indented")
     parser.add_argument(
         "--hardware-probe-path",
         default="../hardware-probe",
-        help="ai-stack/hardware-probe dizininin yolu (varsayılan: ../hardware-probe)",
+        help="Path to the ai-stack/hardware-probe directory (default: ../hardware-probe)",
     )
     parser.add_argument(
         "--prompt",
         default=None,
-        help="Verilirse önerilen model ile gerçek bir Ollama isteği gönderir (yoksa sadece durum raporlanır)",
+        help="If given, sends a real Ollama request with the recommended model (otherwise only the status is reported)",
     )
     parser.add_argument(
         "--converse",
         action="store_true",
         help=(
-            'stdin\'den {"messages": [...], "tools": [...], "model": ...} JSON\'u '
-            "okur, Ollama /api/chat'e gönderir, HAM yanıtı (tool_calls dahil) "
-            "stdout'a JSON basar."
+            'Read {"messages": [...], "tools": [...], "model": ...} JSON from '
+            "stdin, send it to Ollama /api/chat, and print the RAW response "
+            "(including tool_calls) as JSON to stdout."
         ),
     )
     args = parser.parse_args()

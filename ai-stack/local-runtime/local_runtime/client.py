@@ -1,7 +1,7 @@
-"""Ollama REST API için ince istemci — stdlib-only (harici bağımlılık yok).
+"""A thin client for the Ollama REST API — stdlib-only (no external dependencies).
 
-Ollama'nın kendisi kurulu olmasa da (bu ortamda kurulu değil — bkz. proje
-kısıtları) bu istemci mock'lanmış HTTP yanıtlarıyla test edilebilir
+Even when Ollama itself is not installed (it was not, in this environment —
+see the project constraints) this client can be tested with mocked HTTP
 (bkz. tests/test_client.py).
 """
 import json
@@ -10,7 +10,7 @@ import urllib.request
 
 
 class OllamaError(Exception):
-    """Ollama'ya bağlanılamadığında veya bir istek başarısız olduğunda."""
+    """Raised when Ollama cannot be reached or a request fails."""
 
 
 class OllamaClient:
@@ -43,13 +43,14 @@ class OllamaClient:
         try:
             data = self._get("/api/tags")
         except (urllib.error.URLError, OSError, ValueError) as e:
-            raise OllamaError(f"Ollama'ya bağlanılamadı: {e}") from e
+            raise OllamaError(f"Could not connect to Ollama: {e}") from e
         return [m["name"] for m in data.get("models", [])]
 
     def generate(self, model: str, prompt: str, stream: bool = False, timeout: float = 300.0) -> dict:
-        """Model belleğe yüklenip (özellikle ilk çağrıda) CPU'da çıkarım
-        yapması dakikalar sürebilir — varsayılan timeout `is_available()`/
-        `list_models()` gibi metadata uç noktalarından çok daha yüksek (300s)."""
+        """Loading the model into memory and running inference on CPU
+        (especially on the first call) can take minutes — the default timeout
+        is far higher (300s) than for metadata endpoints such as
+        `is_available()`/`list_models()`."""
         try:
             return self._post(
                 "/api/generate",
@@ -57,7 +58,7 @@ class OllamaClient:
                 timeout=timeout,
             )
         except (urllib.error.URLError, OSError, ValueError) as e:
-            raise OllamaError(f"Ollama generate isteği başarısız: {e}") from e
+            raise OllamaError(f"Ollama generate request failed: {e}") from e
 
     def chat(
         self,
@@ -67,15 +68,15 @@ class OllamaClient:
         stream: bool = False,
         timeout: float = 300.0,
     ) -> dict:
-        """`/api/chat` ile çok turlu, tool-calling destekli bir istek
-        gönderir (gerçek makinede `llama3.2:3b` ile doğrulandı — model
-        `message.tool_calls` içinde `{"function": {"name", "arguments"}}`
-        döner; sonucu geri beslemek için `{"role": "tool", "content": ...}`
-        mesajı eklemek yeterli, `tool_call_id` eşleşmesi gerekmiyor)."""
+        """Send a multi-turn, tool-calling-capable request with `/api/chat`
+        (verified on the real machine with `llama3.2:3b` — the model returns
+        `{"function": {"name", "arguments"}}` inside `message.tool_calls`; to
+        feed the result back, appending a `{"role": "tool", "content": ...}`
+        message is enough, no `tool_call_id` matching is required)."""
         payload = {"model": model, "messages": messages, "stream": stream}
         if tools:
             payload["tools"] = tools
         try:
             return self._post("/api/chat", payload, timeout=timeout)
         except (urllib.error.URLError, OSError, ValueError) as e:
-            raise OllamaError(f"Ollama chat isteği başarısız: {e}") from e
+            raise OllamaError(f"Ollama chat request failed: {e}") from e

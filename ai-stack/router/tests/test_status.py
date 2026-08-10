@@ -44,7 +44,7 @@ class TestRouteRequest(unittest.TestCase):
     @patch("router.status.get_local_runtime_status")
     def test_calls_get_local_runtime_status_when_no_status_given(self, mock_get_status):
         mock_get_status.return_value = {"hardware_tier": "high", "model_ready": True}
-        report = route_request("selam", local_runtime_caller=_noop_local_caller)
+        report = route_request("hi", local_runtime_caller=_noop_local_caller)
         self.assertEqual(report["route"], "local")
         mock_get_status.assert_called_once()
 
@@ -77,24 +77,24 @@ class TestRouteRequest(unittest.TestCase):
         def fake_caller(prompt, cwd=None):
             captured["prompt"] = prompt
             captured["cwd"] = cwd
-            return {"status": "ok", "content": "merhaba!"}
+            return {"status": "ok", "content": "hello!"}
 
         report = route_request(
-            "selam navigator",
+            "hi navigator",
             status=status,
             cloud_bridge_cwd="../cloud-bridge",
             cloud_bridge_caller=fake_caller,
         )
         self.assertEqual(report["route"], "cloud")
-        self.assertEqual(captured["prompt"], "selam navigator")
+        self.assertEqual(captured["prompt"], "hi navigator")
         self.assertEqual(captured["cwd"], "../cloud-bridge")
-        self.assertEqual(report["cloud_bridge"]["content"], "merhaba!")
+        self.assertEqual(report["cloud_bridge"]["content"], "hello!")
 
     def test_cloud_route_does_not_call_local_runtime(self):
         status = {"hardware_tier": "minimal", "model_ready": False}
         local_called = []
         report = route_request(
-            "selam navigator",
+            "hi navigator",
             status=status,
             cloud_bridge_caller=_noop_cloud_caller,
             local_runtime_caller=lambda prompt, cwd=None: local_called.append(prompt),
@@ -108,7 +108,7 @@ class TestRouteRequest(unittest.TestCase):
         local_called = []
         cloud_called = []
         report = route_request(
-            "selam navigator",
+            "hi navigator",
             status=status,
             decide_only=True,
             local_runtime_caller=lambda prompt, cwd=None: local_called.append(prompt),
@@ -124,7 +124,7 @@ class TestRouteRequest(unittest.TestCase):
         status = {"hardware_tier": "minimal", "model_ready": False}
         cloud_called = []
         report = route_request(
-            "selam navigator",
+            "hi navigator",
             status=status,
             decide_only=True,
             cloud_bridge_caller=lambda prompt, cwd=None: cloud_called.append(prompt),
@@ -140,18 +140,18 @@ class TestRouteRequest(unittest.TestCase):
         def fake_caller(prompt, cwd=None):
             captured["prompt"] = prompt
             captured["cwd"] = cwd
-            return {"status": "ok", "content": "merhaba!"}
+            return {"status": "ok", "content": "hello!"}
 
         report = route_request(
-            "selam navigator",
+            "hi navigator",
             status=status,
             local_runtime_cwd="../local-runtime",
             local_runtime_caller=fake_caller,
         )
         self.assertEqual(report["route"], "local")
-        self.assertEqual(captured["prompt"], "selam navigator")
+        self.assertEqual(captured["prompt"], "hi navigator")
         self.assertEqual(captured["cwd"], "../local-runtime")
-        self.assertEqual(report["local_runtime"]["content"], "merhaba!")
+        self.assertEqual(report["local_runtime"]["content"], "hello!")
 
 
 if __name__ == "__main__":

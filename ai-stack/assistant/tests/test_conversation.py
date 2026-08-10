@@ -35,18 +35,18 @@ class TestMcpToolsToClaudeTools(unittest.TestCase):
 class TestExtractText(unittest.TestCase):
     def test_concatenates_text_blocks_only(self):
         blocks = [
-            {"type": "text", "text": "merhaba "},
+            {"type": "text", "text": "hello "},
             {"type": "tool_use", "name": "x", "input": {}},
-            {"type": "text", "text": "dünya"},
+            {"type": "text", "text": "world"},
         ]
-        self.assertEqual(_extract_text(blocks), "merhaba dünya")
+        self.assertEqual(_extract_text(blocks), "hello world")
 
 
 class TestDecideRoute(unittest.TestCase):
     @patch("assistant.conversation.subprocess.run")
     def test_calls_router_with_decide_only(self, mock_run):
         mock_run.return_value = _fake_run(json.dumps({"route": "local", "hardware_tier": "low"}))
-        result = decide_route("selam", preference="privacy", router_cwd="../router")
+        result = decide_route("hi", preference="privacy", router_cwd="../router")
         self.assertEqual(result["route"], "local")
         args = mock_run.call_args[0][0]
         self.assertIn("--decide-only", args)
@@ -97,14 +97,14 @@ class TestRunLocalTurn(unittest.TestCase):
 
     @patch("assistant.conversation._call_local_runtime_converse")
     def test_returns_content_immediately_when_no_tool_calls(self, mock_converse):
-        mock_converse.return_value = {"message": {"role": "assistant", "content": "merhaba!"}}
-        result = run_local_turn("selam", self._fake_mcp_client())
-        self.assertEqual(result["content"], "merhaba!")
+        mock_converse.return_value = {"message": {"role": "assistant", "content": "hello!"}}
+        result = run_local_turn("hi", self._fake_mcp_client())
+        self.assertEqual(result["content"], "hello!")
         self.assertEqual(result["tool_calls"], [])
         self.assertEqual(result["route"], "local")
         self.assertEqual(
             result["history"],
-            [{"role": "user", "content": "selam"}, {"role": "assistant", "content": "merhaba!"}],
+            [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello!"}],
         )
         self._fake_mcp_client().call_tool.assert_not_called()
 
@@ -112,13 +112,13 @@ class TestRunLocalTurn(unittest.TestCase):
     def test_raises_on_unavailable(self, mock_converse):
         mock_converse.return_value = {"status": "unavailable", "reason": "ollama_not_running"}
         with self.assertRaises(AssistantError):
-            run_local_turn("selam", self._fake_mcp_client())
+            run_local_turn("hi", self._fake_mcp_client())
 
     @patch("assistant.conversation._call_local_runtime_converse")
     def test_raises_on_error_status(self, mock_converse):
         mock_converse.return_value = {"status": "error", "error": "boom"}
         with self.assertRaises(AssistantError):
-            run_local_turn("selam", self._fake_mcp_client())
+            run_local_turn("hi", self._fake_mcp_client())
 
     @patch("assistant.conversation._call_local_runtime_converse")
     def test_history_is_prepended_to_ollama_messages(self, mock_converse):
@@ -130,18 +130,18 @@ class TestRunLocalTurn(unittest.TestCase):
 
         mock_converse.side_effect = fake_converse
         history = [
-            {"role": "user", "content": "Benim adım Ahmet."},
-            {"role": "assistant", "content": "Merhaba Ahmet!"},
+            {"role": "user", "content": "My name is Ahmet."},
+            {"role": "assistant", "content": "Hello Ahmet!"},
         ]
-        run_local_turn("Benim adım neydi?", self._fake_mcp_client(), history=history)
+        run_local_turn("What was my name?", self._fake_mcp_client(), history=history)
         sent_messages = captured_payloads[0]["messages"]
         self.assertEqual(
             sent_messages,
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": "Benim adım Ahmet."},
-                {"role": "assistant", "content": "Merhaba Ahmet!"},
-                {"role": "user", "content": "Benim adım neydi?"},
+                {"role": "user", "content": "My name is Ahmet."},
+                {"role": "assistant", "content": "Hello Ahmet!"},
+                {"role": "user", "content": "What was my name?"},
             ],
         )
 
@@ -155,14 +155,14 @@ class TestRunLocalTurn(unittest.TestCase):
                     "tool_calls": [{"function": {"name": "hardware_tier", "arguments": {}}}],
                 }
             },
-            {"message": {"role": "assistant", "content": "tier düşük"}},
+            {"message": {"role": "assistant", "content": "tier is low"}},
         ]
-        result = run_local_turn("donanımım nedir?", self._fake_mcp_client())
+        result = run_local_turn("what is my hardware?", self._fake_mcp_client())
         self.assertEqual(
             result["history"],
             [
-                {"role": "user", "content": "donanımım nedir?"},
-                {"role": "assistant", "content": "tier düşük"},
+                {"role": "user", "content": "what is my hardware?"},
+                {"role": "assistant", "content": "tier is low"},
             ],
         )
 
@@ -176,7 +176,7 @@ class TestRunLocalTurn(unittest.TestCase):
                     "tool_calls": [{"function": {"name": "hardware_tier", "arguments": {}}}],
                 }
             },
-            {"message": {"role": "assistant", "content": "tier düşük"}},
+            {"message": {"role": "assistant", "content": "tier is low"}},
         ]
         captured_payloads = []
 
@@ -186,9 +186,9 @@ class TestRunLocalTurn(unittest.TestCase):
 
         mock_converse.side_effect = fake_converse
         client = self._fake_mcp_client(tool_result_text='{"tier": "low"}')
-        result = run_local_turn("donanımım nedir?", client)
+        result = run_local_turn("what is my hardware?", client)
 
-        self.assertEqual(result["content"], "tier düşük")
+        self.assertEqual(result["content"], "tier is low")
         self.assertEqual(result["tool_calls"], [{"name": "hardware_tier", "input": {}}])
         client.call_tool.assert_called_once_with("hardware_tier", {})
 
@@ -199,9 +199,9 @@ class TestRunLocalTurn(unittest.TestCase):
 
     @patch("assistant.conversation._call_local_runtime_converse")
     def test_hallucinated_arguments_outside_schema_are_filtered(self, mock_converse):
-        """Gerçek testte llama3.2:3b sıfır-parametreli araçlara bile
-        halüsinasyon argümanlar uydurdu (örn. {"path": "..."}) — aracın
-        inputSchema'sında olmayan anahtarlar elenmeli."""
+        """In real testing llama3.2:3b made up hallucinated arguments even
+        for zero-parameter tools (e.g. {"path": "..."}) — keys not in the
+        tool's inputSchema must be dropped."""
         responses = [
             {
                 "message": {
@@ -229,12 +229,12 @@ class TestRunLocalTurn(unittest.TestCase):
 
     @patch("assistant.conversation._call_local_runtime_converse")
     def test_unsafe_tool_not_shown_to_model_and_rejected_if_hallucinated(self, mock_converse):
-        """Gerçek testte 3B model, zararsız bir 'sadece merhaba de'
-        isteğinde bile kendiliğinden write_file'ı overwrite=true ile
-        çağırmaya kalkıştı. write_file/delete_file/rename_file yerel
-        modele hiç gösterilmiyor (tools listesinde yok) VE model yine de
-        halüsinasyonla çağırırsa savunma katmanı reddediyor —
-        mcp_client.call_tool()'a hiç ulaşmıyor."""
+        """In real testing the 3B model spontaneously tried to call
+        write_file with overwrite=true even on a harmless 'just say hello'
+        request. write_file/delete_file/rename_file are not shown to the local
+        model at all (they are absent from the tools list) AND if the model
+        still hallucinates a call, the defence layer rejects it — it never
+        reaches mcp_client.call_tool()."""
         responses = [
             {
                 "message": {
@@ -263,16 +263,16 @@ class TestRunLocalTurn(unittest.TestCase):
             },
         ]
 
-        run_local_turn("selam", client)
+        run_local_turn("hi", client)
 
-        # tools/list mock'unda write_file olsa da, Ollama'ya gönderilen
+        # Even though write_file is in the tools/list mock, the tools sent to
         # tools listesinde OLMAMALI:
         sent_tools = mock_converse.call_args_list[0][0][0]["tools"]
         tool_names_sent = {t["function"]["name"] for t in sent_tools}
         self.assertNotIn("write_file", tool_names_sent)
         self.assertIn("hardware_tier", tool_names_sent)
-        # Model yine de halüsinasyonla çağırdıysa, gerçek dosya aracı
-        # ASLA çalıştırılmamalı:
+        # If the model hallucinated a call anyway, the real file tool must
+        # NEVER be executed:
         client.call_tool.assert_not_called()
 
     @patch("assistant.conversation._call_local_runtime_converse")
@@ -324,12 +324,12 @@ class TestRunLocalTurn(unittest.TestCase):
 
         mock_converse.side_effect = fake_converse
         client = self._fake_mcp_client()
-        client.call_tool.side_effect = RuntimeError("mcp-tools çöktü")
+        client.call_tool.side_effect = RuntimeError("mcp-tools crashed")
 
         run_local_turn("x", client)
 
         second_call_messages = captured_payloads[1]["messages"]
-        self.assertIn("mcp-tools çöktü", second_call_messages[-1]["content"])
+        self.assertIn("mcp-tools crashed", second_call_messages[-1]["content"])
 
     @patch("assistant.conversation._call_local_runtime_converse")
     def test_raises_after_max_iterations_infinite_tool_use(self, mock_converse):
@@ -361,17 +361,17 @@ class TestRunCloudTurn(unittest.TestCase):
     @patch("assistant.conversation._call_cloud_bridge_converse")
     def test_returns_text_immediately_when_no_tool_use(self, mock_converse):
         mock_converse.return_value = {
-            "content": [{"type": "text", "text": "merhaba"}],
+            "content": [{"type": "text", "text": "hello"}],
             "stop_reason": "end_turn",
         }
         client = self._fake_mcp_client()
-        result = run_cloud_turn("selam", client)
-        self.assertEqual(result["content"], "merhaba")
+        result = run_cloud_turn("hi", client)
+        self.assertEqual(result["content"], "hello")
         self.assertEqual(result["tool_calls"], [])
         self.assertEqual(result["route"], "cloud")
         self.assertEqual(
             result["history"],
-            [{"role": "user", "content": "selam"}, {"role": "assistant", "content": "merhaba"}],
+            [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}],
         )
         client.call_tool.assert_not_called()
 
@@ -385,25 +385,25 @@ class TestRunCloudTurn(unittest.TestCase):
 
         mock_converse.side_effect = fake_converse
         history = [
-            {"role": "user", "content": "Benim adım Ahmet."},
-            {"role": "assistant", "content": "Merhaba Ahmet!"},
+            {"role": "user", "content": "My name is Ahmet."},
+            {"role": "assistant", "content": "Hello Ahmet!"},
         ]
-        run_cloud_turn("Benim adım neydi?", self._fake_mcp_client(), history=history)
+        run_cloud_turn("What was my name?", self._fake_mcp_client(), history=history)
         sent_payload = captured_payloads[0]
         self.assertEqual(
             sent_payload["messages"],
             [
-                {"role": "user", "content": "Benim adım Ahmet."},
-                {"role": "assistant", "content": "Merhaba Ahmet!"},
-                {"role": "user", "content": "Benim adım neydi?"},
+                {"role": "user", "content": "My name is Ahmet."},
+                {"role": "assistant", "content": "Hello Ahmet!"},
+                {"role": "user", "content": "What was my name?"},
             ],
         )
 
     @patch("assistant.conversation._call_cloud_bridge_converse")
     def test_returned_history_excludes_tool_blocks(self, mock_converse):
-        """Döndürülen history düz metin olmalı — Claude'un tool_use/
-        tool_result blokları sonraki turlara sızmamalı (route değişse
-        bile taşınabilir kalması için, bkz. modül docstring'i)."""
+        """The returned history must be plain text — Claude's
+        tool_use/tool_result blocks must not leak into later turns (so that it
+        stays portable even if the route changes, see the module docstring)."""
         mock_converse.side_effect = [
             {
                 "content": [
@@ -411,14 +411,14 @@ class TestRunCloudTurn(unittest.TestCase):
                 ],
                 "stop_reason": "tool_use",
             },
-            {"content": [{"type": "text", "text": "tier düşük"}], "stop_reason": "end_turn"},
+            {"content": [{"type": "text", "text": "tier is low"}], "stop_reason": "end_turn"},
         ]
-        result = run_cloud_turn("donanımım nedir?", self._fake_mcp_client())
+        result = run_cloud_turn("what is my hardware?", self._fake_mcp_client())
         self.assertEqual(
             result["history"],
             [
-                {"role": "user", "content": "donanımım nedir?"},
-                {"role": "assistant", "content": "tier düşük"},
+                {"role": "user", "content": "what is my hardware?"},
+                {"role": "assistant", "content": "tier is low"},
             ],
         )
 
@@ -437,21 +437,21 @@ class TestRunCloudTurn(unittest.TestCase):
                 "stop_reason": "tool_use",
             },
             {
-                "content": [{"type": "text", "text": "tier düşük"}],
+                "content": [{"type": "text", "text": "tier is low"}],
                 "stop_reason": "end_turn",
             },
         ]
         captured_payloads = []
 
         def fake_converse(payload, cwd="../cloud-bridge"):
-            captured_payloads.append(json.loads(json.dumps(payload)))  # o anki durumun kopyası
+            captured_payloads.append(json.loads(json.dumps(payload)))  # a copy of the state at that moment
             return responses.pop(0)
 
         mock_converse.side_effect = fake_converse
         client = self._fake_mcp_client(tool_result_text='{"tier": "low"}')
-        result = run_cloud_turn("donanımım nedir?", client)
+        result = run_cloud_turn("what is my hardware?", client)
 
-        self.assertEqual(result["content"], "tier düşük")
+        self.assertEqual(result["content"], "tier is low")
         self.assertEqual(result["tool_calls"], [{"name": "hardware_tier", "input": {}}])
         client.call_tool.assert_called_once_with("hardware_tier", {})
 
@@ -481,14 +481,14 @@ class TestRunCloudTurn(unittest.TestCase):
 
         mock_converse.side_effect = fake_converse
         client = self._fake_mcp_client()
-        client.call_tool.side_effect = RuntimeError("mcp-tools çöktü")
+        client.call_tool.side_effect = RuntimeError("mcp-tools crashed")
 
         run_cloud_turn("x", client)
 
         second_call_messages = captured_payloads[1]["messages"]
         tool_result = second_call_messages[-1]["content"][0]
         self.assertTrue(tool_result["is_error"])
-        self.assertIn("mcp-tools çöktü", tool_result["content"])
+        self.assertIn("mcp-tools crashed", tool_result["content"])
 
     @patch("assistant.conversation._call_cloud_bridge_converse")
     def test_raises_on_unavailable(self, mock_converse):
@@ -526,25 +526,25 @@ class TestRunTurn(unittest.TestCase):
         mock_decide.return_value = {
             "route": "local",
             "hardware_tier": "high",
-            "reasoning": "model hazır",
+            "reasoning": "model ready",
         }
-        mock_local.return_value = {"content": "merhaba", "tool_calls": [], "route": "local"}
+        mock_local.return_value = {"content": "hello", "tool_calls": [], "route": "local"}
 
-        result = run_turn("selam", MagicMock())
+        result = run_turn("hi", MagicMock())
 
         mock_local.assert_called_once()
         mock_cloud.assert_not_called()
         self.assertEqual(result["hardware_tier"], "high")
-        self.assertEqual(result["reasoning"], "model hazır")
+        self.assertEqual(result["reasoning"], "model ready")
 
     @patch("assistant.conversation.run_local_turn")
     @patch("assistant.conversation.run_cloud_turn")
     @patch("assistant.conversation.decide_route")
     def test_dispatches_to_cloud(self, mock_decide, mock_cloud, mock_local):
-        mock_decide.return_value = {"route": "cloud", "hardware_tier": "low", "reasoning": "karmaşık"}
+        mock_decide.return_value = {"route": "cloud", "hardware_tier": "low", "reasoning": "complex"}
         mock_cloud.return_value = {"content": "ok", "tool_calls": [], "route": "cloud"}
 
-        result = run_turn("uzun ve karmaşık bir istek", MagicMock())
+        result = run_turn("a long and complex request", MagicMock())
 
         mock_cloud.assert_called_once()
         mock_local.assert_not_called()
@@ -555,7 +555,7 @@ class TestRunTurn(unittest.TestCase):
     def test_passes_history_through_to_route_handler(self, mock_decide, mock_local):
         mock_decide.return_value = {"route": "local", "hardware_tier": "low", "reasoning": "x"}
         mock_local.return_value = {"content": "ok", "tool_calls": [], "route": "local"}
-        history = [{"role": "user", "content": "önceki soru"}]
+        history = [{"role": "user", "content": "previous question"}]
 
         run_turn("yeni soru", MagicMock(), history=history)
 

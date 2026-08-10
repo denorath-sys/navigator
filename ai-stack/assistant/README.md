@@ -1,97 +1,104 @@
 # ai-stack/assistant/
 
-## Ne yapıyor
+## What it does
 
-Navigator'ın **Faz 4** hedefi olan "uçtan uca asistan paneli deneyimi"nin
-ilk somut adımı: `router`, `mcp-tools`, `local-runtime` ve `cloud-bridge`'i
-tek bir gerçek konuşma döngüsünde birleştiren bir CLI/REPL. Bu, tasarım
-ilkelerindeki "her şey keşfedilebilir olmalı" ilkesinin ilk gerçek kanıtı —
-kullanıcı "bu makinede kaç çekirdek var?" gibi bir soruyu web'de aramak
-yerine doğrudan sorabilir ve **gerçek bir araç çağrısıyla** doğru cevabı
-alır (bkz. `docs/architecture.md` "Tasarım ilkeleri").
+The first concrete step towards Navigator's **Phase 4** goal, an
+"end-to-end assistant panel experience": a CLI/REPL that combines `router`,
+`mcp-tools`, `local-runtime` and `cloud-bridge` into a single real
+conversation loop. This is the first real proof of the "everything should be
+discoverable" design principle — instead of searching the web, the user can
+ask something like "how many cores does this machine have?" directly and get
+the right answer **from a real tool call** (see `docs/architecture.md`,
+"Design principles").
 
-Quickshell/Hyprland UI'ı bu makinede test edilemediğinden (bkz.
-`shell/README.md`, `ai-stack/mcp-tools/README.md`), Faz 4'e **UI'ı
-beklemeden**, bu makinede gerçekten çalıştırılıp test edilebilecek bir
-terminal deneyimiyle başlandı.
+Because the Quickshell/Hyprland UI could not be tested on this machine (see
+`shell/README.md`, `ai-stack/mcp-tools/README.md`), Phase 4 began **without
+waiting for the UI**, with a terminal experience that could genuinely be run
+and tested on this machine.
 
-## Mimari
+## Architecture
 
 ```
-kullanıcı promptu
+user prompt
       │
       ▼
-router --decide-only  ──►  hardware-probe (tier kararı)
+router --decide-only  ──►  hardware-probe (tier decision)
       │
-      ├── route: "local" ──► local-runtime --converse (tool-use döngüsü, KISITLI araç seti)
+      ├── route: "local" ──► local-runtime --converse (tool-use loop, RESTRICTED tool set)
       │
-      └── route: "cloud" ──► cloud-bridge --converse (tool-use döngüsü, TAM araç seti)
+      └── route: "cloud" ──► cloud-bridge --converse (tool-use loop, FULL tool set)
                                     │         ▲
                                     ▼         │
-                              mcp-tools (gerçek araç çağrısı — MCP stdio)
+                              mcp-tools (real tool call — MCP stdio)
 ```
 
-Hem `local` hem `cloud` rotası GERÇEK bir tool-use döngüsü kurar — ikisi
-de mcp-tools'un araçlarını gerçekten çağırabilir. Fark, hangi araçlara
-erişebildikleri ve güvenilirlikleri (aşağıya bkz. "Yerel tool-use").
+Both the `local` and the `cloud` route build a REAL tool-use loop — both can
+genuinely call the mcp-tools tools. The difference is which tools they can
+reach and how reliable they are (see "Local tool-use" below).
 
-- **`router --decide-only`**: router'a eklenen bir bayrak — sadece route
-  kararını (`complexity`/`hardware_tier`/`model_ready`/`route`/
-  `reasoning`) döner, `local-runtime` veya `cloud-bridge`'i ÇALIŞTIRMAZ.
-  Bunun nedeni: assistant kendi üretim akışını (tool-use döngüsünü) kurmak
-  zorunda, router'ın kendi tek seferlik çağrısını yapıp sonucu atmak hem
-  israf hem de gereksiz bir gerçek API/model çağrısı olurdu.
-- **`cloud_bridge --converse`**: cloud-bridge'in CLI'ına eklenen bir mod —
-  stdin'den tam bir mesaj listesi + `tools` şeması (Claude formatı) alır,
-  Claude API'nin HAM yanıtını (`tool_use` blokları, `stop_reason` dahil)
-  stdout'a basar.
-- **`local_runtime --converse`**: local-runtime'ın CLI'ına eklenen bir mod
-  — stdin'den tam bir mesaj listesi + `tools` şeması (OpenAI-benzeri
-  format) alır, Ollama `/api/chat`'in HAM yanıtını (`tool_calls` dahil)
-  stdout'a basar.
-- **`mcp_client.py`**: mcp-tools'a karşı gerçek bir MCP istemcisi.
-  Diğer ai-stack modüllerinin "tek seferlik subprocess" deseninden farklı
-  olarak (`python3 -m X --prompt ...`, süreç bitince JSON okunur) burada
-  **kalıcı bir oturum** var — `initialize` bir kez yapılır, sonra aynı
-  süreç üzerinden birden çok `tools/call` isteği gönderilir (MCP
-  protokolünün gerektirdiği gibi).
-- **`conversation.py`**: `run_turn()` — router kararına göre
-  `run_cloud_turn()` (Claude tool-use döngüsü, tam araç seti) veya
-  `run_local_turn()`'e (Ollama tool-use döngüsü, kısıtlı araç seti) dağıtır.
+- **`router --decide-only`**: a flag added to the router — it returns only
+  the routing decision (`complexity`/`hardware_tier`/`model_ready`/`route`/
+  `reasoning`) and DOES NOT RUN `local-runtime` or `cloud-bridge`. The
+  reason: the assistant has to build its own generation flow (the tool-use
+  loop), and having the router make its own one-shot call and then throwing
+  the result away would be both wasteful and an unnecessary real API/model
+  call.
+- **`cloud_bridge --converse`**: a mode added to cloud-bridge's CLI — it
+  takes a full message list plus a `tools` schema (Claude format) from
+  stdin, and prints the RAW Claude API response (including `tool_use` blocks
+  and `stop_reason`) to stdout.
+- **`local_runtime --converse`**: a mode added to local-runtime's CLI — it
+  takes a full message list plus a `tools` schema (OpenAI-like format) from
+  stdin, and prints the RAW Ollama `/api/chat` response (including
+  `tool_calls`) to stdout.
+- **`mcp_client.py`**: a real MCP client against mcp-tools. Unlike the
+  "one-shot subprocess" pattern of the other ai-stack modules
+  (`python3 -m X --prompt ...`, reading the JSON once the process ends),
+  there is a **persistent session** here — `initialize` happens once, and
+  then multiple `tools/call` requests are sent over the same process (as the
+  MCP protocol requires).
+- **`conversation.py`**: `run_turn()` — dispatches to `run_cloud_turn()`
+  (the Claude tool-use loop, full tool set) or `run_local_turn()` (the
+  Ollama tool-use loop, restricted tool set) according to the router's
+  decision.
 
-## Konuşma geçmişi / hafıza
+## Conversation history / memory
 
-Her iki yol da aynı düz `history: [{"role", "content"}, ...]` biçimini
-kullanır — sadece kullanıcı/asistan METİN turları (ne Claude'un
-tool_use/tool_result blokları ne Ollama'nın tool_calls'ı geçmişe dahil
-edilir, sadece o turun içinde kalır). Bu, bir konuşma içinde route değişse
-bile (önce local, sonra cloud) geçmişin taşınabilir kalmasını sağlar —
-ikisi de Claude/Ollama'nın native `{"role", "content"}` mesaj formatına
-doğrudan uyuyor.
+Both paths use the same flat `history: [{"role", "content"}, ...]` format —
+only user/assistant TEXT turns (neither Claude's tool_use/tool_result blocks
+nor Ollama's tool_calls are included in the history; they stay within their
+own turn). This keeps the history portable even if the route changes within
+a conversation (local first, then cloud) — both map directly onto
+Claude's/Ollama's native `{"role", "content"}` message format.
 
-Geçmiş `MAX_HISTORY_MESSAGES` (20 mesaj, ~10 tur) ile kırpılır — sınırsız
-büyümeyi ve gereksiz yere büyüyen prompt/API maliyetini önler.
+The history is trimmed at `MAX_HISTORY_MESSAGES` (20 messages, ~10 turns) —
+preventing unbounded growth and a needlessly growing prompt/API cost.
 
-**Nerede tutulur:**
-- REPL'de otomatik olarak bellekte (oturum boyunca), `/reset` ile temizlenir.
-- `--history-file <yol>` verilirse bir JSON dosyasında KALICI tutulur —
-  hem `--prompt` hem REPL modunda, her turdan sonra dosyaya yazılır (bir
-  çökme geçmişi kaybetmesin diye) — **ayrı süreçler arasında bile hafıza**.
+**Where it is kept:**
+- In the REPL, automatically in memory (for the session), cleared with
+  `/reset`.
+- If `--history-file <path>` is given, PERSISTENTLY in a JSON file — in both
+  `--prompt` and REPL mode, written to the file after every turn (so a crash
+  does not lose the history) — **memory even across separate processes**.
 
-## `run_cloud_turn()` — gerçek tool-use döngüsü (tam araç seti)
+## `run_cloud_turn()` — a real tool-use loop (full tool set)
 
-1. `mcp_client.list_tools()` ile mcp-tools'un 10 aracının şeması alınır,
-   Claude'un `tools` formatına çevrilir (`inputSchema` → `input_schema`).
-2. Claude'a mesaj gönderilir. Yanıt `stop_reason: "tool_use"` ise, her
-   `tool_use` bloğu **gerçekten** `mcp_client.call_tool()` ile çalıştırılır
-   (mock değil — gerçek `hardware_tier`, `read_file`, `list_windows` vb.,
-   `write_file`/`delete_file`/`rename_file` dahil).
-3. Sonuç `tool_result` mesajı olarak geri beslenir, Claude tekrar çağrılır.
-4. Claude `tool_use` dışında bir `stop_reason` verene kadar (en fazla 8 tur
-   — sonsuz döngü koruması) tekrarlanır, son metin döner.
+1. The schema of mcp-tools' 10 tools is fetched with
+   `mcp_client.list_tools()` and converted to Claude's `tools` format
+   (`inputSchema` → `input_schema`).
+2. A message is sent to Claude. If the response has
+   `stop_reason: "tool_use"`, every `tool_use` block is **genuinely**
+   executed via `mcp_client.call_tool()` (not a mock — real `hardware_tier`,
+   `read_file`, `list_windows` and so on, including `write_file` /
+   `delete_file` / `rename_file`).
+3. The result is fed back as a `tool_result` message and Claude is called
+   again.
+4. This repeats until Claude gives a `stop_reason` other than `tool_use` (at
+   most 8 turns — infinite-loop protection), and the final text is returned.
 
-Gerçek bir çalıştırma örneği (bu makinede, gerçek Claude API + gerçek
-mcp-tools ile):
+A real example run (on this machine, with the real Claude API and real
+mcp-tools). The transcript is kept verbatim as captured, which is why it is
+in Turkish:
 
 ```
 $ python3 -m assistant --prompt "Bu makinede kaç tane CPU çekirdeği var, toplam RAM ne kadar, ve ayrık bir grafik kartı var mı yok mu, ... gerçek donanım tespit aracını kullanarak öğren ..." --pretty
@@ -101,151 +108,155 @@ $ python3 -m assistant --prompt "Bu makinede kaç tane CPU çekirdeği var, topl
   "tool_calls": [{"name": "hardware_tier", "input": {}}],
   "route": "cloud",
   "hardware_tier": "low",
-  "reasoning": "karmaşık istek + düşük donanım tier'ı: yerel model yetersiz kalabilir"
+  "reasoning": "complex request + low hardware tier: the local model may be insufficient"
 }
 ```
 
-Tüm sayılar gerçek ve doğru (bu makinenin gerçek donanımıyla eşleşiyor).
+All the numbers are real and correct (they match this machine's real
+hardware).
 
-## `run_local_turn()` — yerel tool-use (kısıtlı araç seti, bilinen güvenilirlik sınırlaması)
+## `run_local_turn()` — local tool-use (restricted tool set, known reliability limitation)
 
-Ollama `/api/chat` ile aynı desende bir tool-use döngüsü kurar — ama gerçek
-testte `llama3.2:3b`'nin (3B parametreli, cloud'daki Claude'dan çok daha
-küçük) davranışı **belirgin şekilde daha az güvenilir** çıktı. Bu, kod
-hatası değil, küçük modellerin bilinen, dokümante edilmiş bir sınırlaması —
-"gerçek olmayan hiçbir şey başarılı gösterilmez" ilkesi gereği burada
-dürüstçe kayıtlı:
+It builds a tool-use loop in the same pattern via Ollama `/api/chat` — but
+in real testing the behaviour of `llama3.2:3b` (3B parameters, far smaller
+than Claude in the cloud) turned out to be **noticeably less reliable**.
+This is not a code bug but a known, documented limitation of small models —
+and per the principle "nothing that isn't real is presented as successful"
+it is honestly recorded here:
 
-### Gerçekte gözlenen sorunlar ve gerçek düzeltmeler
+### Problems actually observed, and the real fixes
 
-1. **Halüsinasyon argümanlar.** Sıfır-parametreli `hardware_tier` aracına
-   bile `{"path": "/home/chief"}` veya `{"": "null"}` gibi uydurma
-   argümanlar üretti. **Düzeltme:** her araç çağrısının argümanları,
-   aracın gerçek `inputSchema`'sındaki `properties` anahtarlarına göre
-   filtreleniyor — şemada olmayan her anahtar atılıyor.
+1. **Hallucinated arguments.** It produced made-up arguments such as
+   `{"path": "/home/chief"}` or `{"": "null"}` even for the zero-parameter
+   `hardware_tier` tool. **Fix:** the arguments of every tool call are
+   filtered against the `properties` keys of the tool's real `inputSchema` —
+   any key not in the schema is dropped.
 
-2. **Güvenlik riski — halüsinasyon yazma çağrısı.** Zararsız bir "sadece
-   'merhaba' de" isteğinde bile kendiliğinden `write_file`'ı
-   `overwrite: true` ile çağırmaya kalkıştı (hedef `/home/chief` bir dizin
-   olduğu için mcp-tools katmanında hata verip başarısız oldu — ama başka
-   bir yolda gerçekten dosya değiştirebilirdi). Bu, "sistemi değiştiren
-   her eylem açık onay ister" ilkesinin gerçek bir ihlal riskiydi.
-   **Düzeltme:** `write_file`/`delete_file`/`rename_file` yerel modele HİÇ
-   gösterilmiyor (`LOCAL_SAFE_TOOL_NAMES` — sadece salt-okunur araçlar:
-   `hardware_tier`, `route_request`, `read_file`, `list_directory`,
-   `list_windows`, `list_workspaces`, `active_window`). Model yine de
-   halüsinasyonla gösterilmeyen bir aracı çağırırsa, savunma katmanı
-   `mcp_client.call_tool()`'a hiç ulaşmadan reddeder — gerçek testte hem
-   "hiç gösterilmez" hem "gösterilmese de reddedilir" doğrulandı.
+2. **A security risk — a hallucinated write call.** Even on a harmless
+   "just say 'hello'" request, it spontaneously tried to call `write_file`
+   with `overwrite: true` (it failed with an error at the mcp-tools layer
+   because the target `/home/chief` is a directory — but on another path it
+   really could have modified a file). This was a genuine risk of violating
+   the principle "every system-modifying action requires explicit
+   confirmation". **Fix:** `write_file`/`delete_file`/`rename_file` are NOT
+   shown to the local model at all (`LOCAL_SAFE_TOOL_NAMES` — read-only
+   tools only: `hardware_tier`, `route_request`, `read_file`,
+   `list_directory`, `list_windows`, `list_workspaces`, `active_window`). If
+   the model nonetheless hallucinates a call to a tool it was not shown, the
+   defence layer rejects it before it ever reaches
+   `mcp_client.call_tool()` — real testing verified both "never shown" and
+   "rejected even if not shown".
 
-3. **Hafıza + tool-use birlikte kararsızlık.** Sistem promptu olmadan,
-   model basit bir hafıza sorusunda ("Benim adım neydi?") bile gereksiz
-   araç çağırmaya kalkışıp bazen yapılandırılmış `tool_calls` yerine ham
-   JSON metnini düz cevap olarak yazdı. **Düzeltme:** cloud ile aynı
-   `SYSTEM_PROMPT` artık local'e de veriliyor, ayrıca "önceki konuşmadan
-   bir şey soruluyorsa araç kullanma" talimatı eklendi — gerçek testte
-   güvenilirliği belirgin arttırdı ama **tam olarak sıfırlamadı**
-   (aşağıya bkz.).
+3. **Instability with memory and tool-use together.** Without a system
+   prompt, the model tried to make unnecessary tool calls even on a simple
+   memory question ("What was my name?"), and sometimes wrote raw JSON text
+   as a plain answer instead of structured `tool_calls`. **Fix:** the same
+   `SYSTEM_PROMPT` as cloud is now given to local as well, with an added
+   instruction not to use tools when something from the earlier conversation
+   is being asked — in real testing this markedly increased reliability but
+   **did not eliminate the problem** (see below).
 
-### Kalan, kabul edilen gerçek sınırlama
+### The remaining, accepted real limitation
 
-Yukarıdaki düzeltmelerden sonra bile, 3B model ara sıra (i) gereksiz yere
-salt-okunur bir araç çağırabiliyor (zararsız, ama gereksiz) veya (ii)
-yapılandırılmış `tool_calls` yerine tool-call-şekilli ham JSON metni
-üretebiliyor (o turda araç hiç çalıştırılamaz, model kendi kendine
-"cevap" gibi görünen ama işe yaramaz bir metin yazar). Bu, **modelin
-kendisinin doğal değişkenliği** — 8B+ modellerde veya cloud'da (Claude)
-gözlenmedi. Gerçek test suite'i bu yüzden içerik-kalitesine bağlı
-senaryolarda sınırlı sayıda tekrar dener (bkz.
-`tests/test_integration.py` `_run_cli_until`) — güvenlik testleri
-(yazma aracı asla gösterilmez/çalıştırılmaz) DETERMİNİSTİK kaldığından
-bunu kullanmaz.
+Even after the fixes above, the 3B model can occasionally (i) call a
+read-only tool unnecessarily (harmless, but pointless), or (ii) produce
+tool-call-shaped raw JSON text instead of structured `tool_calls` (in which
+case no tool runs at all for that turn, and the model writes text that looks
+like an "answer" but is useless). This is **the model's own inherent
+variability** — it was not observed on 8B+ models or in the cloud (Claude).
+The real test suite therefore retries a limited number of times in scenarios
+that depend on content quality (see `tests/test_integration.py`,
+`_run_cli_until`) — the security tests (the write tool is never shown or
+executed) do not use this, since they remain DETERMINISTIC.
 
-Gerçek, başarılı bir çalıştırma örneği (düzeltmelerden sonra, bu makinede):
+A real, successful example run (after the fixes, on this machine), kept
+verbatim:
 
 ```
 $ python3 -m assistant --prompt "Bu makinede kaç CPU çekirdeği var? Aracı kullanarak öğren, kısa cevap ver."
 {"content": "Bu makinenin 6 CPU çekirdeği vardır.", "tool_calls": [{"name": "hardware_tier", "input": {}}], "route": "local", ...}
 ```
 
-Bu, ilk implementasyonda (düzeltmelerden ÖNCE) tam olarak başarısız olan
-senaryoydu (`"Lütfen makine modelini veya aracinızı girin..."` gibi
-alakasız bir halüsinasyon üretmişti) — artık gerçek, doğru veriyle
-cevaplıyor.
+This is exactly the scenario that failed in the first implementation
+(BEFORE the fixes), where it produced an irrelevant hallucination such as
+`"Lütfen makine modelini veya aracinızı girin..."` — it now answers with
+real, correct data.
 
-## Kullanım
+## Usage
 
-Harici bağımlılık yok, sadece Python 3.11+ (stdlib). `router`, `mcp-tools`,
-`local-runtime`, `cloud-bridge`'in yanında (kardeş dizinler olarak)
-bulunması gerekiyor.
+No external dependencies, only Python 3.11+ (stdlib). It must sit next to
+`router`, `mcp-tools`, `local-runtime` and `cloud-bridge` (as sibling
+directories).
 
-Tek seferlik (JSON çıktı, test/scripting için):
+One-shot (JSON output, for tests/scripting):
 
 ```sh
 cd ai-stack/assistant
 python3 -m assistant --prompt "..." [--prefer balanced|privacy|cost|speed] [--pretty]
 ```
 
-İnteraktif REPL (varsayılan, insan diliyle çıktı, geçmiş otomatik bellekte):
+Interactive REPL (the default, human-readable output, history automatically
+in memory):
 
 ```sh
 cd ai-stack/assistant
 python3 -m assistant
-> Bu makinede kaç çekirdek var?
+> How many cores does this machine have?
 ...
-> /reset   # konuşma geçmişini sıfırlar
-> çıkış
+> /reset   # clears the conversation history
+> exit
 ```
 
-Kalıcı geçmiş (ayrı çalıştırmalar/süreçler arasında da hatırlar):
+Persistent history (remembers across separate runs/processes too):
 
 ```sh
 python3 -m assistant --prompt "..." --history-file ~/.navigator-assistant-history.json
 ```
 
-Bulut yolu için gerçek bir Claude API key gerekir — bkz.
-`ai-stack/cloud-bridge/README.md` "Kimlik bilgisini yerel olarak bağlamak".
-Yerel yol (Ollama) her zaman çalışır, kimlik bilgisi gerekmez.
+The cloud path needs a real Claude API key — see
+`ai-stack/cloud-bridge/README.md`, "Wiring up the credential locally". The
+local path (Ollama) always works and needs no credentials.
 
-Testler:
+Tests:
 
 ```sh
 cd ai-stack/assistant
 python3 -m unittest discover -v -s tests
 ```
 
-## Kapsam dışı — henüz yapılmadı
+## Out of scope — not done yet
 
-- Yerel yolun güvenilirliği tam değil (yukarıya bkz.) — bu, model boyutu
-  kaynaklı bir sınırlama, daha büyük bir yerel model veya prompt
-  mühendisliğinin ötesinde bir çözüm gerektirebilir.
-- Gerçek bir Quickshell/Hyprland UI'a bağlı değil — bu, ertelenen gerçek
-  compositor testine bağlı (bkz. `ai-stack/mcp-tools/README.md`).
-- Streaming yok — her yanıt tek seferde, tam olarak döner.
+- The local path's reliability is not complete (see above) — that is a
+  limitation stemming from model size, and may require a larger local model
+  or a solution beyond prompt engineering.
+- It is not connected to a real Quickshell/Hyprland UI — that depends on the
+  deferred real compositor test (see `ai-stack/mcp-tools/README.md`).
+- No streaming — every response is returned in full, in one go.
 
-**Faz 4'te tamamlandı (önceden burada kapsam dışıydı):** Router'ın
-karmaşıklık sezgisi artık "araç gerekebilir mi" sinyalini de kullanıyor
-(`mentions_tool_keywords()`, bkz. `ai-stack/router/README.md`) — kısa ama
-donanım/dosya/pencere ile ilgili istekler düşük tier'da artık otomatik
-buluta düşüyor, sadece kelime sayısına bakmıyor.
+**Completed in Phase 4 (previously out of scope here):** the router's
+complexity heuristic now also uses the "might this need tools?" signal
+(`mentions_tool_keywords()`, see `ai-stack/router/README.md`) — short
+requests relating to hardware, files or windows now automatically fall
+through to the cloud on a low tier, rather than only word count being
+considered.
 
-## Durum
+## Status
 
-Faz 4 — `router` (`--decide-only`), `cloud-bridge` (`--converse`,
-`send_messages()`), `local-runtime` (`--converse`, `chat()`) ve yeni
-`assistant` modülü (`mcp_client.py`, `conversation.py`, CLI/REPL)
-tamamlandı. **Hem cloud hem local yolu artık gerçek bir tool-use
-döngüsüyle çalışıyor** — cloud tam araç setiyle ve güvenilir, local
-kısıtlı (salt-okunur) araç setiyle ve gerçek testte belgelenen bir
-güvenilirlik sınırlamasıyla (yukarıya bkz.). Konuşma geçmişi/hafıza
-eklendi — REPL'de bellekte, `--history-file` ile ayrı süreçler arasında
-bile kalıcı. Gerçek uçtan uca doğrulandı: gerçek Claude API + gerçek
-Ollama + gerçek mcp-tools ile, ikisi de gerçek araç çağırıyor, ikisi de
-dürüstçe belgelendi (özellikle yerel yolda gerçek testte yakalanan bir
-güvenlik riski — halüsinasyon `write_file` çağrısı — gerçekten
-düzeltildi, araç erişimi kısıtlanarak).
+Phase 4 — `router` (`--decide-only`), `cloud-bridge` (`--converse`,
+`send_messages()`), `local-runtime` (`--converse`, `chat()`) and the new
+`assistant` module (`mcp_client.py`, `conversation.py`, CLI/REPL) are
+complete. **Both the cloud and the local path now work with a real tool-use
+loop** — cloud with the full tool set and reliably, local with a restricted
+(read-only) tool set and with a reliability limitation documented from real
+testing (see above). Conversation history/memory was added — in memory in
+the REPL, and persistent even across separate processes via
+`--history-file`. Verified end to end for real: with the real Claude API,
+real Ollama and real mcp-tools, both genuinely calling tools, and both
+honestly documented (in particular a security risk caught on the local path
+in real testing — a hallucinated `write_file` call — which was genuinely
+fixed by restricting tool access).
 
-40 test geçiyor (27 mock'lanmış conversation testi, 7 mock'lanmış MCP
-istemci testi, 6 gerçek entegrasyon testi — dördü her zaman çalışır
-[yerel tool-use, güvenlik, hafıza], ikisi kimlik bilgisi varsa gerçek
-Claude API'ye karşı çalışır, yoksa otomatik `skip`).
+40 tests pass (27 mocked conversation tests, 7 mocked MCP client tests, and
+6 real integration tests — four of which always run [local tool-use,
+security, memory], and two of which run against the real Claude API when
+credentials are present and are otherwise skipped automatically).

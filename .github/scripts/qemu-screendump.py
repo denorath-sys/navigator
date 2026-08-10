@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""QEMU'nun HMP monitor soketine bağlanıp `screendump` çalıştırır (stdlib-only).
+"""Connect to QEMU's HMP monitor socket and run `screendump` (stdlib-only).
 
-VNC istemcisi kurmaya gerek yok: QEMU'nun kendi monitörü ekranın o anki
-içeriğini ham PPM olarak HOST dosya sistemine yazabiliyor. VM'in içinde
-hiçbir şey çalıştırılmıyor, yani ekran görüntüsü misafirden bağımsız —
-tam olarak "kullanıcı ne görüyor" sorusunun cevabı.
+No VNC client needs to be installed: QEMU's own monitor can write the screen's
+current contents to the HOST filesystem as a raw PPM. Nothing is run inside the
+VM, so the screenshot is independent of the guest — exactly the answer to the
+question "what is the user seeing".
 
-Kullanım:
-    qemu-screendump.py <monitor.sock> <çıktı.ppm>
+Usage:
+    qemu-screendump.py <monitor.sock> <output.ppm>
 """
 import os
 import socket
@@ -18,11 +18,11 @@ PROMPT = b"(qemu) "
 
 
 def read_until_prompt(sock: socket.socket, timeout: float = 15.0) -> bytes:
-    """Monitör komut istemini görene kadar okur.
+    """Read until the monitor's command prompt appears.
 
-    HMP satır tabanlı ve her yanıtın sonunda `(qemu) ` istemi geliyor;
-    sabit bir `recv` sayısı yerine istemi beklemek, yavaş bir screendump'ta
-    yanıtı yarıda kesmemizi engelliyor.
+    HMP is line-based and every response ends with a `(qemu) ` prompt; waiting
+    for the prompt rather than using a fixed number of `recv` calls keeps us
+    from truncating the response on a slow screendump.
     """
     sock.settimeout(timeout)
     buf = b""
@@ -54,36 +54,37 @@ def main() -> int:
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.connect(sock_path)
     except OSError as e:
-        print(f"HATA: monitor soketine bağlanılamadı ({sock_path}): {e}")
+        print(f"ERROR: could not connect to the monitor socket ({sock_path}): {e}")
         return 1
 
     with sock:
         banner = read_until_prompt(sock, timeout=10.0)
         first = banner.decode("utf-8", "replace").strip().splitlines()
-        print(f"monitor: {first[0] if first else '(banner yok)'}")
+        print(f"monitor: {first[0] if first else '(no banner)'}")
 
         sock.sendall(f"screendump {out_path}\n".encode())
         resp = read_until_prompt(sock, timeout=30.0).decode("utf-8", "replace")
 
-    # HMP hataları çıkışa düz metin olarak basılıyor; sessizce geçmesin.
+    # HMP errors are printed to the output as plain text; don't let them pass
+    # silently.
     lowered = resp.lower()
     if "error" in lowered or "unknown command" in lowered or "invalid" in lowered:
-        print(f"HATA: screendump reddedildi:\n{resp.strip()}")
+        print(f"ERROR: screendump was refused:\n{resp.strip()}")
         return 1
 
-    # Dosya asenkron yazılabiliyor: boyut sabitlenene kadar bekle.
+    # The file can be written asynchronously: wait until its size stabilises.
     stable_size = -1
     for _ in range(30):
         if os.path.exists(out_path):
             size = os.path.getsize(out_path)
             if size > 0 and size == stable_size:
-                print(f"ekran görüntüsü yazıldı: {out_path} ({size} bayt)")
+                print(f"screenshot written: {out_path} ({size} bytes)")
                 return 0
             stable_size = size
         time.sleep(0.5)
 
-    print(f"HATA: {out_path} 15 saniyede oluşmadı/sabitlenmedi (son boyut: {stable_size}).")
-    print(f"monitor yanıtı: {resp.strip()!r}")
+    print(f"ERROR: {out_path} was not created/did not stabilise in 15 seconds (last size: {stable_size}).")
+    print(f"monitor response: {resp.strip()!r}")
     return 1
 
 

@@ -8,10 +8,10 @@ from .probe import run_probe
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Navigator OS donanım tarayıcı — AI model tier raporu üretir."
+        description="Navigator OS hardware probe — produces an AI model tier report."
     )
     parser.add_argument(
-        "--pretty", action="store_true", help="JSON çıktısını girintili yazdır"
+        "--pretty", action="store_true", help="Print the JSON output indented"
     )
     args = parser.parse_args()
 

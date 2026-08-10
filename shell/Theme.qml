@@ -1,11 +1,11 @@
 import QtQuick
 
 // Navigator marka paleti — ../theme/palette.json ile manuel senkron tutulur
-// (hyprland/hyprland.conf'un renk değerlerini senkron tutma yöntemiyle aynı).
+// (the same method by which hyprland/hyprland.conf keeps its colour values in sync).
 //
-// Basit sabitler için şimdilik her bileşen kendi Theme {} örneğini
-// oluşturuyor (bkz. Bar.qml, Clock.qml vb.). Shell büyüdükçe bunun yerine
-// gerçek bir `pragma Singleton` + qmldir kaydı düşünülebilir.
+// For simple constants each component currently creates its own Theme {}
+// instance (see Bar.qml, Clock.qml and so on). As the shell grows, a real
+// `pragma Singleton` + qmldir registration could be considered instead.
 QtObject {
     readonly property color teal: "#4fd1c5"
     readonly property color purple: "#8b7cf6"

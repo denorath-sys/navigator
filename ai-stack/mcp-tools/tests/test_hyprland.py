@@ -13,10 +13,10 @@ ENV_WITH_HYPRLAND = {"HYPRLAND_INSTANCE_SIGNATURE": "abc123"}
 
 
 class TestRunHyprctl(unittest.TestCase):
-    """Bu makinede gerçek Hyprland çalışmadığından (Debian geliştirme
-    ortamı) tüm senaryolar subprocess.run/shutil.which mock'lanarak test
-    ediliyor — bkz. hyprland.py docstring'i, gerçek doğrulama Faz 3'e
-    kaldı."""
+    """Because no real Hyprland runs on this machine (a Debian development
+    environment), every scenario is tested with subprocess.run/shutil.which
+    mocked — see the hyprland.py docstring; real verification was deferred to
+    Phase 3."""
 
     @patch("mcp_tools.hyprland.shutil.which", return_value=None)
     def test_hyprctl_not_found_raises(self, mock_which):
@@ -41,7 +41,7 @@ class TestRunHyprctl(unittest.TestCase):
     @patch("mcp_tools.hyprland.shutil.which", return_value="/usr/bin/hyprctl")
     @patch("mcp_tools.hyprland.subprocess.run")
     def test_nonzero_returncode_raises(self, mock_run, mock_which):
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="socket bulunamadı")
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="socket not found")
         with self.assertRaises(HyprlandError):
             list_windows()
 
@@ -49,7 +49,7 @@ class TestRunHyprctl(unittest.TestCase):
     @patch("mcp_tools.hyprland.shutil.which", return_value="/usr/bin/hyprctl")
     @patch("mcp_tools.hyprland.subprocess.run")
     def test_invalid_json_raises(self, mock_run, mock_which):
-        mock_run.return_value = MagicMock(returncode=0, stdout="bu json değil", stderr="")
+        mock_run.return_value = MagicMock(returncode=0, stdout="this is not json", stderr="")
         with self.assertRaises(HyprlandError):
             list_windows()
 
