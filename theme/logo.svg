@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Navigator OS">
+  <title>Navigator OS</title>
+
+  <!--
+    The Navigator mark: an eight-point compass rose whose north point is the
+    North Star, on the navy of the night sky. Colours come from
+    theme/palette.json and are repeated here by hand, as in hyprland.conf and
+    shell/Theme.qml (see theme/README.md).
+
+    Each arm is split into a lit half (teal) and a shaded half (purple), which
+    is what gives a compass rose its depth — the light is kept consistently on
+    the same side of every arm, otherwise the star reads as flat noise.
+
+    Built so it survives being small: at 16px the navy disc, the ring and the
+    gold north point still read, which is enough to recognise it.
+  -->
+
+  <defs>
+    <radialGradient id="navSky" cx="0.5" cy="0.36" r="0.75">
+      <stop offset="0" stop-color="#18223d"/>
+      <stop offset="1" stop-color="#0b0f1a"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="128" cy="128" r="124" fill="url(#navSky)"/>
+
+  <!-- bezel -->
+  <circle cx="128" cy="128" r="114" fill="none" stroke="#4fd1c5" stroke-opacity="0.35" stroke-width="2"/>
+  <g stroke="#4fd1c5" stroke-opacity="0.5" stroke-width="3" stroke-linecap="round">
+    <line x1="128" y1="8"   x2="128" y2="20"/>
+    <line x1="128" y1="236" x2="128" y2="248"/>
+    <line x1="8"   y1="128" x2="20"  y2="128"/>
+    <line x1="236" y1="128" x2="248" y2="128"/>
+  </g>
+
+  <!-- intercardinal points: deliberately narrow and dim, so the cardinals lead -->
+  <g fill="#8b7cf6" fill-opacity="0.38">
+    <path d="M168 88 L128 117 L139 139 Z"/>
+    <path d="M168 168 L139 128 L117 139 Z"/>
+    <path d="M88 168 L128 139 L117 117 Z"/>
+    <path d="M88 88 L117 128 L139 117 Z"/>
+  </g>
+
+  <!-- cardinal arms: lit half teal, shaded half purple, light always clockwise -->
+  <g>
+    <!-- east -->
+    <path d="M232 128 L142 114 L128 128 Z" fill="#4fd1c5"/>
+    <path d="M232 128 L142 142 L128 128 Z" fill="#8b7cf6"/>
+    <!-- south -->
+    <path d="M128 232 L142 142 L128 128 Z" fill="#4fd1c5"/>
+    <path d="M128 232 L114 142 L128 128 Z" fill="#8b7cf6"/>
+    <!-- west -->
+    <path d="M24 128 L114 142 L128 128 Z" fill="#4fd1c5"/>
+    <path d="M24 128 L114 114 L128 128 Z" fill="#8b7cf6"/>
+  </g>
+
+  <!-- north: the North Star, in brand gold -->
+  <path d="M128 24 L142 114 L128 128 Z" fill="#f2e6c0"/>
+  <path d="M128 24 L114 114 L128 128 Z" fill="#c8b47e"/>
+
+  <!-- hub -->
+  <circle cx="128" cy="128" r="8.5" fill="#0b0f1a"/>
+  <circle cx="128" cy="128" r="8.5" fill="none" stroke="#e8d9a8" stroke-width="2.5"/>
+</svg>

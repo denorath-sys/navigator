@@ -1,4 +1,12 @@
-# Navigator OS
+<p align="center">
+  <img src="theme/logo-wordmark.svg" alt="Navigator OS" width="560">
+</p>
+
+<p align="center">
+  <em>An AI-native Linux desktop — Fedora Atomic, Hyprland, and an assistant wired into the system rather than bolted on top.</em>
+</p>
+
+---
 
 Navigator is a Linux distribution that treats AI as a native part of the
 operating system rather than a third-party application. Target audience:
@@ -6,7 +14,12 @@ developers, gamers and multimedia users on mid-to-high-end hardware.
 
 The brand identity is a nautical/sky aesthetic built around the compass,
 the lighthouse, the Orion constellation and the North Star (see
-[`theme/palette.json`](theme/palette.json)).
+[`theme/palette.json`](theme/palette.json) and
+[`theme/logo.svg`](theme/logo.svg)).
+
+**New here?** [Introducing Navigator OS](docs/introducing-navigator.md) is the
+short version — what it does, what it deliberately does not do yet, and the
+screenshot that found two real bugs every textual test had missed.
 
 ## Architecture summary
 

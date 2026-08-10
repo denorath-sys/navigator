@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 256" width="920" height="256" role="img" aria-label="Navigator OS">
+  <title>Navigator OS</title>
+
+  <!--
+    Horizontal lockup: the compass mark from logo.svg plus the wordmark.
+
+    The wordmark is live text rather than outlines, so it stays editable and
+    diffable in the repository. That means it renders with whatever sans-serif
+    the viewer has — fine for a README or a docs header, but if this is ever
+    used somewhere the exact letterforms matter (print, a favicon sheet, a
+    third-party site), convert the text to paths first.
+  -->
+
+  <defs>
+    <radialGradient id="wmSky" cx="0.5" cy="0.36" r="0.75">
+      <stop offset="0" stop-color="#18223d"/>
+      <stop offset="1" stop-color="#0b0f1a"/>
+    </radialGradient>
+  </defs>
+
+  <g>
+    <circle cx="128" cy="128" r="124" fill="url(#wmSky)"/>
+    <circle cx="128" cy="128" r="114" fill="none" stroke="#4fd1c5" stroke-opacity="0.35" stroke-width="2"/>
+    <g stroke="#4fd1c5" stroke-opacity="0.5" stroke-width="3" stroke-linecap="round">
+      <line x1="128" y1="8"   x2="128" y2="20"/>
+      <line x1="128" y1="236" x2="128" y2="248"/>
+      <line x1="8"   y1="128" x2="20"  y2="128"/>
+      <line x1="236" y1="128" x2="248" y2="128"/>
+    </g>
+    <g fill="#8b7cf6" fill-opacity="0.38">
+      <path d="M168 88 L128 117 L139 139 Z"/>
+      <path d="M168 168 L139 128 L117 139 Z"/>
+      <path d="M88 168 L128 139 L117 117 Z"/>
+      <path d="M88 88 L117 128 L139 117 Z"/>
+    </g>
+    <path d="M232 128 L142 114 L128 128 Z" fill="#4fd1c5"/>
+    <path d="M232 128 L142 142 L128 128 Z" fill="#8b7cf6"/>
+    <path d="M128 232 L142 142 L128 128 Z" fill="#4fd1c5"/>
+    <path d="M128 232 L114 142 L128 128 Z" fill="#8b7cf6"/>
+    <path d="M24 128 L114 142 L128 128 Z" fill="#4fd1c5"/>
+    <path d="M24 128 L114 114 L128 128 Z" fill="#8b7cf6"/>
+    <path d="M128 24 L142 114 L128 128 Z" fill="#f2e6c0"/>
+    <path d="M128 24 L114 114 L128 128 Z" fill="#c8b47e"/>
+    <circle cx="128" cy="128" r="8.5" fill="#0b0f1a"/>
+    <circle cx="128" cy="128" r="8.5" fill="none" stroke="#e8d9a8" stroke-width="2.5"/>
+  </g>
+
+  <g font-family="DejaVu Sans, Inter, Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <text x="300" y="139" font-size="76" font-weight="700" letter-spacing="7" fill="#4fd1c5">NAVIGATOR</text>
+    <text x="304" y="196" font-size="30" font-weight="400" letter-spacing="15.5" fill="#e8d9a8">OPERATING SYSTEM</text>
+  </g>
+</svg>

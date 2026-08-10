@@ -8,8 +8,41 @@ compass, the lighthouse, the Orion constellation and the North Star.
 - `palette.json` — the brand colour palette (teal `#4fd1c5`, purple
   `#8b7cf6`, gold `#e8d9a8`, navy base `#0b0f1a`) and gradient definitions.
   Kept in manual sync with `hyprland/hyprland.conf`.
+- `logo.svg` — the Navigator mark (see below).
+- `logo-wordmark.svg` — the horizontal lockup: mark + wordmark.
+- `wallpaper.png` — the brand wallpaper (see "Wallpaper" below).
 - `gtk/` — placeholder for GTK3/GTK4 theme assets (Phase 2).
 - `qt/` — placeholder for Qt5/Qt6 (qt5ct/qt6ct) theme assets (Phase 2).
+
+## The mark
+
+An eight-point compass rose whose north point is the North Star, on the navy
+of the night sky — the same nautical/sky identity as the palette and the
+wallpaper.
+
+Two things in it are deliberate rather than decorative:
+
+- **Each arm is split into a lit half (teal) and a shaded half (purple), and
+  the light stays on the same side of every arm.** That is what gives a
+  compass rose depth; light applied inconsistently makes the star read as
+  flat noise. The first draft used a diagonal gradient across the whole mark
+  and had exactly that problem.
+- **The intercardinal points are narrow and dimmed.** At full size they fill
+  the rose out; at small sizes they recede so the four cardinals still lead.
+
+It was checked by rendering, not by eye on the source: at 48px the navy disc,
+the bezel and the gold north point still read, which is enough to recognise
+it in a tab or a launcher.
+
+The colours are repeated here by hand, exactly as they are in
+`hyprland/hyprland.conf` and `shell/Theme.qml`. Unlike those two, the logo is
+**not** yet part of the CI colour-sync check — if the palette changes, this
+file has to be updated by hand.
+
+`logo-wordmark.svg` keeps its text as live text rather than outlines, so it
+stays diffable in the repository. That means it renders with whatever
+sans-serif the viewer has; convert the text to paths before using it anywhere
+the exact letterforms matter.
 
 ## Installation path in the image (Layer 3)
 
