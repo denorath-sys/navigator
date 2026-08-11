@@ -247,8 +247,9 @@ Details: [`ai-stack/cloud-bridge/`](ai-stack/cloud-bridge/).
   `hyprland.conf` / `shell/Theme.qml` is now compared in CI (gradient stops
   plus angle, shadow colour, four `Theme.qml` constants); the check was
   proven to do real work by injecting a deliberate deviation.
-  `theme/gtk` and `theme/qt` were deliberately not layered — they are still
-  empty skeletons. **Layer 7 brought `shell/*.qml` into the image**
+  `theme/gtk` and `theme/qt` were not layered at that point — they were still
+  empty skeletons; they became real later, see "The widget theme" in
+  `theme/README.md`. **Layer 7 brought `shell/*.qml` into the image**
   (`/usr/share/navigator/shell/`, not `/etc/skel`, because it is program
   code — a user copy should not be frozen, and image updates should be able
   to update the shell). With that, the only thing copied from the runner to

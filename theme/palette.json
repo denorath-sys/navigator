@@ -25,6 +25,33 @@
       "description": "The navy base — the night-sky ground, window backgrounds, the panel ground"
     }
   },
+  "ui": {
+    "text": {
+      "hex": "#e6ecf5",
+      "role": "foreground",
+      "description": "Primary text on the navy ground — a near-white with a blue cast so it belongs to the night sky rather than sitting on top of it"
+    },
+    "text_muted": {
+      "hex": "#97a3b8",
+      "role": "foreground-muted",
+      "description": "Secondary text, placeholders, disabled labels"
+    },
+    "surface": {
+      "hex": "#121826",
+      "role": "surface",
+      "description": "Raised surfaces on the navy ground — text views, entries, tooltips, menus"
+    },
+    "surface_alt": {
+      "hex": "#0f1522",
+      "role": "surface-alt",
+      "description": "Buttons, header bars, alternating rows — between navy and surface"
+    },
+    "border": {
+      "hex": "#1d2740",
+      "role": "border",
+      "description": "Separators and widget borders — visible against navy without competing with the accents"
+    }
+  },
   "gradients": {
     "assistant": {
       "stops": ["#4fd1c5", "#8b7cf6"],
@@ -33,7 +60,8 @@
     }
   },
   "notes": [
-    "This palette is a Phase 1 draft; GTK/Qt theme production will take shape under theme/gtk and theme/qt in Phase 2.",
-    "The colour values inside hyprland/hyprland.conf are kept in manual sync with this file."
+    "'colors' are the brand identity and appear in the logo, the wallpaper and the compositor. 'ui' are interface surfaces, derived to sit on the navy ground; they exist because a widget theme needs a foreground, surfaces and borders that a four-colour brand palette does not provide. Keeping them here rather than inventing them inside each theme file is what stops GTK and Qt drifting apart.",
+    "Everything in 'ui' except 'text' is a shade of navy. They are literal hexes rather than computed at load time because Qt colour schemes cannot express a formula.",
+    "The colour values inside hyprland/hyprland.conf, shell/Theme.qml, theme/gtk/ and theme/qt/ are repeated by hand from this file, and CI verifies that duplication — see .github/workflows/brand-check.yml and the 'Layer 3/4/7' step of build-disk-and-boot-test.yml."
   ]
 }

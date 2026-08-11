@@ -3,14 +3,18 @@
 # theme/palette.json is the single source of the brand colours, and several
 # files repeat those hexes by hand. The compositor and shell copies are
 # verified inside a booted VM by build-disk-and-boot-test.yml, because there
-# the point is to check what the *image* ships. The logos cannot be checked
-# there: they are deliberately not in the image, since nothing at runtime
-# needs them.
+# the point is to check what the *image* ships.
 #
-# So they get this instead — a plain checkout, no VM, a few seconds. It is a
-# separate workflow rather than a job in build-image.yml because a logo change
-# must not drag a full image build along with it, and because this check is
-# useful on its own.
+# The rest get this instead — the logos, which are deliberately not in the
+# image at all since nothing at runtime needs them, and the GTK/Qt theme
+# files, whose colours can be checked on a plain checkout without waiting
+# twenty minutes for a VM to boot. (The boot test still verifies that those
+# same theme files REACH the image and a new user's home; this checks that
+# their colours are right, which is a different question.)
+#
+# A plain checkout, no VM, a few seconds. A separate workflow rather than a
+# job in build-image.yml, because a theme change must not drag a full image
+# build along with it and because this check is useful on its own.
 #
 # The script lives in .github/scripts/ so its failure paths can be exercised
 # locally without spending a CI round. They were: a drifted palette, a
@@ -46,7 +50,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: palette.json <-> logo.svg / logo-wordmark.svg
+      - name: palette.json <-> logos, GTK and Qt theme
         run: python3 .github/scripts/check-brand-colors.py
 
       - name: Prove the check is not vacuously green

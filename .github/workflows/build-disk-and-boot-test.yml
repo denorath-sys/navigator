@@ -750,17 +750,17 @@ jobs:
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           SCP="scp ${SSH_OPTS} -i ${SSH_KEY} -P 2222"
 
-          echo "=== Katman 3: /usr/share/navigator/theme/ ==="
+          echo "=== Layer 3: /usr/share/navigator/theme/ ==="
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "ls -la /usr/share/navigator/theme/"
           ${SCP} root@127.0.0.1:/usr/share/navigator/theme/palette.json image-palette.json
 
-          echo "=== Katman 4: /etc/skel/.config/hypr/ ==="
+          echo "=== Layer 4: /etc/skel/.config/hypr/ ==="
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "ls -la /etc/skel/.config/hypr/"
           ${SCP} root@127.0.0.1:/etc/skel/.config/hypr/hyprland.conf image-hyprland.conf
           ${SCP} root@127.0.0.1:/etc/skel/.config/hypr/hyprpaper.conf image-hyprpaper.conf
           ${SCP} root@127.0.0.1:/usr/share/navigator/theme/wallpaper.png image-wallpaper.png
 
-          echo "=== Katman 7: /usr/share/navigator/shell/ ==="
+          echo "=== Layer 7: /usr/share/navigator/shell/ ==="
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "ls -la /usr/share/navigator/shell/"
           mkdir -p image-shell
           ${SCP} "root@127.0.0.1:/usr/share/navigator/shell/*.qml" image-shell/
@@ -897,6 +897,64 @@ jobs:
             exit 1
           fi
           echo "OK: the account created by bootc-image-builder got /etc/skel — Layer 4 genuinely reaches new users."
+
+      - name: Layer 4 — do the GTK and Qt theme files reach the image and a new user
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          SCP="scp ${SSH_OPTS} -i ${SSH_KEY} -P 2222"
+          SSH="ssh ${SSH_OPTS} -i ${SSH_KEY} -p 2222 root@127.0.0.1"
+
+          echo "=== the theme files in /etc/skel ==="
+          ${SSH} "find /etc/skel/.config/gtk-3.0 /etc/skel/.config/gtk-4.0 /etc/skel/.config/qt6ct -type f -exec ls -l {} +"
+
+          # Byte-identical to the repo, so a stale image cannot pass. Same
+          # reasoning as the palette/hyprland.conf checks above.
+          mkdir -p image-theme
+          for pair in \
+            "gtk-3.0/gtk.css|theme/gtk/gtk-3.0/gtk.css" \
+            "gtk-3.0/settings.ini|theme/gtk/gtk-3.0/settings.ini" \
+            "gtk-4.0/gtk.css|theme/gtk/gtk-4.0/gtk.css" \
+            "qt6ct/qt6ct.conf|theme/qt/qt6ct/qt6ct.conf" \
+            "qt6ct/colors/Navigator.conf|theme/qt/qt6ct/colors/Navigator.conf"; do
+            REMOTE="${pair%%|*}"; LOCAL="${pair##*|}"
+            OUT="image-theme/$(echo "${REMOTE}" | tr / _)"
+            ${SCP} "root@127.0.0.1:/etc/skel/.config/${REMOTE}" "${OUT}"
+            if ! cmp -s "${OUT}" "${LOCAL}"; then
+              echo "ERROR: /etc/skel/.config/${REMOTE} differs from ${LOCAL}:"
+              diff -u "${LOCAL}" "${OUT}" | head -20
+              exit 1
+            fi
+            echo "  OK  ${REMOTE}"
+          done
+
+          # qt6ct has to be installed or the Qt colour scheme is a file nothing
+          # reads — a failure that would look exactly like success from the
+          # config side alone.
+          echo
+          echo "=== ASSERTION: qt6ct is installed ==="
+          ${SSH} "rpm -q qt6ct" || { echo "ERROR: qt6ct is not in the image; the Qt scheme would be read by nothing."; exit 1; }
+
+          # And the compositor has to export QT_QPA_PLATFORMTHEME, for the same
+          # reason. Checked in the image's own hyprland.conf rather than in the
+          # repository's, because the image is what users get.
+          echo
+          echo "=== ASSERTION: hyprland.conf exports QT_QPA_PLATFORMTHEME=qt6ct ==="
+          ${SSH} "grep -q '^env = QT_QPA_PLATFORMTHEME,qt6ct' /etc/skel/.config/hypr/hyprland.conf" \
+            || { echo "ERROR: QT_QPA_PLATFORMTHEME is not exported; ~/.config/qt6ct would be ignored."; exit 1; }
+          echo "  OK"
+
+          # /etc/skel is only copied at account creation, and that bootc-image-builder
+          # does so is not a documented guarantee — it was measured for hyprland.conf
+          # (see the /etc/skel step) and is asserted here for the theme too, since a
+          # theme that never reaches a real user is not a theme.
+          echo
+          echo "=== ASSERTION: the navtest account got them ==="
+          ${SSH} "for f in .config/gtk-3.0/gtk.css .config/gtk-4.0/gtk.css .config/qt6ct/colors/Navigator.conf; do \
+                    cmp -s /var/home/navtest/\$f /etc/skel/\$f || { echo \"  MISSING or DIFFERENT: \$f\"; exit 1; }; \
+                    echo \"  OK  \$f\"; \
+                  done"
+          echo "OK: the GTK and Qt theme reach both the image and a new user."
 
       - name: Credential path — the /etc/skel template and REAL resolution in the image
         run: |

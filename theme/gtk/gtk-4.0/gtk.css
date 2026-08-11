@@ -1,0 +1,67 @@
+/* Navigator OS — GTK4 / libadwaita colour overrides.
+ *
+ * libadwaita deliberately does not support full custom themes; the supported
+ * way to recolour it is to redefine its named colours, which is exactly what
+ * this does. Nothing here restyles a widget, so it does not break when
+ * libadwaita changes one.
+ *
+ * Every literal colour comes from theme/palette.json and CI rejects any hex
+ * that does not (.github/scripts/check-brand-colors.py).
+ *
+ * Installed to ~/.config/gtk-4.0/gtk.css via /etc/skel.
+ */
+
+@define-color navigator_teal   #4fd1c5;
+@define-color navigator_purple #8b7cf6;
+@define-color navigator_gold   #e8d9a8;
+@define-color navigator_navy   #0b0f1a;
+
+@define-color navigator_text        #e6ecf5;
+@define-color navigator_text_muted  #97a3b8;
+@define-color navigator_surface     #121826;
+@define-color navigator_surface_alt #0f1522;
+@define-color navigator_border      #1d2740;
+
+/* --- libadwaita's named colours ----------------------------------------- */
+
+@define-color window_bg_color  @navigator_navy;
+@define-color window_fg_color  @navigator_text;
+
+@define-color view_bg_color    @navigator_surface;
+@define-color view_fg_color    @navigator_text;
+
+@define-color headerbar_bg_color        @navigator_surface_alt;
+@define-color headerbar_fg_color        @navigator_text;
+@define-color headerbar_border_color    @navigator_border;
+@define-color headerbar_backdrop_color  @navigator_navy;
+
+@define-color sidebar_bg_color       @navigator_surface_alt;
+@define-color sidebar_fg_color       @navigator_text;
+@define-color sidebar_border_color   @navigator_border;
+@define-color sidebar_backdrop_color @navigator_navy;
+
+@define-color card_bg_color     @navigator_surface;
+@define-color card_fg_color     @navigator_text;
+@define-color dialog_bg_color   @navigator_surface;
+@define-color dialog_fg_color   @navigator_text;
+@define-color popover_bg_color  @navigator_surface;
+@define-color popover_fg_color  @navigator_text;
+
+/* Accent. Teal on navy rather than teal on white: libadwaita uses
+ * accent_bg_color behind accent_fg_color, and navy is the only palette colour
+ * that stays readable on teal. */
+@define-color accent_bg_color   @navigator_teal;
+@define-color accent_fg_color   @navigator_navy;
+@define-color accent_color      @navigator_teal;
+
+/* Gold carries "attention", teal carries "went well". Destructive keeps
+ * libadwaita's red on purpose — a brand colour must not be the only signal
+ * that an action is destructive. */
+@define-color warning_bg_color  @navigator_gold;
+@define-color warning_fg_color  @navigator_navy;
+@define-color warning_color     @navigator_gold;
+@define-color success_bg_color  @navigator_teal;
+@define-color success_fg_color  @navigator_navy;
+@define-color success_color     @navigator_teal;
+
+@define-color borders           @navigator_border;

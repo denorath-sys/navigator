@@ -1,0 +1,90 @@
+/* Navigator OS — GTK3 colour overrides.
+ *
+ * This is NOT a widget theme. It recolours whatever GTK3 theme is in use
+ * (Adwaita by default) by redefining the named colours GTK3 resolves at load
+ * time, which is the supported way to restyle GTK without forking a theme and
+ * then owning every widget change upstream makes. Navigator ships two GTK3
+ * apps of its own — waybar and wofi — and this is what makes them, and any
+ * GTK app the user installs, look like they belong to the same desktop.
+ *
+ * Every literal colour here comes from theme/palette.json. Anything that is
+ * not a palette colour is expressed with GTK's own shade()/alpha() functions
+ * rather than a hand-picked hex, so the palette stays the single source and
+ * CI can verify it: .github/scripts/check-brand-colors.py rejects a hex that
+ * is not in the palette.
+ *
+ * Installed to ~/.config/gtk-3.0/gtk.css via /etc/skel, so a user can edit or
+ * delete it and image updates will not overwrite their choice.
+ */
+
+/* Brand */
+@define-color navigator_teal   #4fd1c5;
+@define-color navigator_purple #8b7cf6;
+@define-color navigator_gold   #e8d9a8;
+@define-color navigator_navy   #0b0f1a;
+
+/* Interface surfaces (palette.json "ui") */
+@define-color navigator_text        #e6ecf5;
+@define-color navigator_text_muted  #97a3b8;
+@define-color navigator_surface     #121826;
+@define-color navigator_surface_alt #0f1522;
+@define-color navigator_border      #1d2740;
+
+/* --- GTK3's named colours ------------------------------------------------ */
+
+@define-color theme_bg_color        @navigator_navy;
+@define-color theme_fg_color        @navigator_text;
+@define-color theme_base_color      @navigator_surface;
+@define-color theme_text_color      @navigator_text;
+
+@define-color theme_selected_bg_color @navigator_teal;
+@define-color theme_selected_fg_color @navigator_navy;
+
+@define-color insensitive_bg_color  @navigator_surface_alt;
+@define-color insensitive_fg_color  @navigator_text_muted;
+@define-color insensitive_base_color @navigator_surface_alt;
+
+@define-color borders               @navigator_border;
+@define-color unfocused_borders     @navigator_border;
+
+@define-color theme_unfocused_bg_color   @navigator_navy;
+@define-color theme_unfocused_fg_color   @navigator_text;
+@define-color theme_unfocused_base_color @navigator_surface;
+@define-color theme_unfocused_text_color @navigator_text;
+@define-color theme_unfocused_selected_bg_color @navigator_teal;
+@define-color theme_unfocused_selected_fg_color @navigator_navy;
+
+/* Header bars and menus sit between the ground and a raised surface. */
+@define-color headerbar_bg_color    @navigator_surface_alt;
+@define-color headerbar_fg_color    @navigator_text;
+@define-color menu_color            @navigator_surface;
+@define-color popover_bg_color      @navigator_surface;
+@define-color popover_fg_color      @navigator_text;
+
+/* Feedback. Gold is the North Star accent and reads as "look here", which is
+ * why it carries warnings; error keeps GTK's red because a brand colour must
+ * not be the only thing distinguishing a destructive state. */
+@define-color warning_color         @navigator_gold;
+@define-color success_color         @navigator_teal;
+@define-color link_color            @navigator_teal;
+@define-color visited_link_color    @navigator_purple;
+
+/* Wide separators between navy panes need a little more contrast than the
+ * border colour gives; shade() keeps that derived rather than invented. */
+@define-color wm_border             shade(@navigator_border, 1.15);
+@define-color wm_bg                 @navigator_surface_alt;
+@define-color wm_title              @navigator_text;
+@define-color wm_unfocused_title    @navigator_text_muted;
+
+/* Selection in text views, at an opacity that keeps the text readable. */
+selection,
+*:selected {
+  background-color: alpha(@navigator_teal, 0.35);
+  color: @navigator_text;
+}
+
+/* Focus rings: teal is the primary accent and focus is the primary
+ * interaction, so they are the same colour on purpose. */
+*:focus-visible {
+  outline-color: alpha(@navigator_teal, 0.75);
+}

@@ -61,6 +61,14 @@ FROM ${BASE_IMAGE}:${BASE_TAG}
 # assigns no seat). seatd can manage device access itself even without a real
 # VT/seat (e.g. this QEMU VM, and future remote/headless usage scenarios).
 #
+# qt6ct: 1 MB, and without it the Qt colour scheme in Layer 4 is a file nothing
+# reads. It is what makes non-Qt-Quick Qt applications follow the palette;
+# Navigator's own shell is Quickshell and styles itself from shell/Theme.qml,
+# so this is for everything else the user runs. qt5ct is deliberately NOT
+# installed: Navigator ships no Qt5 application, and shipping a config for a
+# toolkit that is not there is the kind of thing this repository tries not to
+# do.
+#
 # hyprland-qtutils: while missing, Hyprland showed a yellow info banner on the
 # desktop ("This is a runtime dependency for some dialogs") and the banner
 # covered the right-hand side of the top panel (the assistant button + clock).
@@ -86,6 +94,7 @@ RUN dnf5 -y copr enable denorath/navigator-hyprland \
         pipewire \
         wireplumber \
         seatd \
+        qt6ct \
     && ostree container commit
 
 # ---------------------------------------------------------------------------
@@ -120,11 +129,11 @@ RUN dnf5 -y copr enable errornointernet/quickshell \
 # ---------------------------------------------------------------------------
 # Layer 3: Navigator brand/theme assets
 # ---------------------------------------------------------------------------
-# ONLY `palette.json` goes into the image from `theme/`, because it is the only
-# asset that is currently real: `theme/gtk/` and `theme/qt/` are still empty
-# skeletons (containing only a `.gitkeep`, see theme/README.md "Status").
-# Layering empty directories would make a non-existent GTK/Qt theme look as
-# though it were there — they will be added here once real assets exist.
+# `palette.json` is what goes into the image from `theme/` as machine-readable
+# data. The GTK and Qt theme files are user configuration rather than data, so
+# they go through /etc/skel in Layer 4 instead — the same reasoning as
+# hyprland.conf: the user must be able to change their theme and keep the
+# change across image updates.
 #
 # palette.json is the machine-readable single source of the brand colours: both
 # `hyprland/hyprland.conf` (col.active_border, shadow) and `shell/Theme.qml`
@@ -166,6 +175,23 @@ COPY hyprland/hyprland.conf /etc/skel/.config/hypr/hyprland.conf
 # started without a config would give up in the first second, so the two went
 # in together.
 COPY hyprland/hyprpaper.conf /etc/skel/.config/hypr/hyprpaper.conf
+
+# The GTK and Qt theme files. These are user configuration, not data, so they
+# take the /etc/skel route rather than /usr/share: a user must be able to
+# restyle their desktop and keep that across image updates.
+#
+# None of them is a widget theme. Each redefines the named colours its toolkit
+# already resolves — GTK3's theme_* colours, libadwaita's window_bg_color and
+# friends, and a Qt colour scheme — so they recolour the desktop without
+# forking a theme and then owning every widget change upstream makes.
+#
+# QT_QPA_PLATFORMTHEME=qt6ct is set in hyprland.conf; without it the qt6ct
+# files are read by nothing.
+COPY theme/gtk/gtk-3.0/gtk.css              /etc/skel/.config/gtk-3.0/gtk.css
+COPY theme/gtk/gtk-3.0/settings.ini         /etc/skel/.config/gtk-3.0/settings.ini
+COPY theme/gtk/gtk-4.0/gtk.css              /etc/skel/.config/gtk-4.0/gtk.css
+COPY theme/qt/qt6ct/qt6ct.conf              /etc/skel/.config/qt6ct/qt6ct.conf
+COPY theme/qt/qt6ct/colors/Navigator.conf   /etc/skel/.config/qt6ct/colors/Navigator.conf
 
 # The credential configuration file — an EMPTY template (no secret enters the
 # image, nor could it: the image is public).

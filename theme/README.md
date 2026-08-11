@@ -11,8 +11,8 @@ compass, the lighthouse, the Orion constellation and the North Star.
 - `logo.svg` — the Navigator mark (see below).
 - `logo-wordmark.svg` — the horizontal lockup: mark + wordmark.
 - `wallpaper.png` — the brand wallpaper (see "Wallpaper" below).
-- `gtk/` — placeholder for GTK3/GTK4 theme assets (Phase 2).
-- `qt/` — placeholder for Qt5/Qt6 (qt5ct/qt6ct) theme assets (Phase 2).
+- `gtk/` — GTK3 and GTK4/libadwaita colour overrides (see "The widget theme").
+- `qt/` — the qt6ct configuration and Qt colour scheme.
 
 ## The mark
 
@@ -43,13 +43,19 @@ they are deliberately not in the image (nothing at runtime needs a logo), so
 the in-VM check cannot see them.
 [`.github/workflows/brand-check.yml`](../.github/workflows/brand-check.yml)
 runs [`check-brand-colors.py`](../.github/scripts/check-brand-colors.py) on a
-plain checkout in seconds. It asserts two things:
+plain checkout in seconds, over the logos **and** the GTK/Qt theme files. It
+asserts two things per asset:
 
-- every palette colour still appears in each logo, and
-- each logo contains **no colour that is neither in the palette nor listed as
-  a documented derivation**. The second half is what stops the palette
-  quietly ceasing to be the source of truth — a hand-picked hex is caught even
-  though nothing is "missing".
+- the palette group that asset is required to carry is present in full — the
+  brand `colors` for a logo, the `ui` surfaces for a theme file — and
+- the asset contains **no colour that is neither in the palette nor listed as
+  a documented derivation**. The second half is what stops the palette quietly
+  ceasing to be the source of truth — a hand-picked hex is caught even though
+  nothing is "missing".
+
+The extractor understands Qt's `#AARRGGBB` as well as `#RRGGBB`. That is not
+a detail: a six-digit-only pattern matches *nothing* in a Qt colour scheme, so
+the Qt file would have gone unchecked while the run still went green.
 
 The derivations it does allow are named in the script with a reason: the lit
 and shaded halves of the gold north point, and the lighter stop of the sky
@@ -67,11 +73,81 @@ the exact letterforms matter.
 
 ## Installation path in the image (Layer 3)
 
-Layer 3 of `image/Containerfile` takes **only `palette.json`** from here into
-the image → `/usr/share/navigator/theme/palette.json`. `gtk/` and `qt/` are
-still empty skeletons (containing only a `.gitkeep`) and so are not layered:
-putting empty directories into the image would make a non-existent GTK/Qt
-theme look as though it were there.
+Layer 3 takes the machine-readable **data** from here into the image:
+`palette.json` and `wallpaper.png` → `/usr/share/navigator/theme/`.
+
+`gtk/` and `qt/` take a different route on purpose. They are user
+**configuration**, not data, so Layer 4 installs them under `/etc/skel` —
+exactly the reasoning `hyprland.conf` follows. A user must be able to restyle
+their desktop and keep that across image updates, which `/usr/share` would
+not allow.
+
+## The widget theme
+
+`gtk/` and `qt/` make GTK and Qt applications look like they belong to the
+same desktop as the shell. Navigator ships two GTK3 apps of its own — waybar
+and wofi — and everything else the user installs lands in one of these two
+toolkits.
+
+**None of it is a widget theme, on purpose.** Each file redefines the named
+colours its toolkit already resolves at load time:
+
+| File | Mechanism |
+|---|---|
+| `gtk/gtk-3.0/gtk.css` | GTK3's `theme_bg_color`, `theme_fg_color`, `borders`, … |
+| `gtk/gtk-3.0/settings.ini` | dark preference, icon and cursor theme |
+| `gtk/gtk-4.0/gtk.css` | libadwaita's `window_bg_color`, `accent_bg_color`, … |
+| `qt/qt6ct/colors/Navigator.conf` | a Qt colour scheme: three lists of 21 `QPalette` roles |
+| `qt/qt6ct/qt6ct.conf` | selects that scheme and the Fusion style |
+
+Forking a real theme would mean owning every widget change GTK or libadwaita
+makes afterwards. Redefining colours means upstream can rewrite a widget and
+Navigator still looks right.
+
+Three decisions worth their reasoning:
+
+- **Fusion for Qt.** It is the style that honours a custom palette on every
+  widget; the platform styles override parts of it and would leave Qt apps
+  half-themed next to the rest of the desktop.
+- **`qt5ct` is not installed.** Navigator ships no Qt5 application, and
+  shipping configuration for a toolkit that is not there is exactly the kind
+  of "looks done" this repository avoids.
+- **Destructive actions keep the toolkit's red.** Gold carries warnings and
+  teal carries success, but a brand colour must never be the only signal that
+  an action destroys something.
+
+`QT_QPA_PLATFORMTHEME=qt6ct` is exported from `hyprland/hyprland.conf`;
+without it `~/.config/qt6ct/` is read by nothing. GTK needs no equivalent —
+with no settings daemon running it reads `settings.ini` itself — and
+`GTK_THEME` is deliberately **not** set, because it would override that file
+and take the choice away from the user.
+
+### Where the interface colours come from
+
+A four-colour brand palette does not contain a foreground, surfaces or
+borders, and a widget theme needs all three. Rather than invent them inside
+each theme file — three files quietly drifting apart is precisely the failure
+this directory is built to prevent — `palette.json` grew a **`ui`** section
+alongside `colors`:
+
+| | |
+|---|---|
+| `text` `#e6ecf5` | near-white with a blue cast, so it belongs to the night sky |
+| `text_muted` `#97a3b8` | secondary text, placeholders, disabled labels |
+| `surface` `#121826` | text views, entries, tooltips, menus |
+| `surface_alt` `#0f1522` | buttons, header bars, alternating rows |
+| `border` `#1d2740` | separators and widget borders |
+
+`colors` is the brand and appears in the logo, wallpaper and compositor; `ui`
+is the interface. The GTK files may use both — accents, links and focus rings
+are where the brand shows up in a widget theme — and the CI check enforces
+exactly that split.
+
+Everything in `ui` except `text` is a shade of navy. They are literal hexes
+rather than computed, because a Qt colour scheme cannot express a formula and
+GTK and Qt reading different numbers would defeat the point. Where GTK *can*
+derive a value it does, with `shade()` and `alpha()`, so no hand-picked hex
+appears in the CSS.
 
 ### The colour duplication is now genuinely verified
 
@@ -165,8 +241,12 @@ version that leaves more safe area at the edge.
 
 ## Status
 
-Phase 1 — the palette definition is real and now in the image; the wallpaper
-is real too (the brand image, in the image, verified by screenshot). `gtk/`
-and `qt/` are still empty skeletons. Real GTK/Qt theme production (icon set,
-cursor theme, GTK CSS, Qt Kvantum/QQC2 style) will be tackled as part of
-Phase 2.
+The palette, the wallpaper, the logo and the widget theme are all real and
+in the image. `gtk/` and `qt/` are no longer skeletons.
+
+Still not done, and deliberately scoped out for now: an **icon theme** and a
+**cursor theme**. Both are asset production rather than configuration —
+hundreds of drawn files, not a colour mapping — and neither can be derived
+from the palette, so neither would benefit from the machinery that makes the
+rest of this directory verifiable. Adwaita's are used meanwhile, which is
+what `settings.ini` and `qt6ct.conf` name.

@@ -51,8 +51,10 @@ This section exists on purpose, and it is not a footnote.
   model belongs on your machine is your call — and a model is another ~2 GB.
   Until you run `ollama pull`, the assistant falls through to the cloud,
   which needs your key.
-- **The GTK and Qt themes are empty skeletons.** The palette is real and
-  verified; the theme assets are not built.
+- **There is no icon or cursor theme yet.** The GTK and Qt widget colours are
+  real and verified against the palette, but icons and cursors are Adwaita's —
+  those are drawn assets, not a colour mapping, so they are a different kind of
+  work.
 - **The small local model is not fully reliable at tool use.** A 3B model
   occasionally calls a tool it doesn't need, or emits tool-call-shaped JSON as
   prose. This is documented, measured, and mitigated — not hidden.
