@@ -1178,45 +1178,73 @@ jobs:
           done
           [ -x /usr/bin/ollama ] || { echo "  /usr/bin/ollama is not executable"; FAIL=1; }
           [ "$FAIL" -eq 0 ] || exit 1
-          echo "ollama version: $(ollama --version 2>&1 | head -n1)"
 
-          # DIAGNOSTICS, on purpose. Everything below is being measured for the
-          # first time: whether `systemctl enable` at container-build time
-          # survives into an ostree deployment, whether systemd-sysusers really
-          # creates the `ollama` user at boot (/var is empty until then), and
-          # where the daemon decides to keep models. None of that is a
-          # documented guarantee, so it is NOT asserted on this round — the
-          # rule in this repository is measure first, harden second, and
-          # breaking it has cost a CI round more than once.
-          #
-          # Promote these to assertions once the real output has been read.
+          # DIAGNOSTIC, and staying one: the Fedora build does not bake its
+          # version in, so the binary self-reports 0.0.0 while the RPM is
+          # 0.12.11-4.fc44 (measured, run 31456154300). Nothing in Navigator
+          # version-gates on it — local-runtime only needs /api/version to
+          # answer, not to say anything in particular — but asserting a value
+          # here would break the day Fedora fixes the ldflags.
+          echo "ollama version (binary self-report): $(ollama --version 2>&1 | head -n1)"
+
+          # ASSERTIONS. These were diagnostics on the round that first ran
+          # Layer 6, because none of them is a documented guarantee: whether
+          # `systemctl enable` at container-build time survives into an ostree
+          # deployment, whether systemd-sysusers really creates the user at
+          # boot (/var is empty until then), and where the daemon keeps state.
+          # Run 31456154300 answered all three, so they are hardened now —
+          # measure first, harden second.
           echo
-          echo "--- DIAGNOSTIC: unit state ---"
-          systemctl is-enabled ollama.service 2>&1 || true
-          systemctl is-active  ollama.service 2>&1 || true
-          systemctl show ollama.service -p Environment -p ExecStart -p User 2>&1 || true
+          echo "=== ASSERTION: the unit is enabled and running ==="
+          STATE="$(systemctl is-enabled ollama.service 2>&1)"
+          [ "$STATE" = "enabled" ] || { echo "  is-enabled -> ${STATE}, expected 'enabled'"; exit 1; }
+          STATE="$(systemctl is-active ollama.service 2>&1)"
+          [ "$STATE" = "active" ] || { echo "  is-active -> ${STATE}, expected 'active'"; exit 1; }
+          systemctl show ollama.service -p ExecStart -p User
+          echo "  OK: ollama.service is enabled and active."
 
           echo
-          echo "--- DIAGNOSTIC: did sysusers create the user, and where does state live ---"
-          id ollama 2>&1 || echo "(no ollama user)"
-          ls -ld /var/lib/ollama /usr/share/ollama 2>&1 || true
+          echo "=== ASSERTION: sysusers created the user and /var/lib/ollama exists ==="
+          id ollama || { echo "  no ollama user — sysusers did not run"; exit 1; }
+          [ -d /var/lib/ollama ] || { echo "  /var/lib/ollama missing — the daemon has nowhere to keep models"; exit 1; }
+          ls -ld /var/lib/ollama
+          echo "  OK: user present, state directory present."
 
           echo
-          echo "--- DIAGNOSTIC: does the API answer (up to 30s for first start) ---"
+          echo "=== ASSERTION: the API answers ==="
+          OUT=""
           for i in $(seq 1 15); do
-            OUT="$(curl -fsS --max-time 2 http://127.0.0.1:11434/api/version 2>&1)" && { echo "  api/version -> ${OUT}"; break; }
+            OUT="$(curl -fsS --max-time 2 http://127.0.0.1:11434/api/version 2>&1)" && break
             sleep 2
           done
-          [ -n "${OUT:-}" ] || echo "  (no answer from 127.0.0.1:11434)"
+          [ -n "${OUT}" ] || { echo "  no answer from 127.0.0.1:11434 within 30s"; exit 1; }
+          echo "  api/version -> ${OUT}"
 
           echo
-          echo "--- DIAGNOSTIC: what local-runtime makes of it ---"
-          # This is the reading that actually matters: ollama_available should
-          # become true, while model_ready stays false because Layer 6
-          # deliberately ships no model weights. The router then keeps falling
-          # through to the cloud, exactly as it did before this layer.
+          echo "=== ASSERTION: local-runtime sees a runtime but no model ==="
+          # The reading that actually matters, and it asserts BOTH halves of
+          # Layer 6's design: the runtime is available, and no model weights
+          # ship. If someone later layers a model in, this breaks and forces
+          # that to be a conscious decision rather than a silent size increase.
           cd /usr/share/navigator/ai-stack/local-runtime
-          python3 -m local_runtime --pretty 2>&1 | head -n 20
+          python3 -m local_runtime --pretty | tee /tmp/lr.json
+          python3 - <<'PY'
+          import json, sys
+          d = json.load(open("/tmp/lr.json"))
+          fails = []
+          if d.get("ollama_available") is not True:
+              fails.append(f"ollama_available={d.get('ollama_available')!r}, expected True")
+          if d.get("model_ready") is not False:
+              fails.append(f"model_ready={d.get('model_ready')!r}, expected False (no weights are shipped)")
+          if d.get("installed_models"):
+              fails.append(f"installed_models={d['installed_models']!r}, expected empty")
+          if fails:
+              print("ERROR: Layer 6 is not in the intended state:")
+              for f in fails:
+                  print("  -", f)
+              sys.exit(1)
+          print("  OK: ollama_available=true, model_ready=false, no models installed.")
+          PY
           CHECK
 
       - name: List DRM/GPU devices inside the VM (for diagnostics)

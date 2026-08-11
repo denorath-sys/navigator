@@ -197,6 +197,55 @@ already maps a hardware tier to a recommendation (see `models.py`). Until
 the cloud, which is the path this stack has had verified in CI since long
 before Layer 6 existed.
 
+### Verified in a booted VM
+
+Everything below was a diagnostic on the first run and is an assertion now,
+because [run
+31456154300](https://github.com/denorath-sys/navigator/actions/runs/31456154300)
+answered it. None of it was a documented guarantee beforehand:
+
+```
+=== ASSERTION: the package's three files are in the image ===
+  OK  /usr/bin/ollama
+  OK  /usr/lib/systemd/system/ollama.service
+  OK  /usr/lib/sysusers.d/ollama.conf
+
+--- unit state ---
+enabled
+active
+ExecStart={ path=/usr/bin/ollama ; argv[]=/usr/bin/ollama serve ; pid=986 }
+User=ollama
+
+--- user and state directory ---
+uid=966(ollama) gid=966(ollama) groups=966(ollama)
+drwxr-xr-x. 1 ollama ollama 14 Aug 11 04:03 /var/lib/ollama
+ls: cannot access '/usr/share/ollama': No such file or directory
+
+--- API ---
+  api/version -> {"version":"0.0.0"}
+
+--- what local-runtime makes of it ---
+{"hardware_tier": "minimal", "recommended_model": null,
+ "ollama_available": true, "installed_models": [], "model_ready": false}
+```
+
+Three things worth naming:
+
+- **`systemctl enable` at container-build time does survive into an ostree
+  deployment**, and **systemd-sysusers does create the user at boot** — both
+  were open questions, since `/var` is empty until deployment.
+- **Models live in `/var/lib/ollama`**; `/usr/share/ollama` does not exist.
+- **The binary self-reports `0.0.0`** while the RPM is `0.12.11-4.fc44` — the
+  Fedora build does not bake its version in. Nothing here version-gates on it
+  (`is_available()` only needs `/api/version` to answer), so it is left as a
+  diagnostic rather than asserted; asserting a value would break the day
+  Fedora fixes the ldflags.
+
+The last assertion is the one that carries the design: it requires
+`ollama_available: true` **and** `model_ready: false` **and** no installed
+models. If anyone later layers weights into the image, that check fails and
+makes it a conscious decision rather than a silent 2 GB.
+
 **The size is real and it is not small.** Measured from the actual build
 rather than predicted: the image went from 3.26 GB to **5.62 GB compressed
 (+72%)**, in a single 2364 MB layer. Most of it is rocblas — ROCm's GPU
