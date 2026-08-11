@@ -262,6 +262,18 @@ package metadata before the build. It was wrong by a factor of seven:
 recorded rather than quietly fixed — it is the same "measure, don't predict"
 rule this repository applies to everything else.
 
+**Why that cost was accepted.** +72% was a real question with a real
+alternative — revert the layer and document `rpm-ostree install ollama` as a
+user step, keeping the image at 3.26 GB. It was kept because without the AI
+stack working out of the box, Navigator is not meaningfully different from
+any other Fedora Atomic + Hyprland image. The local runtime is the product,
+not an optional extra.
+
+The same reasoning is why model **weights** are still not shipped, and it is
+worth being precise about the asymmetry: a missing runtime makes the
+assistant impossible, whereas a missing model only makes it cloud-backed —
+and that path is real, tested, and runs on the user's own key.
+
 ## Status
 
 All six modules are real and were tested with real data on this machine (not

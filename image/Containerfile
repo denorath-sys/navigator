@@ -285,6 +285,20 @@ RUN python3 -c "import sys; assert sys.version_info >= (3, 11), f'ai-stack requi
 # is not a layer size, and this repository's own rule — measure, don't predict
 # — applies to whoever is writing the rule down as much as to anyone else.
 #
+# +72% was put to the project owner as a real question, with the option of
+# reverting and documenting `rpm-ostree install ollama` as a user step
+# instead. The answer was to keep it, and the reasoning is worth recording
+# because it decides similar trade-offs later: without the AI stack working
+# out of the box, Navigator is not meaningfully different from any other
+# Fedora Atomic + Hyprland image. The local runtime is the product, not an
+# optional extra — so its size is a cost of being Navigator rather than a
+# feature that has to justify itself against the download.
+#
+# Note this cuts the other way for model WEIGHTS, which is why they still are
+# not shipped: a runtime that is absent makes the assistant impossible, while
+# a model that is absent only makes it cloud-backed — and that path is real,
+# tested, and the user's own key.
+#
 # The rocblas half is AMD GPU (ROCm) acceleration, arriving as a HARD
 # dependency: ollama requires libhipblas.so.3, so it cannot be excluded
 # without breaking the package. That looks like waste on a machine with no
