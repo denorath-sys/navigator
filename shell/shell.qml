@@ -34,6 +34,19 @@ ShellRoot {
         function isLoading(): bool {
             return panel.loading
         }
+
+        // Both of these exist so a REAL mouse click can be verified from
+        // outside the guest. `toggleRect` says where to aim, `isVisible` says
+        // whether the click landed — without them the only way to test the
+        // click path would be to hardcode a pixel and hope, which would go on
+        // passing after the button moved.
+        function isVisible(): bool {
+            return root.assistantVisible
+        }
+
+        function toggleRect(): string {
+            return bar.assistantToggleRect()
+        }
     }
 
     // Makes the Hyprland data WorkspaceIndicator binds to readable from
@@ -66,6 +79,7 @@ ShellRoot {
     }
 
     Bar {
+        id: bar
         onAssistantToggled: root.assistantVisible = !root.assistantVisible
     }
 

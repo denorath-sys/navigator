@@ -171,10 +171,12 @@ out it was exposed.
 ## Where it's going
 
 Phase 5 is real-hardware installation testing and a first community release.
-Before that: building the GTK/Qt theme assets, and adding real input injection
-to the visual test so clicks can be verified, not just rendering. Layering
-Ollama in is done — the runtime ships in the image; the weights are still
-yours to choose.
+Before that: an icon and cursor theme, which are drawn assets rather than a
+colour mapping and so cannot come from the palette. The GTK and Qt widget
+colours are done, and so is layering Ollama in — the runtime ships in the
+image; the weights are still yours to choose. Real pointer input can now be
+injected into the test VM from outside the guest, which closes the last thing
+the desktop was never able to check about itself.
 
 ## Contributing
 

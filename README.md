@@ -395,7 +395,14 @@ Details: [`ai-stack/cloud-bridge/`](ai-stack/cloud-bridge/).
   hyprpaper's "cover" cropping is accounted for). The threshold again comes
   from measurement: the same wallpaper 0.1, a wrong Navigator wallpaper
   37.9, stock Hyprland 68.7 → threshold 15, with over a hundredfold margin
-  on both sides. Remaining: real mouse clicks (input injection).
+  on both sides. **Real mouse input now exists too:** the test VM had no
+  input device at all, which is why a click had never been testable — with
+  nothing for libinput to bind, "the button does not respond" and "there is
+  no mouse" looked the same from inside. It now has an absolute pointing
+  device, and events are injected over QEMU's QMP socket from outside the
+  guest, aimed using coordinates the shell reports rather than a hardcoded
+  pixel. The guest-side result is a diagnostic on its first round, pending
+  its real numbers.
   **Layer 6 (Ollama) is no longer a placeholder:** the runtime now ships in
   the image, from the official Fedora repository (no COPR needed). It is not
   cheap — measured from the real build, the image went from **3.26 GB to

@@ -48,7 +48,9 @@ component under test comes from the image.
   - `target: "assistant"` — `toggle()`/`ask(prompt)`/`getResponse()`/
     `isLoading()`; connects both the click in `Bar.qml` and the Hyprland
     Super+Space shortcut (`qs ipc call assistant toggle`) to
-    `AssistantPanel`.
+    `AssistantPanel`. Plus `isVisible()`/`toggleRect()`, which exist so a
+    real mouse click can be aimed and its effect read from outside the
+    guest (see "Real input").
   - `target: "workspaces"` — `list()`/`focusedId()`; makes the live
     Hyprland data that `WorkspaceIndicator` binds to readable from the
     outside (see below).
@@ -100,10 +102,48 @@ Layer level 2 (top):
 were seen: `libEGL warning: egl: failed to create dri2 screen` (expected
 because virtio-gpu is software-only; it did not prevent rendering).
 
-**Known remaining limitation:** this is proof that `Bar.qml` genuinely maps
-and renders. `WorkspaceIndicator`'s DATA is verified separately (see below).
-A real MOUSE CLICK on a pill is still not tested: the `activate()` call is
-correct by code review, but the click path itself requires input injection.
+**What this does and does not prove:** it is proof that `Bar.qml` genuinely
+maps and renders. `WorkspaceIndicator`'s DATA is verified separately (see
+below). The click path is a separate question again, and it now has its own
+machinery — see "Real input" below.
+
+## Real input — clicking from outside the guest
+
+Every test before this one drove the desktop from *inside* the guest, with
+`hyprctl dispatch` and `qs ipc call`. Those prove the compositor and the
+shell agree with each other; they cannot prove that a human pointing at the
+button would hit anything, because the click path is never exercised.
+
+The reason it had never been tested turned out to be simpler than "it is
+hard": **the test VM had no input device at all.** With nothing for libinput
+to bind, "the button does not respond" and "there is no mouse" looked
+identical from inside the guest. The VM now gets `-device virtio-tablet-pci`,
+an absolute pointing device.
+
+Events are injected over QEMU's **QMP** socket rather than the HMP monitor
+used for screenshots, because HMP's `mouse_move` is relative while
+`input-send-event` takes absolute axes — which is what makes "click at this
+pixel" expressible at all.
+[`.github/scripts/qemu-input.py`](../.github/scripts/qemu-input.py) does the
+handshake and the coordinate mapping (QEMU's absolute axes are a fixed
+0..32767 range, so the caller has to say how big the screen is).
+
+**Where to aim is asked for, not hardcoded.** `Bar.qml` exposes
+`assistantToggleRect()` and `shell.qml` publishes it as
+`qs ipc call assistant toggleRect`, alongside `isVisible`. CI combines that
+with the bar surface's own geometry from `hyprctl layers -j`. A hardcoded
+pixel would keep passing after the button moved, which is exactly the failure
+this is meant to catch — the same reasoning that put the workspace data
+behind an `IpcHandler` in the first place.
+
+**Status: measured, not yet asserted.** The injection script's own failure
+paths were exercised locally against a fake QMP server — a missing socket, a
+non-QMP socket, an out-of-range coordinate and a QMP error all exit 1 — so a
+failure from the script fails the step. What happens *inside* the guest
+(virtio-tablet → libinput → Hyprland → layer surface → the QML `MouseArea`)
+is a diagnostic on this first round, because none of that chain is a
+documented guarantee. It gets hardened once the real numbers have been read,
+which is the same order everything else here followed.
 
 ## Visual correctness — the real image of the screen (CI)
 

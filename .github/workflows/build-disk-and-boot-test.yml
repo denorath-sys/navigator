@@ -674,6 +674,17 @@ jobs:
           OVMF_VARS_SRC="$(find /usr/share/OVMF -iname 'OVMF_VARS*.fd' | grep -vi secboot | sort | head -n1)"
           echo "OVMF_CODE=${OVMF_CODE}"
           cp "${OVMF_VARS_SRC}" ./OVMF_VARS.fd
+          # -device virtio-tablet-pci : an ABSOLUTE pointing device. Until this
+          # was added the VM had no input device at all, which is the real
+          # reason a click was never testable: there was nothing for libinput
+          # to bind, so "the button does not respond" and "there is no mouse"
+          # looked identical from inside the guest.
+          #
+          # -qmp unix:... : the input path uses QMP rather than HMP, because
+          # HMP's mouse_move is relative while `input-send-event` takes
+          # absolute axes — which is what makes "click at this pixel"
+          # expressible. See .github/scripts/qemu-input.py.
+          #
           # -monitor unix:... : QEMU's HMP monitor. The visual correctness test
           # calls `screendump` over it and has the screen's current contents
           # written to the HOST as a raw PPM — no VNC client needs installing and
@@ -700,8 +711,10 @@ jobs:
               -m 4096 \
               -vga none \
               -device virtio-gpu-pci \
+              -device virtio-tablet-pci \
               -display vnc=127.0.0.1:1 \
               -monitor unix:$(pwd)/qemu-monitor.sock,server,nowait \
+              -qmp unix:$(pwd)/qemu-qmp.sock,server,nowait \
               -drive if=pflash,format=raw,readonly=on,file=${OVMF_CODE} \
               -drive if=pflash,format=raw,file=$(pwd)/OVMF_VARS.fd \
               -drive file=${QCOW2},format=qcow2,if=virtio \
@@ -1356,6 +1369,102 @@ jobs:
           path: navigator-screen.png
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Real input — inject a pointer click from outside the guest
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          SSH="ssh ${SSH_OPTS} -i ${SSH_KEY} -p 2222 root@127.0.0.1"
+          QMP="$(pwd)/qemu-qmp.sock"
+
+          # Every test so far drove the desktop from INSIDE the guest, with
+          # hyprctl dispatch and qs ipc call. Those prove the compositor and
+          # the shell agree with each other; they cannot prove that a human
+          # pointing at the button would hit anything, because the click path
+          # itself is never exercised. This sends events at the hardware
+          # level, the same way the screenshot is taken from outside.
+          #
+          # DIAGNOSTIC this round, deliberately: virtio-tablet -> libinput ->
+          # Hyprland -> layer surface -> MouseArea is not a documented
+          # guarantee, and the rule here is measure first, harden second.
+          # A failure of the injection SCRIPT still fails this step — its
+          # paths were exercised locally against a fake QMP server (missing
+          # socket, non-QMP socket, out-of-range coordinate, QMP error all
+          # exit 1), so an error from it is a real defect rather than a
+          # question about the guest.
+
+          $SSH "cat > /tmp/navenv.sh" <<'ENVEOF'
+          export XDG_RUNTIME_DIR=/run/user/0
+          export HYPRLAND_INSTANCE_SIGNATURE="$(ls "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n1)"
+          export WAYLAND_DISPLAY="$(ls "$XDG_RUNTIME_DIR" 2>/dev/null | grep -E '^wayland-[0-9]+$' | head -n1)"
+          ENVEOF
+          inguest() { $SSH ". /tmp/navenv.sh && $*"; }
+
+          echo "=== screen geometry (asked for, not assumed) ==="
+          MON="$(inguest 'hyprctl monitors -j')"
+          SW="$(printf '%s' "$MON" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["width"])')"
+          SH="$(printf '%s' "$MON" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["height"])')"
+          echo "  ${SW}x${SH}"
+
+          echo
+          echo "--- DIAGNOSTIC: does injected motion reach the compositor at all ---"
+          TX=$(( SW / 3 )); TY=$(( SH / 3 ))
+          python3 .github/scripts/qemu-input.py "$QMP" move "$SW" "$SH" "$TX" "$TY"
+          sleep 1
+          echo "  asked for (${TX}, ${TY}); hyprctl cursorpos -> $(inguest 'hyprctl cursorpos' 2>&1 || echo '(failed)')"
+
+          echo
+          echo "--- DIAGNOSTIC: a real click on the assistant toggle ---"
+          # Where to aim is asked for rather than hardcoded: the bar surface's
+          # own geometry from hyprctl, plus the toggle's position inside the
+          # window from the shell. A hardcoded pixel would keep passing after
+          # the button moved, which is the failure this exists to catch.
+          IPC="qs ipc -p /usr/share/navigator/shell/shell.qml call assistant"
+          LAYERS="$(inguest 'hyprctl layers -j')"
+          RECT="$(inguest "$IPC toggleRect" 2>&1 || echo '')"
+          echo "  toggleRect -> ${RECT}"
+
+          if ! printf '%s' "${RECT}" | grep -q '"w"'; then
+            echo "  (no rect from the shell — cannot aim, so no click this round)"
+          else
+            cat > /tmp/aim.py <<'AIMEOF'
+          import json, sys
+          layers, rect = sys.stdin.read().split("\n", 1)
+          surface = None
+          for mon in json.loads(layers).values():
+              for level in mon.get("levels", {}).values():
+                  for s in level:
+                      if s.get("namespace") == "quickshell":
+                          surface = s
+          if surface is None:
+              print("ERR ERR")
+              raise SystemExit
+          r = json.loads(rect)
+          print(surface["x"] + r["x"] + r["w"] // 2, surface["y"] + r["y"] + r["h"] // 2)
+          AIMEOF
+            COORDS="$(printf '%s\n%s' "$LAYERS" "$RECT" | python3 /tmp/aim.py)"
+            CX="${COORDS%% *}"; CY="${COORDS##* }"
+            echo "  bar surface + toggle centre -> (${CX}, ${CY})"
+            if [ "${CX}" = "ERR" ]; then
+              echo "  (no quickshell layer surface found — no click)"
+            else
+              BEFORE="$(inguest "$IPC isVisible" 2>&1 || echo '?')"
+              python3 .github/scripts/qemu-input.py "$QMP" click "$SW" "$SH" "$CX" "$CY"
+              sleep 2
+              AFTER="$(inguest "$IPC isVisible" 2>&1 || echo '?')"
+              echo "  assistantVisible: ${BEFORE} -> ${AFTER}"
+              if [ "${BEFORE}" != "${AFTER}" ]; then
+                echo "  RESULT: the click reached the QML MouseArea — the whole input path works."
+              else
+                echo "  RESULT: the panel did not toggle. Either the events never reach"
+                echo "          libinput, or the aim is wrong. The numbers above say which."
+              fi
+            fi
+          fi
+
+          echo
+          echo "--- DIAGNOSTIC: input devices Hyprland can see ---"
+          inguest 'hyprctl devices' 2>&1 | head -n 30 || true
 
       - name: Clean up the VM
         if: always()
