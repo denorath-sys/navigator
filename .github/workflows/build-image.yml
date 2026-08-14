@@ -31,10 +31,29 @@ env:
   IMAGE_NAME: navigator
   IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
 
+# Two guards this workflow was missing while build-disk-and-boot-test.yml had
+# both.
+#
+# concurrency is the one that matters for correctness: without it, two pushes
+# in quick succession start two builds, and if the older one finishes last it
+# pushes a STALE :latest over the newer image. Nothing downstream would notice
+# — the tag would simply be wrong, and the next boot test would verify the
+# wrong thing while passing. cancel-in-progress is right here because :latest
+# should be whatever main is now, not whichever build happened to finish last.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build & Push
     runs-on: ubuntu-latest
+    # Real builds take 8-9 minutes, including the Ollama layer. With no
+    # timeout at all a stuck build runs to GitHub's 6-hour default, which is
+    # how a single wedged runner turns into an afternoon of billed minutes on
+    # a private repo and a very confusing wait on a public one. 45 minutes is
+    # generous against a slow mirror and still nowhere near six hours.
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
