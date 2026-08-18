@@ -11,9 +11,7 @@ name: Build Navigator Image
 on:
   workflow_dispatch: {}
   push:
-    # TEMPORARY (diag/build-storage): lets the fix be measured on a branch
-    # before it reaches main. Removed before merge.
-    branches: [main, "diag/**"]
+    branches: [main]
     paths:
       - "image/Containerfile"
       # Layer 4's /etc/skel templates (the credential file).
@@ -33,11 +31,11 @@ on:
 env:
   IMAGE_NAME: navigator
   IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
-  # Why the build does not use the runner's own container storage
-  # configuration is written down in .github/storage.conf. It is set at the
-  # workflow level so that the build, the login and the push all address the
-  # same image store; a step that missed it would look for the image in a
-  # different place and fail to find what was just built.
+  # .github/storage.conf explains itself, including the measurement showing it
+  # is a pin rather than the repair. It is set at the workflow level so that
+  # the build, the login and the push all address the same image store; a step
+  # that missed it would look for the image somewhere else and fail to find
+  # what was just built.
   CONTAINERS_STORAGE_CONF: ${{ github.workspace }}/.github/storage.conf
 
 # Two guards this workflow was missing while build-disk-and-boot-test.yml had
@@ -57,7 +55,7 @@ jobs:
   build:
     name: Build & Push
     runs-on: ubuntu-latest
-    # Real builds take 8-9 minutes, including the Ollama layer. With no
+    # Real builds take 5-9 minutes, including the Ollama layer. With no
     # timeout at all a stuck build runs to GitHub's 6-hour default, which is
     # how a single wedged runner turns into an afternoon of billed minutes on
     # a private repo and a very confusing wait on a public one. 45 minutes is
@@ -77,17 +75,18 @@ jobs:
 
       # Diagnostic, not an assertion, and deliberately so. The first attempt at
       # this step asserted that `buildah info` reports no mount program — and
-      # it turned out that `buildah info` does not report a mount program that
-      # comes from storage.conf at all, not even the runner's own. The check
+      # it turned out that `buildah info` does not report one at all, not even
+      # with the runner's own configuration, which certainly sets it. The check
       # was measuring nothing, which its own positive control caught (run
       # 32085405848). What the build actually needs guarding is its duration,
-      # so that assertion lives on the build step below, where the number being
-      # checked is measured rather than inferred.
+      # so that assertion lives on the build step below, on a number that is
+      # measured rather than inferred.
       #
-      # Both configurations are printed because the difference between them is
-      # the whole subject: ours is .github/storage.conf, the control is the
-      # runner's, and the GraphStatus of each says which overlay implementation
-      # the driver ended up with.
+      # Both configurations are still printed. Neither says which overlay
+      # implementation is in use — their GraphStatus is identical, "Native
+      # Overlay Diff": "true" included — but a future storage change on the
+      # runner side is the thing that broke this build, and having both in the
+      # log is what made it findable the first time.
       - name: Record the container storage configuration
         run: |
           set -euo pipefail
@@ -127,15 +126,19 @@ jobs:
           echo "seconds=$seconds" >> "$GITHUB_OUTPUT"
           echo "built in ${seconds}s"
 
-          # The FUSE regression did not fail anything. It made a 8-9 minute
+          # The FUSE regression did not fail anything. It made an 8-9 minute
           # build take over 45, and the only reason it was noticed at all is
           # that a human looked at a run that was still going. The 45 minute
           # job timeout catches the extreme case; this catches the merely
           # ruinous one, and it does it on a number that was measured rather
           # than on a configuration field that may or may not mean what it
-          # looks like. Every successful build so far: 8m06s, 8m40s, 8m41s.
+          # looks like.
+          #
+          # The measurements it sits on: 486s, 520s and 521s through the
+          # action, 326s calling buildah directly (run 32085688979), against
+          # 2700s+ for the two builds that had to be killed.
           if [ "$seconds" -gt 1200 ]; then
-            echo "::error::The build took ${seconds}s. Successful builds take 500-550s, and the layer-through-FUSE regression took over 2700s. Something has put the layer commits back on a slow path — start with the storage configuration printed above."
+            echo "::error::The build took ${seconds}s, where a healthy build is 300-550s and the layer-through-FUSE regression was 2700s+. Something has put the layer commits back on a slow path — start with the storage configuration printed above."
             exit 1
           fi
 
