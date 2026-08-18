@@ -212,7 +212,9 @@ Details: [`ai-stack/cloud-bridge/`](ai-stack/cloud-bridge/).
   the same VM:** until then it had only passed a static `qmllint` review
   (see `shell/README.md`); now `qs -p shell.qml` really starts in CI and
   `Bar.qml` is mapped as a real layer-shell surface (verified with
-  `hyprctl layers`, `namespace: quickshell`, at the real monitor width) —
+  `hyprctl layers`, at the real monitor width; the surface is named
+  `navigator-bar` since two windows called `quickshell` turned out to be one
+  too many) —
   the first real end-to-end compositor+shell test. **`AssistantToggle` is
   now genuinely wired to `ai-stack/router`:** the new `AssistantPanel.qml`
   really invokes `python3 -m router` as a subprocess via
@@ -327,7 +329,8 @@ Details: [`ai-stack/cloud-bridge/`](ai-stack/cloud-bridge/).
   to end: the image build passed and `build-disk-and-boot-test.yml` reported
   `Fedora Linux 44.20260801.0` in the VM, Hyprland came up, its own
   `exec-once` started Quickshell from the image path and `hyprctl layers`
-  showed a real layer-shell surface (`namespace: quickshell`), and the
+  showed a real layer-shell surface (`namespace: quickshell`, as it was
+  called before the surfaces were given names), and the
   AssistantPanel → `ai-stack/router` chain responded. Layer 2's choice of
   `dnf5 install` was deliberately left alone: its rationale (not being able
   to upgrade the old Qt in the base image) appears to have disappeared on
@@ -401,8 +404,12 @@ Details: [`ai-stack/cloud-bridge/`](ai-stack/cloud-bridge/).
   no mouse" looked the same from inside. It now has an absolute pointing
   device, and events are injected over QEMU's QMP socket from outside the
   guest, aimed using coordinates the shell reports rather than a hardcoded
-  pixel. The guest-side result is a diagnostic on its first round, pending
-  its real numbers.
+  pixel. **It works and is now asserted** (run 32092556819): motion asked for
+  at (426, 266) arrived at 426, 266, and a click at the toggle's centre
+  flipped `assistantVisible` — then a second click flipped it back, because
+  one flip could be anything that closes the panel. Two rounds were spent
+  getting there, and both failures were in the test rather than in the
+  desktop.
   **Layer 6 (Ollama) is no longer a placeholder:** the runtime now ships in
   the image, from the official Fedora repository (no COPR needed). It is not
   cheap — measured from the real build, the image went from **3.26 GB to

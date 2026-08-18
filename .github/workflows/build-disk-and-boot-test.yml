@@ -1370,7 +1370,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Real input — inject a pointer click from outside the guest
+      - name: Real input — a pointer click from outside the guest must reach the shell
         run: |
           set -euo pipefail
           # LogLevel=ERROR because this step captures ssh output into files
@@ -1388,14 +1388,14 @@ jobs:
           # itself is never exercised. This sends events at the hardware
           # level, the same way the screenshot is taken from outside.
           #
-          # DIAGNOSTIC this round, deliberately: virtio-tablet -> libinput ->
-          # Hyprland -> layer surface -> MouseArea is not a documented
-          # guarantee, and the rule here is measure first, harden second.
-          # A failure of the injection SCRIPT still fails this step — its
-          # paths were exercised locally against a fake QMP server (missing
-          # socket, non-QMP socket, out-of-range coordinate, QMP error all
-          # exit 1), so an error from it is a real defect rather than a
-          # question about the guest.
+          # Asserted, as of run 32092556819. The first round was deliberately
+          # a diagnostic, because virtio-tablet -> libinput -> Hyprland ->
+          # layer surface -> MouseArea is not a documented guarantee and the
+          # rule here is measure first, harden second. It has now been
+          # measured: motion asked for (426, 266) came back from hyprctl
+          # cursorpos as 426, 266, and a click at the toggle's centre flipped
+          # assistantVisible. Both are checked below, so a regression anywhere
+          # along that chain fails this step instead of being described in it.
 
           $SSH "cat > /tmp/navenv.sh" <<'ENVEOF'
           export XDG_RUNTIME_DIR=/run/user/0
@@ -1411,11 +1411,32 @@ jobs:
           echo "  ${SW}x${SH}"
 
           echo
-          echo "--- DIAGNOSTIC: does injected motion reach the compositor at all ---"
+          echo "--- injected motion must arrive where it was aimed ---"
           TX=$(( SW / 3 )); TY=$(( SH / 3 ))
           python3 .github/scripts/qemu-input.py "$QMP" move "$SW" "$SH" "$TX" "$TY"
           sleep 1
-          echo "  asked for (${TX}, ${TY}); hyprctl cursorpos -> $(inguest 'hyprctl cursorpos' 2>&1 || echo '(failed)')"
+          CURSOR="$(inguest 'hyprctl cursorpos')"
+          echo "  asked for (${TX}, ${TY}); hyprctl cursorpos -> ${CURSOR}"
+          GOT_X="$(printf '%s' "$CURSOR" | cut -d, -f1 | tr -d ' ')"
+          GOT_Y="$(printf '%s' "$CURSOR" | cut -d, -f2 | tr -d ' ')"
+          case "${GOT_X}${GOT_Y}" in
+            ''|*[!0-9]*)
+              echo "::error::hyprctl cursorpos did not answer with a coordinate pair: ${CURSOR}"
+              exit 1
+              ;;
+          esac
+          # Two pixels of slack, not zero: QEMU's absolute axes are a fixed
+          # 0..32767 range, so a pixel makes the round trip through two
+          # divisions. It happens to land exactly at 1280x800; that is not a
+          # promise at every resolution, and a rounding difference is not the
+          # failure this is looking for. Missing the compositor entirely is.
+          DX=$(( GOT_X - TX )); DX=${DX#-}
+          DY=$(( GOT_Y - TY )); DY=${DY#-}
+          if [ "$DX" -gt 2 ] || [ "$DY" -gt 2 ]; then
+            echo "::error::Injected motion did not arrive: aimed at (${TX}, ${TY}), the compositor put the cursor at (${GOT_X}, ${GOT_Y})."
+            exit 1
+          fi
+          echo "  OK: the pointer went where it was told"
 
           echo
           echo "--- DIAGNOSTIC: a real click on the assistant toggle ---"
@@ -1454,12 +1475,23 @@ jobs:
           sleep 2
           AFTER="$(inguest "$IPC isVisible")"
           echo "  assistantVisible: ${BEFORE} -> ${AFTER}"
-          if [ "${BEFORE}" != "${AFTER}" ]; then
-            echo "  RESULT: the click reached the QML MouseArea — the whole input path works."
-          else
-            echo "  RESULT: the panel did not toggle. Either the events never reach"
-            echo "          libinput, or the aim is wrong. The numbers above say which."
+          if [ "${BEFORE}" = "${AFTER}" ]; then
+            echo "::error::The click did not reach the QML MouseArea. assistantVisible stayed ${BEFORE} after a click at (${CX}, ${CY}). The motion check above passed, so the events reach the compositor — the aim or the button is what to look at."
+            exit 1
           fi
+
+          # And back. One flip could be anything that closes the panel; two
+          # flips in opposite directions is the button doing what a button
+          # does, which is the claim being made.
+          python3 .github/scripts/qemu-input.py "$QMP" click "$SW" "$SH" "$CX" "$CY"
+          sleep 2
+          AGAIN="$(inguest "$IPC isVisible")"
+          echo "  clicked again: ${AFTER} -> ${AGAIN}"
+          if [ "${AGAIN}" != "${BEFORE}" ]; then
+            echo "::error::The second click did not toggle back: ${BEFORE} -> ${AFTER} -> ${AGAIN}. The first flip was something other than the toggle."
+            exit 1
+          fi
+          echo "  OK: the click reached the QML MouseArea and the toggle toggles"
 
           echo
           echo "--- DIAGNOSTIC: input devices Hyprland can see ---"

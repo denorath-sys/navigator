@@ -97,6 +97,13 @@ Layer level 2 (top):
     Layer 55b9230bbd30: xywh: 0 20 1280 32, namespace: quickshell, pid: 1516
 ```
 
+(That run predates the surfaces having names. `quickshell` is what Quickshell
+calls every window it maps, so the bar and the assistant panel were the same
+name from outside — which is exactly how the click test came to aim at the
+panel. `Bar.qml` is `navigator-bar` and `AssistantPanel.qml` is
+`navigator-assistant` now, via `WlrLayershell.namespace`; run 32092556819
+reports `['hyprpaper', 'navigator-assistant', 'navigator-bar']`.)
+
 (`w=1280` matches the real monitor width and `h=32` matches `barHeight` in
 `Theme.qml` exactly — not a mock, but a real render.) Two harmless warnings
 were seen: `libEGL warning: egl: failed to create dri2 screen` (expected
@@ -136,14 +143,39 @@ pixel would keep passing after the button moved, which is exactly the failure
 this is meant to catch — the same reasoning that put the workspace data
 behind an `IpcHandler` in the first place.
 
-**Status: measured, not yet asserted.** The injection script's own failure
-paths were exercised locally against a fake QMP server — a missing socket, a
-non-QMP socket, an out-of-range coordinate and a QMP error all exit 1 — so a
-failure from the script fails the step. What happens *inside* the guest
-(virtio-tablet → libinput → Hyprland → layer surface → the QML `MouseArea`)
-is a diagnostic on this first round, because none of that chain is a
-documented guarantee. It gets hardened once the real numbers have been read,
-which is the same order everything else here followed.
+**Status: measured, then asserted** — run 32092556819. The whole chain works:
+
+```
+  asked for (426, 266); hyprctl cursorpos -> 426, 266
+  toggleRect -> {"x":1133,"y":5,"w":79,"h":22}
+  layer namespaces -> ['hyprpaper', 'navigator-assistant', 'navigator-bar']
+  bar surface + toggle centre -> (1172, 16)
+  clicked left at (1172, 16)
+  assistantVisible: true -> false
+```
+
+virtio-tablet → libinput → Hyprland → layer surface → the QML `MouseArea`,
+none of which is a documented guarantee, which is why it was a diagnostic
+first. Both halves are now checked: motion must arrive within two pixels of
+where it was aimed (two, not zero — QEMU's absolute axes are a fixed 0..32767
+range and a pixel makes the round trip through two divisions), and the click
+must flip `assistantVisible`. **Then it clicks again and requires it to flip
+back**, because one flip could be anything that closes the panel; two flips
+in opposite directions is a button behaving like a button.
+
+Getting there cost two rounds, and both failures were in the test rather than
+in the desktop:
+
+- The aiming step was a heredoc into `/tmp/aim.py` that read both JSON
+  documents from one stdin and split on the first newline. `hyprctl layers
+  -j` is multi-line, so the layer list arrived as `{` (run 32087531703). It
+  is [`.github/scripts/aim-at-toggle.py`](../.github/scripts/aim-at-toggle.py)
+  now, taking two file paths, exercised against fixtures without a VM.
+- With both windows called `quickshell`, it picked whichever came last and
+  asked to click x=2063 on a 1280-wide screen (run 32089480998).
+  `qemu-input.py` refused, which is its range check earning its place. The
+  surfaces have names now and the namespace is an argument, not an
+  assumption.
 
 ## Visual correctness — the real image of the screen (CI)
 
