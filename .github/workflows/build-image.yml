@@ -75,36 +75,33 @@ jobs:
       - name: Maximize build space
         uses: ublue-os/remove-unwanted-software@v7
 
-      # Two questions, in the order that matters: is a mount program configured
-      # at all, and would this check notice if one were? The second half is not
-      # decoration. A check that silently matches nothing looks exactly like a
-      # check that passes, and this repository has already been bitten by one.
-      - name: Verify the build will not run through FUSE
+      # Diagnostic, not an assertion, and deliberately so. The first attempt at
+      # this step asserted that `buildah info` reports no mount program — and
+      # it turned out that `buildah info` does not report a mount program that
+      # comes from storage.conf at all, not even the runner's own. The check
+      # was measuring nothing, which its own positive control caught (run
+      # 32085405848). What the build actually needs guarding is its duration,
+      # so that assertion lives on the build step below, where the number being
+      # checked is measured rather than inferred.
+      #
+      # Both configurations are printed because the difference between them is
+      # the whole subject: ours is .github/storage.conf, the control is the
+      # runner's, and the GraphStatus of each says which overlay implementation
+      # the driver ended up with.
+      - name: Record the container storage configuration
         run: |
           set -euo pipefail
 
-          echo "== the store this build will use"
-          buildah info | grep -iE 'graphdrivername|graphroot|graphoptions' || true
+          echo "== this build (.github/storage.conf)"
+          buildah info
 
-          # The runner's own configuration is the positive control: the same
-          # grep MUST find a mount program there. A throwaway --root keeps this
-          # away from the real store; the driver options still come from the
-          # configuration being tested.
-          control_root="$RUNNER_TEMP/storage-check"
+          echo
+          echo "== the runner's own configuration, for comparison"
+          control_root="$RUNNER_TEMP/storage-control"
           mkdir -p "$control_root/root" "$control_root/runroot"
-          if ! env -u CONTAINERS_STORAGE_CONF buildah \
-                 --root "$control_root/root" --runroot "$control_root/runroot" \
-                 info | grep -qi mount_program; then
-            echo "::error::The mount_program check found nothing even in the runner's own configuration, which is known to set one. The check is not checking anything — fix it before trusting this build."
-            exit 1
-          fi
-          echo "check confirmed against the runner's own configuration"
-
-          if buildah info | grep -qi mount_program; then
-            echo "::error::A mount program is configured for this build. Every layer would be committed through FUSE, which is what turned 8-9 minute builds into 45+ minute ones. See .github/storage.conf."
-            exit 1
-          fi
-          echo "no mount program: layers go through the kernel's overlayfs"
+          env -u CONTAINERS_STORAGE_CONF buildah \
+            --root "$control_root/root" --runroot "$control_root/runroot" \
+            info
 
       # buildah is called directly rather than through redhat-actions/buildah-build.
       # The action reads the storage driver out of the runner's configuration and,
@@ -126,8 +123,21 @@ jobs:
           # buildah 1.33's --tag takes a single name, so the second tag is
           # applied afterwards rather than during the build.
           buildah tag "${IMAGE_NAME}:latest" "${IMAGE_NAME}:${GITHUB_SHA}"
-          echo "seconds=$(( SECONDS - start ))" >> "$GITHUB_OUTPUT"
-          echo "built in $(( SECONDS - start ))s"
+          seconds=$(( SECONDS - start ))
+          echo "seconds=$seconds" >> "$GITHUB_OUTPUT"
+          echo "built in ${seconds}s"
+
+          # The FUSE regression did not fail anything. It made a 8-9 minute
+          # build take over 45, and the only reason it was noticed at all is
+          # that a human looked at a run that was still going. The 45 minute
+          # job timeout catches the extreme case; this catches the merely
+          # ruinous one, and it does it on a number that was measured rather
+          # than on a configuration field that may or may not mean what it
+          # looks like. Every successful build so far: 8m06s, 8m40s, 8m41s.
+          if [ "$seconds" -gt 1200 ]; then
+            echo "::error::The build took ${seconds}s. Successful builds take 500-550s, and the layer-through-FUSE regression took over 2700s. Something has put the layer commits back on a slow path — start with the storage configuration printed above."
+            exit 1
+          fi
 
       # Pushing is limited to main. A build from any other branch is worth
       # running — it proves the Containerfile still builds — but :latest must
