@@ -130,8 +130,17 @@ jobs:
 
       - name: Install QEMU + OVMF
         run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd
+          # The timeouts are not decoration. In run 32094211318 apt sat on an
+          # unreachable azure.archive.ubuntu.com, retrying with the default
+          # 120-second timeout, and ate the job's entire 20-minute budget
+          # before a single package was installed. Ubuntu's own archive was
+          # answering the whole time. Short timeouts and explicit retries let
+          # it fail over instead of hanging; the outer `timeout` is the
+          # backstop, and one retry covers a mirror that is merely slow.
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20"
+          timeout 300 sudo apt-get $APT_OPTS update \
+            || timeout 300 sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd
 
       - name: Verify KVM access
         run: |
@@ -248,8 +257,17 @@ jobs:
 
       - name: Install QEMU + OVMF
         run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd
+          # The timeouts are not decoration. In run 32094211318 apt sat on an
+          # unreachable azure.archive.ubuntu.com, retrying with the default
+          # 120-second timeout, and ate the job's entire 20-minute budget
+          # before a single package was installed. Ubuntu's own archive was
+          # answering the whole time. Short timeouts and explicit retries let
+          # it fail over instead of hanging; the outer `timeout` is the
+          # backstop, and one retry covers a mirror that is merely slow.
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20"
+          timeout 300 sudo apt-get $APT_OPTS update \
+            || timeout 300 sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd
 
       - name: Verify KVM access
         run: |
@@ -1439,7 +1457,7 @@ jobs:
           echo "  OK: the pointer went where it was told"
 
           echo
-          echo "--- DIAGNOSTIC: a real click on the assistant toggle ---"
+          echo "--- a real click on the assistant toggle must reach the shell ---"
           # Where to aim is asked for rather than hardcoded: the bar surface's
           # own geometry from hyprctl, plus the toggle's position inside the
           # window from the shell. A hardcoded pixel would keep passing after

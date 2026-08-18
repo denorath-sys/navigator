@@ -143,7 +143,10 @@ pixel would keep passing after the button moved, which is exactly the failure
 this is meant to catch — the same reasoning that put the workspace data
 behind an `IpcHandler` in the first place.
 
-**Status: measured, then asserted** — run 32092556819. The whole chain works:
+**Status: measured, then asserted** — measured in run 32092556819, and the
+assertions themselves verified in run 32094211318, where the second click
+was exercised for the first time (`true -> false -> true`). The whole chain
+works:
 
 ```
   asked for (426, 266); hyprctl cursorpos -> 426, 266
