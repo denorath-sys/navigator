@@ -11,7 +11,9 @@ name: Build Navigator Image
 on:
   workflow_dispatch: {}
   push:
-    branches: [main]
+    # TEMPORARY (diag/build-storage): lets the fix be measured on a branch
+    # before it reaches main. Removed before merge.
+    branches: [main, "diag/**"]
     paths:
       - "image/Containerfile"
       # Layer 4's /etc/skel templates (the credential file).
@@ -26,10 +28,17 @@ on:
       # shell/*.qml likewise (Layer 7).
       - "shell/**"
       - ".github/workflows/build-image.yml"
+      - ".github/storage.conf"
 
 env:
   IMAGE_NAME: navigator
   IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+  # Why the build does not use the runner's own container storage
+  # configuration is written down in .github/storage.conf. It is set at the
+  # workflow level so that the build, the login and the push all address the
+  # same image store; a step that missed it would look for the image in a
+  # different place and fail to find what was just built.
+  CONTAINERS_STORAGE_CONF: ${{ github.workspace }}/.github/storage.conf
 
 # Two guards this workflow was missing while build-disk-and-boot-test.yml had
 # both.
@@ -66,37 +75,97 @@ jobs:
       - name: Maximize build space
         uses: ublue-os/remove-unwanted-software@v7
 
+      # Two questions, in the order that matters: is a mount program configured
+      # at all, and would this check notice if one were? The second half is not
+      # decoration. A check that silently matches nothing looks exactly like a
+      # check that passes, and this repository has already been bitten by one.
+      - name: Verify the build will not run through FUSE
+        run: |
+          set -euo pipefail
+
+          echo "== the store this build will use"
+          buildah info | grep -iE 'graphdrivername|graphroot|graphoptions' || true
+
+          # The runner's own configuration is the positive control: the same
+          # grep MUST find a mount program there. A throwaway --root keeps this
+          # away from the real store; the driver options still come from the
+          # configuration being tested.
+          control_root="$RUNNER_TEMP/storage-check"
+          mkdir -p "$control_root/root" "$control_root/runroot"
+          if ! env -u CONTAINERS_STORAGE_CONF buildah \
+                 --root "$control_root/root" --runroot "$control_root/runroot" \
+                 info | grep -qi mount_program; then
+            echo "::error::The mount_program check found nothing even in the runner's own configuration, which is known to set one. The check is not checking anything — fix it before trusting this build."
+            exit 1
+          fi
+          echo "check confirmed against the runner's own configuration"
+
+          if buildah info | grep -qi mount_program; then
+            echo "::error::A mount program is configured for this build. Every layer would be committed through FUSE, which is what turned 8-9 minute builds into 45+ minute ones. See .github/storage.conf."
+            exit 1
+          fi
+          echo "no mount program: layers go through the kernel's overlayfs"
+
+      # buildah is called directly rather than through redhat-actions/buildah-build.
+      # The action reads the storage driver out of the runner's configuration and,
+      # when it is overlay, exports STORAGE_OPTS to force fuse-overlayfs — which
+      # is precisely what the build must not do, and the action offers no way to
+      # decline. It is also deprecated in favour of a v3 that behaves the same.
       - name: Build image
         id: build_image
-        uses: redhat-actions/buildah-build@v2
-        with:
-          image: ${{ env.IMAGE_NAME }}
-          tags: latest ${{ github.sha }}
-          containerfiles: |
-            ./image/Containerfile
-          context: .
-          layers: true
-          oci: true
+        run: |
+          set -euo pipefail
+          start=$SECONDS
+          buildah build \
+            --format oci \
+            --tls-verify=true \
+            --layers=true \
+            -f image/Containerfile \
+            -t "${IMAGE_NAME}:latest" \
+            .
+          # buildah 1.33's --tag takes a single name, so the second tag is
+          # applied afterwards rather than during the build.
+          buildah tag "${IMAGE_NAME}:latest" "${IMAGE_NAME}:${GITHUB_SHA}"
+          echo "seconds=$(( SECONDS - start ))" >> "$GITHUB_OUTPUT"
+          echo "built in $(( SECONDS - start ))s"
 
+      # Pushing is limited to main. A build from any other branch is worth
+      # running — it proves the Containerfile still builds — but :latest must
+      # keep meaning "what main is now", and the old condition let anything
+      # that was not a pull request overwrite it.
       - name: Log in to ghcr.io
-        if: github.event_name != 'pull_request'
-        uses: redhat-actions/podman-login@v1
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        if: github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | buildah login --username "${{ github.actor }}" --password-stdin ghcr.io
 
       - name: Push to ghcr.io
         id: push
-        if: github.event_name != 'pull_request'
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.build_image.outputs.image }}
-          tags: ${{ steps.build_image.outputs.tags }}
-          registry: ${{ env.IMAGE_REGISTRY }}
+        if: github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          for tag in latest "$GITHUB_SHA"; do
+            buildah push --format oci \
+              "${IMAGE_NAME}:${tag}" \
+              "docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:${tag}"
+          done
 
       - name: Summary
-        if: github.event_name != 'pull_request'
+        if: always()
         run: |
-          echo "### Navigator image pushed" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`${{ steps.push.outputs.registry-paths }}\`" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Navigator image"
+            echo
+            echo "Built in ${{ steps.build_image.outputs.seconds }}s."
+            if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+              echo
+              echo "Pushed:"
+              echo
+              echo "- \`${IMAGE_REGISTRY}/${IMAGE_NAME}:latest\`"
+              echo "- \`${IMAGE_REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA}\`"
+            else
+              echo
+              echo "Not pushed: pushing is limited to main."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
