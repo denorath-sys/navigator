@@ -1373,7 +1373,11 @@ jobs:
       - name: Real input — inject a pointer click from outside the guest
         run: |
           set -euo pipefail
-          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          # LogLevel=ERROR because this step captures ssh output into files
+          # that are then parsed as JSON, and "Warning: Permanently added ..."
+          # lands on stderr of every single call. Anything that merges the two
+          # streams turns a document into a parse error.
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
           SSH="ssh ${SSH_OPTS} -i ${SSH_KEY} -p 2222 root@127.0.0.1"
           QMP="$(pwd)/qemu-qmp.sock"
 
@@ -1420,46 +1424,38 @@ jobs:
           # window from the shell. A hardcoded pixel would keep passing after
           # the button moved, which is the failure this exists to catch.
           IPC="qs ipc -p /usr/share/navigator/shell/shell.qml call assistant"
-          LAYERS="$(inguest 'hyprctl layers -j')"
-          RECT="$(inguest "$IPC toggleRect" 2>&1 || echo '')"
-          echo "  toggleRect -> ${RECT}"
 
-          if ! printf '%s' "${RECT}" | grep -q '"w"'; then
-            echo "  (no rect from the shell — cannot aim, so no click this round)"
-          else
-            cat > /tmp/aim.py <<'AIMEOF'
+          # Both documents go to files and are parsed by a script in the
+          # repository. The version this replaces piped them into one stdin
+          # and split on the first newline — `hyprctl layers -j` is
+          # multi-line, so the layer list arrived cut off at its opening brace
+          # (run 32087531703). Files have no protocol to get wrong, and
+          # .github/scripts/aim-at-toggle.py can be exercised without a VM.
+          LAYERS_JSON="$RUNNER_TEMP/hypr-layers.json"
+          RECT_JSON="$RUNNER_TEMP/toggle-rect.json"
+          inguest 'hyprctl layers -j' > "$LAYERS_JSON"
+          inguest "$IPC toggleRect" > "$RECT_JSON"
+          echo "  toggleRect -> $(cat "$RECT_JSON")"
+          echo "  layer namespaces -> $(python3 -c '
           import json, sys
-          layers, rect = sys.stdin.read().split("\n", 1)
-          surface = None
-          for mon in json.loads(layers).values():
-              for level in mon.get("levels", {}).values():
-                  for s in level:
-                      if s.get("namespace") == "quickshell":
-                          surface = s
-          if surface is None:
-              print("ERR ERR")
-              raise SystemExit
-          r = json.loads(rect)
-          print(surface["x"] + r["x"] + r["w"] // 2, surface["y"] + r["y"] + r["h"] // 2)
-          AIMEOF
-            COORDS="$(printf '%s\n%s' "$LAYERS" "$RECT" | python3 /tmp/aim.py)"
-            CX="${COORDS%% *}"; CY="${COORDS##* }"
-            echo "  bar surface + toggle centre -> (${CX}, ${CY})"
-            if [ "${CX}" = "ERR" ]; then
-              echo "  (no quickshell layer surface found — no click)"
-            else
-              BEFORE="$(inguest "$IPC isVisible" 2>&1 || echo '?')"
-              python3 .github/scripts/qemu-input.py "$QMP" click "$SW" "$SH" "$CX" "$CY"
-              sleep 2
-              AFTER="$(inguest "$IPC isVisible" 2>&1 || echo '?')"
-              echo "  assistantVisible: ${BEFORE} -> ${AFTER}"
-              if [ "${BEFORE}" != "${AFTER}" ]; then
-                echo "  RESULT: the click reached the QML MouseArea — the whole input path works."
-              else
-                echo "  RESULT: the panel did not toggle. Either the events never reach"
-                echo "          libinput, or the aim is wrong. The numbers above say which."
-              fi
-            fi
+          data = json.load(open(sys.argv[1]))
+          print(sorted(n for n in {s.get("namespace") for m in data.values() for lv in m.get("levels", {}).values() for s in lv or []} if n))
+          ' "$LAYERS_JSON" 2>&1 || echo '(unreadable)')"
+
+          COORDS="$(python3 .github/scripts/aim-at-toggle.py "$LAYERS_JSON" "$RECT_JSON")"
+          CX="${COORDS%% *}"; CY="${COORDS##* }"
+          echo "  bar surface + toggle centre -> (${CX}, ${CY})"
+
+          BEFORE="$(inguest "$IPC isVisible")"
+          python3 .github/scripts/qemu-input.py "$QMP" click "$SW" "$SH" "$CX" "$CY"
+          sleep 2
+          AFTER="$(inguest "$IPC isVisible")"
+          echo "  assistantVisible: ${BEFORE} -> ${AFTER}"
+          if [ "${BEFORE}" != "${AFTER}" ]; then
+            echo "  RESULT: the click reached the QML MouseArea — the whole input path works."
+          else
+            echo "  RESULT: the panel did not toggle. Either the events never reach"
+            echo "          libinput, or the aim is wrong. The numbers above say which."
           fi
 
           echo
