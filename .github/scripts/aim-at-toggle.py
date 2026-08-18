@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """Work out the screen pixel to click for the assistant toggle.
 
-    aim-at-toggle.py LAYERS_JSON RECT_JSON
+    aim-at-toggle.py LAYERS_JSON RECT_JSON NAMESPACE
 
 LAYERS_JSON is `hyprctl layers -j` from inside the guest: the compositor's
 view of where the bar's layer surface sits on screen. RECT_JSON is the
-shell's own `toggleRect`: where the button sits inside that surface. Neither
-is guessed, and neither is hardcoded — a hardcoded pixel would keep passing
-after the button moved, which is the failure the click test exists to catch.
+shell's own `toggleRect`: where the button sits inside that surface. NAMESPACE
+is the layer surface to aim at, "navigator-bar" for the bar. Nothing here is
+guessed and nothing is hardcoded — a hardcoded pixel would keep passing after
+the button moved, which is the failure the click test exists to catch.
+
+The namespace has to be given because it has to be right: Quickshell names
+every window it maps "quickshell" unless told otherwise, so the bar and the
+assistant panel were the same name from outside, and picking one of them by
+position in a list aimed at x=2063 on a 1280-wide screen (run 32089480998).
+Bar.qml and AssistantPanel.qml name themselves now.
 
 Prints "X Y" on stdout. Everything else goes to stderr and exits 1.
 
@@ -71,22 +78,24 @@ def find_surface(layers, namespace):
             f"the compositor reports: {sorted(n for n in seen if n) or 'none at all'}"
         )
     if len(found) > 1:
-        # Not fatal, but it decides where the click lands, so say so.
-        print(
-            f"note: {len(found)} surfaces named {namespace!r}; using the last",
-            file=sys.stderr,
+        # Fatal on purpose. Picking one of several is what produced an
+        # off-screen coordinate in the first place, and a duplicate namespace
+        # means the shell is not saying what it means.
+        die(
+            f"{len(found)} layer surfaces are named {namespace!r}; "
+            "the name is supposed to identify one window"
         )
-    return found[-1]
+    return found[0]
 
 
 def main(argv):
-    if len(argv) != 3:
-        die(f"usage: {argv[0]} LAYERS_JSON RECT_JSON")
+    if len(argv) != 4:
+        die(f"usage: {argv[0]} LAYERS_JSON RECT_JSON NAMESPACE")
 
     layers = load(argv[1], "layer list")
     rect = load(argv[2], "toggle rect")
 
-    surface = find_surface(layers, "quickshell")
+    surface = find_surface(layers, argv[3])
 
     missing = [k for k in ("x", "y", "w", "h") if k not in surface]
     if missing:

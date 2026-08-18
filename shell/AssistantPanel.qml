@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 
 // The Navigator AI assistant panel — genuinely wired to ai-stack/router.
 // Toggled by clicking AssistantToggle (Bar.qml) or by the Hyprland Super+Space
@@ -17,6 +18,10 @@ import Quickshell.Io
 // build-disk-and-boot-test.yml.
 PanelWindow {
     id: panel
+
+    // See the note in Bar.qml: both windows were called "quickshell" from
+    // outside, which is fine until something has to tell them apart.
+    WlrLayershell.namespace: "navigator-assistant"
 
     property string responseText: ""
     property bool loading: false

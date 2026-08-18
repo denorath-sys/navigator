@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Wayland
 
 // The Navigator top panel: workspace indicator, assistant panel toggle, clock.
 // It places itself on the panel layer in Wayland via the wlr-layer-shell
@@ -8,6 +9,14 @@ import Quickshell
 // https://quickshell.outfoxxed.me/docs/types/quickshell/panelwindow/).
 PanelWindow {
     id: bar
+
+    // The layer surface's name, as `hyprctl layers` and any Hyprland
+    // layerrule will see it. Quickshell's default is "quickshell" for every
+    // window it maps, so the bar and the assistant panel were indistinguisha-
+    // ble from outside: the click test picked whichever came last and aimed
+    // at x=2063 on a 1280-wide screen (run 32089480998). Naming them is what
+    // makes "the bar" a thing that can be asked for rather than guessed at.
+    WlrLayershell.namespace: "navigator-bar"
 
     signal assistantToggled()
 

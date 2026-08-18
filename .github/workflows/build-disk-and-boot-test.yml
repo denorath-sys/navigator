@@ -1442,7 +1442,10 @@ jobs:
           print(sorted(n for n in {s.get("namespace") for m in data.values() for lv in m.get("levels", {}).values() for s in lv or []} if n))
           ' "$LAYERS_JSON" 2>&1 || echo '(unreadable)')"
 
-          COORDS="$(python3 .github/scripts/aim-at-toggle.py "$LAYERS_JSON" "$RECT_JSON")"
+          # navigator-bar, not "quickshell": Bar.qml and AssistantPanel.qml
+          # name their own layer surfaces, so this asks for the bar rather
+          # than taking whichever surface the compositor listed last.
+          COORDS="$(python3 .github/scripts/aim-at-toggle.py "$LAYERS_JSON" "$RECT_JSON" navigator-bar)"
           CX="${COORDS%% *}"; CY="${COORDS##* }"
           echo "  bar surface + toggle centre -> (${CX}, ${CY})"
 
