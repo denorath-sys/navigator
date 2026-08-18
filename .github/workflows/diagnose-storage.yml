@@ -1,0 +1,105 @@
+# Navigator OS — one-off: is .github/storage.conf load-bearing, or is dropping
+# the action enough?
+#
+# NOT part of the pipeline. It lives on the diag/ branch only and is deleted
+# once it has answered.
+#
+# The fix changed two things at once: the build stopped going through
+# redhat-actions/buildah-build, which exports STORAGE_OPTS to force
+# fuse-overlayfs, AND it started overriding the runner's storage.conf, which
+# names the same mount program. The result was decisive (326s, against 2700s+
+# for the two builds that were killed) but it does not say which of the two
+# changes did the work, and `buildah info` reports nothing that distinguishes
+# them: with the runner's own configuration it prints the same GraphStatus,
+# "Native Overlay Diff": "true" included.
+#
+# That matters because it decides whether .github/storage.conf stays in the
+# repository or is dead weight, so it is measured rather than argued.
+#
+# The two variants differ only in CONTAINERS_STORAGE_CONF. Neither goes near
+# the action, so STORAGE_OPTS is out of the picture in both. What is built is
+# the real Containerfile truncated after its first COPY — the FROM and the two
+# rpm-ostree layers, which is exactly where the 685s and 856s commits were.
+# Truncating keeps a wrong answer cheap; the previous probe's synthetic 1 GB
+# dd was a bad proxy precisely because FUSE costs per file, not per byte.
+
+name: Diagnose build storage
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [ "diag/**" ]
+    paths:
+      - ".github/workflows/diagnose-storage.yml"
+
+jobs:
+  probe:
+    name: Storage probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Maximize build space
+        uses: ublue-os/remove-unwanted-software@v7
+
+      - name: Measure both configurations
+        # bash without -e: a variant that fails or is killed at its cap is a
+        # result to record, not a reason to abandon the other one. The first
+        # probe lost its last variant to exactly this, since GitHub's default
+        # `bash -e` is not undone by `set -uo pipefail`.
+        shell: bash {0}
+        run: |
+          set -uo pipefail
+
+          mkdir -p probe
+          awk '{ print } /^COPY theme\/palette.json/ { exit }' \
+            image/Containerfile > probe/Containerfile
+          echo "== the truncated Containerfile"
+          grep -nE '^(FROM|RUN|COPY)' probe/Containerfile
+
+          : > results.txt
+
+          measure() {
+            variant="$1"
+            conf="$2"
+
+            root="$HOME/probe-$variant"
+            mkdir -p "$root/root" "$root/runroot"
+
+            echo "::group::$variant — build"
+            start=$SECONDS
+            env ${conf:+CONTAINERS_STORAGE_CONF="$conf"} \
+              timeout 1500 buildah \
+                --root "$root/root" --runroot "$root/runroot" \
+                build --no-cache --layers=true --format oci \
+                -f probe/Containerfile -t "probe-$variant" .
+            rc=$?
+            secs=$(( SECONDS - start ))
+            echo "::endgroup::"
+
+            # 124 is timeout(1) killing it at the cap: a result, not an error.
+            echo "$variant rc=$rc seconds=$secs" | tee -a results.txt
+            df -h /home | tail -1
+          }
+
+          # Ours first: it is the one expected to be quick, and a job-level
+          # timeout must not be able to cost us the measurement that matters.
+          measure ours   "$GITHUB_WORKSPACE/.github/storage.conf"
+          measure runner ""
+
+          echo "== results"
+          cat results.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Is .github/storage.conf load-bearing?"
+            echo
+            echo '```'
+            cat results.txt 2>/dev/null || echo "no results"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
