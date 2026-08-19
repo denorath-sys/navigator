@@ -51,10 +51,13 @@ This section exists on purpose, and it is not a footnote.
   model belongs on your machine is your call — and a model is another ~2 GB.
   Until you run `ollama pull`, the assistant falls through to the cloud,
   which needs your key.
-- **There is no icon or cursor theme yet.** The GTK and Qt widget colours are
-  real and verified against the palette, but icons and cursors are Adwaita's —
-  those are drawn assets, not a colour mapping, so they are a different kind of
-  work.
+- **The icons and cursors are adopted, not drawn.** Papirus-Dark and Breeze,
+  from Fedora's repositories, with Papirus's folders repointed to its teal
+  variants. Drawing an icon set means hundreds of files that no palette can
+  produce, and a partial one reads as partial. What Navigator does own here is
+  the verification: the boot test takes the theme names out of the image's own
+  config files and requires them to exist in the image, because a config
+  naming a theme nobody installed looks exactly like one that works.
 - **The small local model is not fully reliable at tool use.** A 3B model
   occasionally calls a tool it doesn't need, or emits tool-call-shaped JSON as
   prose. This is documented, measured, and mitigated — not hidden.
@@ -171,12 +174,14 @@ out it was exposed.
 ## Where it's going
 
 Phase 5 is real-hardware installation testing and a first community release.
-Before that: an icon and cursor theme, which are drawn assets rather than a
-colour mapping and so cannot come from the palette. The GTK and Qt widget
-colours are done, and so is layering Ollama in — the runtime ships in the
-image; the weights are still yours to choose. Real pointer input can now be
-injected into the test VM from outside the guest, which closes the last thing
-the desktop was never able to check about itself.
+The GTK and Qt widget colours are done, the icons and cursors are chosen and
+verified, and so is layering Ollama in — the runtime ships in the image; the
+weights are still yours to choose. Real pointer input can now be injected into
+the test VM from outside the guest, which closed the last thing the desktop
+was never able to check about itself. The open question left in the theme is
+whether Navigator's own teal should replace Papirus's inside the folder icons,
+which is a question about altering someone else's artwork rather than a
+technical one.
 
 ## Contributing
 

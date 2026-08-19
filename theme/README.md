@@ -244,9 +244,38 @@ version that leaves more safe area at the edge.
 The palette, the wallpaper, the logo and the widget theme are all real and
 in the image. `gtk/` and `qt/` are no longer skeletons.
 
-Still not done, and deliberately scoped out for now: an **icon theme** and a
-**cursor theme**. Both are asset production rather than configuration —
-hundreds of drawn files, not a colour mapping — and neither can be derived
-from the palette, so neither would benefit from the machinery that makes the
-rest of this directory verifiable. Adwaita's are used meanwhile, which is
-what `settings.ini` and `qt6ct.conf` name.
+The **icon and cursor themes** are chosen, installed and verified, and the
+distinction matters: they are adopted, not drawn. Navigator ships
+**Papirus-Dark** for icons and **Breeze** for cursors, both from Fedora's own
+repositories, named in `settings.ini`, `qt6ct.conf` and `hyprland.conf`.
+
+Drawing them was never the sensible option. An icon set is hundreds of files
+that cannot be derived from a four-colour palette, and a partial one would
+read as partial — Navigator's icons next to Adwaita's for everything they did
+not cover. Adopting finished work and saying whose it is beats a half-drawn
+identity.
+
+The one place the palette does reach them is the folders: Layer 3 of
+`image/Containerfile` repoints Papirus's folder icons at its own **teal**
+variants, which is exactly what `papirus-folders` does on an ordinary system
+and is possible only because Papirus ships those defaults as symlinks. Being
+precise about it, since this directory is otherwise strict about hexes: that
+teal is Papirus's `#16a085`/`#12806a`, not Navigator's `#4fd1c5`. Recolouring
+the SVGs to the brand hex is mechanical (they are flat fills) and would put
+the folders under the brand check, but it means shipping altered copies of
+someone else's artwork — a separate decision, not a side effect of this one.
+
+The cursor is the smaller half and had the worse bug: `hyprland.conf` set
+`XCURSOR_SIZE` and `HYPRCURSOR_SIZE` and never named a theme, so the size was
+Navigator's and the cursor itself was whatever the compositor fell back to.
+
+What makes any of this more than three lines in three config files is the
+verification, and it is built around the failure these have: **a config naming
+a theme that is not installed behaves exactly like one naming a theme that
+is.** So the boot test reads the names out of the image's own files rather
+than hardcoding them, requires GTK, Qt and Hyprland to name the same two,
+requires `index.theme` and `cursors/left_ptr` to exist for them in the image,
+requires the folder symlink to point at the teal variant, and — because a
+variable in a config file is not a variable in a process — reads
+`XCURSOR_THEME` out of the environment of the running shell that the
+compositor itself started.

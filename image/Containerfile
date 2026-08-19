@@ -95,7 +95,35 @@ RUN dnf5 -y copr enable denorath/navigator-hyprland \
         wireplumber \
         seatd \
         qt6ct \
+        papirus-icon-theme \
+        papirus-icon-theme-dark \
+        breeze-cursor-theme \
     && ostree container commit
+
+# The icon and cursor themes, which until now were the honest gap in theme/:
+# settings.ini and qt6ct.conf named Adwaita's because Navigator had none of
+# its own, and nothing named a cursor theme at all — only a size, which left
+# the cursor at whatever the compositor happened to fall back to.
+#
+# Neither is drawn here, and that is the point. An icon set is hundreds of
+# drawn files that cannot be derived from a four-colour palette; a partial one
+# would look like a partial one, mixed in with Adwaita for everything it did
+# not cover. So Navigator adopts finished work and says whose it is:
+#
+# - papirus-icon-theme + -dark: a complete, maintained set with a dark variant
+#   built for exactly this kind of desktop. The -dark subpackage is symlinks
+#   into the base package's tree, so both are needed. Layer 3 points its folder
+#   icons at Papirus's own teal variants, which is the one place the theme is
+#   made Navigator's rather than merely chosen by it.
+# - breeze-cursor-theme: a cursor theme that reads well on a dark desktop and
+#   does not look like the GNOME default. Fedora 44 has no bibata, and
+#   generating a palette-tinted cursor set means a toolchain (clickgen) that is
+#   packaged nowhere here — a real option, but a much larger piece of work than
+#   this one, and not one to start by accident.
+#
+# What makes these more than a line in a config file is that the names are now
+# verified against the image: a settings file naming a theme that is not
+# installed fails silently and looks exactly like one that works.
 
 # ---------------------------------------------------------------------------
 # Layer 2: Quickshell (Navigator's custom shell — see shell/README.md)
@@ -153,6 +181,40 @@ COPY theme/palette.json /usr/share/navigator/theme/palette.json
 # .github/scripts/analyze-screenshot.py). So the question answered is not "did
 # hyprpaper run" but "is the user seeing this image".
 COPY theme/wallpaper.png /usr/share/navigator/theme/wallpaper.png
+
+# Folder icons: Papirus ships its default folders as symlinks
+# (folder.svg -> folder-blue.svg) precisely so they can be repointed, which is
+# all papirus-folders does on an ordinary system. That package does not exist
+# in Fedora, and the operation is six lines, so it happens here.
+#
+# Teal because it is the closest thing in Papirus's own set to Navigator's
+# primary accent — and only close. Papirus's teal is #16a085/#12806a, Material
+# Design's; Navigator's is #4fd1c5. Recolouring the SVGs to the exact brand
+# hex is possible (they are flat fills, two colours) and would let the brand
+# check assert them, but it means shipping altered copies of someone else's
+# artwork, so it is a separate decision rather than a side effect of this one.
+#
+# Both checks below are there because this is a silent operation: if Papirus
+# renames its colour variants, the loop would quietly repoint nothing and the
+# folders would stay blue with the build still green.
+RUN set -eu; \
+    theme=/usr/share/icons/Papirus; \
+    test -d "$theme" || { echo "Papirus is not installed at $theme"; exit 1; }; \
+    n=0; \
+    for dir in "$theme"/*/places; do \
+        [ -d "$dir" ] || continue; \
+        for teal in "$dir"/folder-teal*.svg; do \
+            [ -e "$teal" ] || continue; \
+            base="$(basename "$teal")"; \
+            ln -sf "$base" "$dir/folder${base#folder-teal}"; \
+            n=$((n + 1)); \
+        done; \
+    done; \
+    [ "$n" -gt 0 ] || { echo "no folder-teal*.svg anywhere under $theme — Papirus changed its colour variants"; exit 1; }; \
+    target="$(readlink "$theme/64x64/places/folder.svg")"; \
+    [ "$target" = "folder-teal.svg" ] || { echo "folder.svg points at $target, not folder-teal.svg"; exit 1; }; \
+    echo "repointed $n folder icons to Papirus teal"; \
+    ostree container commit
 
 # ---------------------------------------------------------------------------
 # Layer 4: Navigator system configs

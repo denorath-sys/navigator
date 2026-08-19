@@ -347,7 +347,7 @@ jobs:
           # crash", but that the real values from the config are genuinely in
           # effect.
           echo "--- config errors (the compositor's OWN report) ---"
-          # Burada eskiden /root/hyprland.log'da "config error" grep'leniyordu
+          # This used to grep /root/hyprland.log for "config error"
           # and it was giving FALSE ASSURANCE: it printed "(none)" even when
           # there really was an error in the config. The error was sitting in
           # Hyprland's ON-SCREEN error banner and was never seen until the first
@@ -987,6 +987,64 @@ jobs:
                   done"
           echo "OK: the GTK and Qt theme reach both the image and a new user."
 
+      - name: Layer 1/4 — the icon and cursor themes exist and the configs name them
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
+          SSH="ssh ${SSH_OPTS} -i ${SSH_KEY} -p 2222 root@127.0.0.1"
+
+          # The names are READ OUT of the image's own configuration rather than
+          # written here. Hardcoding "Papirus-Dark" in CI would check that CI
+          # and CI agree; taking the name from the file the user gets and then
+          # requiring it to exist in the image checks the thing that actually
+          # breaks — a settings file naming a theme nobody installed, which
+          # looks identical to a working one from the config side and falls
+          # back silently on the desktop.
+          SKEL=/etc/skel/.config
+          ICON_GTK="$(${SSH} "sed -n 's/^gtk-icon-theme-name=//p' ${SKEL}/gtk-3.0/settings.ini")"
+          ICON_QT="$(${SSH} "sed -n 's/^icon_theme=//p' ${SKEL}/qt6ct/qt6ct.conf")"
+          CURSOR_GTK="$(${SSH} "sed -n 's/^gtk-cursor-theme-name=//p' ${SKEL}/gtk-3.0/settings.ini")"
+          CURSOR_HYPR="$(${SSH} "sed -n 's/^env = XCURSOR_THEME,//p' ${SKEL}/hypr/hyprland.conf")"
+          echo "  icon theme:   GTK=${ICON_GTK:-(unset)}  Qt=${ICON_QT:-(unset)}"
+          echo "  cursor theme: GTK=${CURSOR_GTK:-(unset)}  Hyprland=${CURSOR_HYPR:-(unset)}"
+
+          for pair in "icon|${ICON_GTK}|${ICON_QT}" "cursor|${CURSOR_GTK}|${CURSOR_HYPR}"; do
+            WHAT="${pair%%|*}"; REST="${pair#*|}"; A="${REST%%|*}"; B="${REST##*|}"
+            if [ -z "${A}" ] || [ -z "${B}" ]; then
+              echo "ERROR: the ${WHAT} theme is not named in both places (got '${A}' and '${B}'). A size without a name is how the cursor ended up at the compositor's fallback."
+              exit 1
+            fi
+            if [ "${A}" != "${B}" ]; then
+              echo "ERROR: the ${WHAT} theme differs between toolkits: '${A}' vs '${B}'. Half the desktop would use one and half the other."
+              exit 1
+            fi
+          done
+          echo "  OK: GTK, Qt and Hyprland name the same themes"
+
+          # An icon theme is an index.theme; a cursor theme is a cursors/
+          # directory. Checking for the directory alone would pass on an empty
+          # one left behind by a removed package.
+          echo
+          echo "=== ASSERTION: those themes are really in the image ==="
+          ${SSH} "test -f /usr/share/icons/${ICON_GTK}/index.theme" \
+            || { echo "ERROR: /usr/share/icons/${ICON_GTK}/index.theme is missing — the configs name an icon theme the image does not have."; exit 1; }
+          ${SSH} "test -e /usr/share/icons/${CURSOR_GTK}/cursors/left_ptr" \
+            || { echo "ERROR: /usr/share/icons/${CURSOR_GTK}/cursors/left_ptr is missing — the configs name a cursor theme the image does not have."; exit 1; }
+          echo "  OK  ${ICON_GTK}/index.theme and ${CURSOR_GTK}/cursors/left_ptr"
+
+          # Layer 3 repoints Papirus's folder icons at its teal variants. The
+          # operation is a loop over symlinks: if Papirus renames its colour
+          # variants it repoints nothing, and blue folders are not the kind of
+          # failure anyone notices in a log.
+          echo
+          echo "=== ASSERTION: the folder icons are Navigator's teal choice, not Papirus's default blue ==="
+          FOLDER="$(${SSH} "readlink /usr/share/icons/Papirus/64x64/places/folder.svg" || echo '(not a symlink)')"
+          echo "  folder.svg -> ${FOLDER}"
+          [ "${FOLDER}" = "folder-teal.svg" ] \
+            || { echo "ERROR: folder.svg points at ${FOLDER}. Layer 3's repoint did not take effect."; exit 1; }
+          echo "  the colours inside it: $(${SSH} "grep -o '#[0-9a-f]\{6\}' /usr/share/icons/Papirus/64x64/places/folder-teal.svg | sort -u | tr '\n' ' '")"
+          echo "  (Papirus's teal, not Navigator's #4fd1c5 — see the Layer 3 comment in image/Containerfile)"
+
       - name: Credential path — the /etc/skel template and REAL resolution in the image
         run: |
           set -euo pipefail
@@ -1358,6 +1416,37 @@ jobs:
         run: |
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           ssh ${SSH_OPTS} -i "${SSH_KEY}" -p 2222 root@127.0.0.1 "bash /root/hyprland-test.sh"
+
+      - name: The cursor theme reaches applications, not just the config file
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
+          SSH="ssh ${SSH_OPTS} -i ${SSH_KEY} -p 2222 root@127.0.0.1"
+
+          # `env = XCURSOR_THEME,...` in a config file proves nothing on its
+          # own: the question is whether an application started by the
+          # compositor sees it, and the only place that answer exists is the
+          # environment of a process the compositor actually started. Quickshell
+          # is one, started by hyprland.conf's own exec-once.
+          WANT="$(${SSH} "sed -n 's/^env = XCURSOR_THEME,//p' /root/.config/hypr/hyprland.conf")"
+          GOT="$(${SSH} "tr '\\0' '\\n' < /proc/\$(pgrep -x qs | head -1)/environ | sed -n 's/^XCURSOR_THEME=//p'")"
+          SIZE="$(${SSH} "tr '\\0' '\\n' < /proc/\$(pgrep -x qs | head -1)/environ | sed -n 's/^XCURSOR_SIZE=//p'")"
+          echo "  hyprland.conf asks for: ${WANT:-(nothing)}"
+          echo "  the shell process has:  XCURSOR_THEME=${GOT:-(unset)} XCURSOR_SIZE=${SIZE:-(unset)}"
+
+          [ -n "${WANT}" ] || { echo "ERROR: the running config names no cursor theme at all."; exit 1; }
+          [ "${GOT}" = "${WANT}" ] \
+            || { echo "ERROR: the compositor did not export the cursor theme to its children: wanted '${WANT}', the shell has '${GOT:-unset}'. Qt applications take the cursor from this variable."; exit 1; }
+          echo "  OK: applications started by the compositor inherit the cursor theme"
+
+          # Diagnostic, deliberately: what Hyprland says about loading the
+          # cursor is version-dependent wording, and an assertion on wording
+          # that changes is worse than none. What is asserted is the theme
+          # being installed and the variable arriving; what the compositor
+          # draws for its own pointer is read here, not claimed.
+          echo
+          echo "--- DIAGNOSTIC: what the compositor logged about cursors ---"
+          ${SSH} "grep -i cursor /root/hyprland.log | tail -n 10" || echo "  (nothing about cursors in the log)"
 
       - name: Visual correctness — capture and inspect the real image of the screen
         # NOT `always()`, but the image would be very valuable even if the test
