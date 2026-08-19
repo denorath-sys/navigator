@@ -168,6 +168,18 @@ RUN dnf5 -y install --setopt=install_weak_deps=0 \
         breeze-cursor-theme \
     && ostree container commit
 
+# TEMPORARY DIAGNOSTIC. /usr/share/icons/breeze and breeze-dark are icons
+# nothing in Navigator selects, and they arrived with something else — the
+# cursor package's header asks for neither. Whether they can be removed
+# depends on what holds them, and the rpmdb in this image is the only place
+# that answer exists. Printed here rather than in the boot test because a
+# build is six minutes and a boot test is twenty-five; removed once read.
+RUN echo "=== what requires the breeze icon themes ===" \
+    && rpm -q --whatrequires breeze-icon-theme || echo "  breeze-icon-theme: nothing" ; \
+    rpm -q --whatrequires kf6-breeze-icons || echo "  kf6-breeze-icons: nothing" ; \
+    rpm -q --whatrequires 'libKF6BreezeIcons.so.6()(64bit)' || echo "  libKF6BreezeIcons.so.6: nothing" ; \
+    rpm -q --queryformat '%{NAME} %{SIZE}\n' breeze-icon-theme kf6-breeze-icons
+
 # ---------------------------------------------------------------------------
 # Layer 2: Quickshell (Navigator's custom shell — see shell/README.md)
 # ---------------------------------------------------------------------------

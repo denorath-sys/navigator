@@ -113,7 +113,12 @@ jobs:
     name: Boot the VM and verify over SSH
     needs: build-disk
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # 30 rather than 20: the steps inside now bound their own slow paths
+    # (apt gets up to 300s + 420s twice over), and a job budget smaller than
+    # the sum of its guards turns a recoverable retry into a cancelled job,
+    # which is exactly what happened in run 32303178221. The real work takes
+    # 8-10 minutes.
+    timeout-minutes: 30
 
     steps:
       - name: Download the disk image artifact
@@ -140,7 +145,14 @@ jobs:
           APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20"
           timeout 300 sudo apt-get $APT_OPTS update \
             || timeout 300 sudo apt-get $APT_OPTS update
-          sudo apt-get $APT_OPTS install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd
+          # The install needs the same treatment, learned the hard way twice.
+          # The first version bounded `update` only, and the next failure was a
+          # mirror trickling the ~100 MB of packages at 300 kB/s: apt's own
+          # timeouts never fire on a connection that is slow rather than dead,
+          # so it sat there until the job timeout killed it (run 32303178221).
+          # A second attempt usually lands on a different mirror.
+          timeout 420 sudo apt-get $APT_OPTS install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd \
+            || timeout 420 sudo apt-get $APT_OPTS install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd
 
       - name: Verify KVM access
         run: |
@@ -233,7 +245,12 @@ jobs:
     name: Really start Hyprland in the VM, test mcp-tools and Quickshell
     needs: build-disk
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # 30 rather than 20: the steps inside now bound their own slow paths
+    # (apt gets up to 300s + 420s twice over), and a job budget smaller than
+    # the sum of its guards turns a recoverable retry into a cancelled job,
+    # which is exactly what happened in run 32303178221. The real work takes
+    # 8-10 minutes.
+    timeout-minutes: 30
     # Experimental — unlike boot-test, a failure here must not break the
     # workflow; we read the result from the log and assess it (see the commit
     # message).
@@ -267,7 +284,14 @@ jobs:
           APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20"
           timeout 300 sudo apt-get $APT_OPTS update \
             || timeout 300 sudo apt-get $APT_OPTS update
-          sudo apt-get $APT_OPTS install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd
+          # The install needs the same treatment, learned the hard way twice.
+          # The first version bounded `update` only, and the next failure was a
+          # mirror trickling the ~100 MB of packages at 300 kB/s: apt's own
+          # timeouts never fire on a connection that is slow rather than dead,
+          # so it sat there until the job timeout killed it (run 32303178221).
+          # A second attempt usually lands on a different mirror.
+          timeout 420 sudo apt-get $APT_OPTS install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd \
+            || timeout 420 sudo apt-get $APT_OPTS install -y qemu-system-x86 qemu-utils ovmf openssh-client netcat-openbsd
 
       - name: Verify KVM access
         run: |
