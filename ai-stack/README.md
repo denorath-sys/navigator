@@ -119,8 +119,9 @@ hardware-probe: {"cpu": {"model": "AMD EPYC 7763 64-Core Processor", ...},
 local-runtime:  {"hardware_tier": "minimal", "ollama_available": false,
                  "model_ready": false}
 cloud-bridge:   {"provider": "anthropic", "credentials_configured": false}
-router:         {"route": "cloud", "reasoning": "local model not ready
-                 (Ollama down or model not pulled)"}
+router:         {"route": "cloud", "ollama_available": false,
+                 "reasoning": "local model unavailable: the Ollama service
+                 is not running"}
 ```
 
 Because `local-runtime`'s status report invokes its own `../hardware-probe`

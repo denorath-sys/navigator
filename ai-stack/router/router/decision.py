@@ -86,14 +86,45 @@ def estimate_complexity(prompt: str) -> str:
     return "simple"
 
 
-def decide_route(hardware_tier: str, model_ready: bool, preference: str, complexity: str) -> dict:
+def local_unavailable_reason(ollama_available: bool | None) -> str:
+    """Why the local model cannot be used, as precisely as the caller knows.
+
+    This used to be one sentence for two different situations: "local model
+    not ready (Ollama down or model not pulled)". Since Layer 6 of the image
+    ships Ollama installed and enabled, that sentence led with the unlikely
+    half — in practice the service is running and the model was simply never
+    pulled. The two need different things from the user, `ollama pull` in one
+    case and a service that is not running in the other, so they are no longer
+    the same sentence.
+
+    None means the caller did not say. The answer is then still vague, because
+    the alternative is guessing at the user's machine, and this stack's habit
+    is to say what is known and stop there.
+    """
+    if ollama_available is True:
+        return (
+            "local model not pulled: Ollama is running, but the model recommended "
+            "for this machine is not installed (ollama pull)"
+        )
+    if ollama_available is False:
+        return "local model unavailable: the Ollama service is not running"
+    return "local model not ready (Ollama status not reported)"
+
+
+def decide_route(
+    hardware_tier: str,
+    model_ready: bool,
+    preference: str,
+    complexity: str,
+    ollama_available: bool | None = None,
+) -> dict:
     if preference not in PREFERENCES:
         raise ValueError(f"Unknown preference: {preference!r} (valid: {PREFERENCES})")
 
     if not model_ready:
         return {
             "target": "cloud",
-            "reasoning": "local model not ready (Ollama down or model not pulled)",
+            "reasoning": local_unavailable_reason(ollama_available),
         }
 
     if preference == "privacy":

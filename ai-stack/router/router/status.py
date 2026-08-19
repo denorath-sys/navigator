@@ -2,9 +2,9 @@
 genuinely invoke local-runtime or cloud-bridge according to that decision.
 
 The router does not call hardware-probe separately — local-runtime's report
-already contains the hardware_tier and model_ready fields (see
-ai-stack/local-runtime/local_runtime/status.py), so a single subprocess hop
-yeterli.
+already contains the hardware_tier, model_ready and ollama_available fields
+(see ai-stack/local-runtime/local_runtime/status.py), so a single subprocess
+hop is enough.
 """
 import json
 import subprocess
@@ -41,6 +41,11 @@ def route_request(
         model_ready=status["model_ready"],
         preference=preference,
         complexity=complexity,
+        # local-runtime reports this separately and the router used to throw
+        # it away, which is why "not ready" could not say which kind. .get()
+        # rather than [] because a caller may pass a partial status dict, and
+        # an unreported field is a vaguer sentence rather than a crash.
+        ollama_available=status.get("ollama_available"),
     )
 
     report = {
@@ -50,6 +55,7 @@ def route_request(
         "preference": preference,
         "hardware_tier": status["hardware_tier"],
         "model_ready": status["model_ready"],
+        "ollama_available": status.get("ollama_available"),
         "route": decision["target"],
         "reasoning": decision["reasoning"],
     }

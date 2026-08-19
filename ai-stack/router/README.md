@@ -12,7 +12,8 @@ sections below). It is intended to be the central point where the assistant
 panel (`shell/`) and `mcp-tools/` come together.
 
 `router` does not call `hardware-probe` separately — `local-runtime`'s
-report already contains the `hardware_tier` and `model_ready` fields, so a
+report already contains the `hardware_tier`, `model_ready` and
+`ollama_available` fields, so a
 single subprocess hop is enough (see `router/status.py`).
 
 **Both paths are now real end to end on this machine**: simple requests are
@@ -49,7 +50,10 @@ python3 -m unittest discover -v -s tests
 ## Example output — the local path (real generation)
 
 A simple request, genuinely executed on this machine. The prompt and reply
-are kept verbatim as captured, which is why they are in Turkish:
+are kept verbatim as captured, which is why they are in Turkish — and why
+`ollama_available` is missing from it: that field was added to the report
+afterwards, and editing a captured run to look current would make it a
+mock-up of a real run rather than a real one.
 
 ```json
 {

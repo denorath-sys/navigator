@@ -51,6 +51,37 @@ class TestDecideRoute(unittest.TestCase):
             decision = decide_route("high", model_ready=False, preference=pref, complexity="simple")
             self.assertEqual(decision["target"], "cloud")
 
+    def test_not_ready_says_which_kind_of_not_ready(self):
+        """The two situations need different things from the user — one is
+        `ollama pull`, the other is a service that is not running — and they
+        used to share one sentence that named the unlikely half first. The
+        image ships Ollama enabled, so in practice it is running and the model
+        was never pulled."""
+        running = decide_route(
+            "high", model_ready=False, preference="balanced",
+            complexity="simple", ollama_available=True,
+        )["reasoning"]
+        self.assertIn("not pulled", running)
+        self.assertIn("ollama pull", running)
+
+        down = decide_route(
+            "high", model_ready=False, preference="balanced",
+            complexity="simple", ollama_available=False,
+        )["reasoning"]
+        self.assertIn("not running", down)
+        self.assertNotIn("pull", down)
+
+        self.assertNotEqual(running, down)
+
+    def test_not_ready_stays_vague_when_nobody_said(self):
+        """A caller with a partial status dict gets the vague sentence rather
+        than a guess or a crash — router/status.py passes .get() for exactly
+        this reason."""
+        unknown = decide_route(
+            "high", model_ready=False, preference="balanced", complexity="simple",
+        )["reasoning"]
+        self.assertIn("not reported", unknown)
+
     def test_privacy_preference_stays_local_when_ready(self):
         decision = decide_route("low", model_ready=True, preference="privacy", complexity="complex")
         self.assertEqual(decision["target"], "local")
