@@ -195,6 +195,14 @@ RUN dnf5 -y copr enable denorath/navigator-hyprland \
 # them: the bytes would still ship in the layer underneath and only the
 # deployed filesystem would get smaller. Deleting where they are installed
 # takes them out of the image as well.
+#
+# What it actually bought, measured (run 32309051114, and the manifests from
+# the registry): the package layer 174 -> 167 MB compressed, the image
+# 5485 -> 5478 MB, and ~175 MB off the deployed filesystem. The download
+# barely moves because SVGs compress; the disk moves a lot because 27.6 MB of
+# tiny files were spending 175 MB of 4 KB blocks. Removing them for the sake
+# of the download would not have been worth a line of this comment. Removing
+# them for the sake of the disk was.
 
 RUN dnf5 -y install --setopt=install_weak_deps=0 \
         papirus-icon-theme \

@@ -292,9 +292,16 @@ alone, because that mistake has been made here before and was seven times off.
 The same `du` output is what turned up ~175 MB of `breeze`/`breeze-dark`
 icons that nothing in Navigator selects, which are now deleted in the layer
 that installs the desktop. The packages stay: `kf6-kiconthemes` requires
-`libKF6BreezeIcons.so.6` by soname, so removing them would have taken it and
-everything behind it — only the theme data goes, and the boot test asserts
-both that the directories are gone and that the library is not.
+`libKF6BreezeIcons.so.6` by soname — asked by package name the rpmdb says
+nothing requires it, which is the answer that would have made `dnf remove`
+look safe — so only the theme data goes. The boot test asserts both that the
+directories are gone and that the library and `kf6-kiconthemes` are not.
+
+The result, measured in run 32309051114: **~175 MB off the deployed
+filesystem, 7 MB off the download** (the package layer 174 → 167 MB
+compressed). The gap between those two numbers is the whole story of this
+directory's sizes — 27.6 MB of tiny files were spending 175 MB of 4 KB
+blocks, and compress to almost nothing in the layer.
 
 The cursor is the smaller half and had the worse bug: `hyprland.conf` set
 `XCURSOR_SIZE` and `HYPRCURSOR_SIZE` and never named a theme, so the size was
