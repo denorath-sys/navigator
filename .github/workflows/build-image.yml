@@ -27,6 +27,18 @@ on:
       - "shell/**"
       - ".github/workflows/build-image.yml"
       - ".github/storage.conf"
+      # And never for prose. The filter above is deliberately generous: it
+      # matches whole directories so that a newly added asset cannot be missed
+      # by a filter nobody remembered to update, and the cost of that is real
+      # — two image builds in one evening were triggered by an edit to
+      # shell/README.md, each of them six minutes and a new :latest.
+      #
+      # Excluding markdown gives back the waste without taking on the risk,
+      # because the risk case is a new asset and a new asset is never a
+      # README. Checked rather than assumed: of the twenty-three paths this
+      # Containerfile copies, not one contains a .md file, so no markdown in
+      # this repository can change the image.
+      - "!**/*.md"
 
 env:
   IMAGE_NAME: navigator
