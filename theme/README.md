@@ -272,14 +272,29 @@ the SVGs to the brand hex is mechanical (they are flat fills) and would put
 the folders under the brand check, but it means shipping altered copies of
 someone else's artwork — a separate decision, not a side effect of this one.
 
-**What it costs**, since this repository does not estimate sizes: 383 MB for
-`Papirus`, 33 MB for `Papirus-Dark`, 16 MB each for `breeze_cursors` and the
-`Breeze_Light` that comes with it — about 448 MB on disk, which is +64 MB in
-the registry's compressed terms (5400 → 5464 MB). Measured with `du` inside
-the booted image in run 32295413242, not read off package metadata, because
-that mistake has been made here before. For scale, the same output shows
-~175 MB of `breeze`/`breeze-dark` icons that nothing in Navigator selects and
-that were in the image before any of this — a separate thread to pull.
+**What it costs** — three numbers, because they disagree by a factor of four
+and each answers a different question:
+
+| | bytes (rpmdb) | on disk (`du`) | in the registry |
+|---|---|---|---|
+| `papirus-icon-theme` | 103 MB | 383 MB | |
+| `papirus-icon-theme-dark` | 3 MB | 33 MB | |
+| `breeze-cursor-theme` | ~5 MB | 32 MB | |
+| **the change** | **~111 MB** | **~448 MB** | **+64 MB compressed** |
+
+`du` is four times the byte count because these themes are tens of thousands
+of tiny SVGs and symlinks and each one takes a whole 4 KB block. None of the
+three is the "real" number: the registry's is what a user downloads, `du`'s is
+what the deployed filesystem spends, the rpmdb's is the content. Measured in
+run 32295413242 and from the package headers — not read off package metadata
+alone, because that mistake has been made here before and was seven times off.
+
+The same `du` output is what turned up ~175 MB of `breeze`/`breeze-dark`
+icons that nothing in Navigator selects, which are now deleted in the layer
+that installs the desktop. The packages stay: `kf6-kiconthemes` requires
+`libKF6BreezeIcons.so.6` by soname, so removing them would have taken it and
+everything behind it — only the theme data goes, and the boot test asserts
+both that the directories are gone and that the library is not.
 
 The cursor is the smaller half and had the worse bug: `hyprland.conf` set
 `XCURSOR_SIZE` and `HYPRCURSOR_SIZE` and never named a theme, so the size was

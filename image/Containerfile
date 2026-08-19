@@ -112,22 +112,29 @@ RUN dnf5 -y copr enable denorath/navigator-hyprland \
 # is attributable: it is one blob in the manifest instead of a change in the
 # 200 MB package layer that also moves whenever Fedora updates anything.
 #
-# THE COST, measured rather than estimated (run 32295413242, du inside the
-# booted image; the registry's numbers are compressed and are not this):
+# THE COST, measured rather than estimated, and in three units because they
+# disagree by a factor of four and only one of them answers any given
+# question:
 #
-#   /usr/share/icons/Papirus        383 MB   added here
-#   /usr/share/icons/Papirus-Dark    33 MB   added here
-#   /usr/share/icons/breeze_cursors  16 MB   added here
-#   /usr/share/icons/Breeze_Light    16 MB   added here, unused, same package
-#   -------------------------------------
-#   about 448 MB on disk, +64 MB compressed in the registry (5400 -> 5464 MB)
+#                            bytes (rpmdb)   on disk (du)   in the registry
+#   papirus-icon-theme           103 MB          383 MB
+#   papirus-icon-theme-dark        3 MB           33 MB
+#   breeze-cursor-theme            ~5 MB          32 MB     (both its themes)
+#   ------------------------------------------------------------------------
+#   the whole icon+cursor change  ~111 MB        ~448 MB     +64 MB compressed
+#                                                            (5400 -> 5464 MB)
 #
-# Accepted deliberately, and the comparison that settles it is in the same du
-# output: /usr/share/icons/breeze and breeze-dark are ~175 MB that NOTHING in
-# Navigator selects and that predate this work entirely. An icon theme the
-# desktop actually uses, at 416 MB, next to 175 MB of one it does not.
-# Tracking down what pulls those in is worth doing and is not this change; the
-# boot test now prints what the rpmdb says requires them.
+# du is four times the byte count because these themes are tens of thousands
+# of tiny SVGs and symlinks, and every one of them takes a whole 4 KB block.
+# None of the three numbers is wrong: the registry's is what a user downloads,
+# du's is what the deployed filesystem actually spends, and the rpmdb's is the
+# content. Quoting only the biggest would be as misleading as quoting only the
+# smallest, and this repository has already shipped one size claim that came
+# from package metadata and was seven times off.
+#
+# Accepted deliberately (run 32295413242 for the du figures, rpmdb for the
+# bytes). The comparison that settled it came out of the same du output and
+# is dealt with below: 175 MB of breeze icons that nothing selects.
 #
 # The themes, which until now were the honest gap in theme/:
 # settings.ini and qt6ct.conf named Adwaita's because Navigator had none of
