@@ -51,9 +51,9 @@ This section exists on purpose, and it is not a footnote.
   model belongs on your machine is your call — and a model is another ~2 GB.
   Until you run `ollama pull`, the assistant falls through to the cloud,
   which needs your key.
-- **The icons and cursors are adopted, not drawn.** Papirus-Dark and Breeze,
-  from Fedora's repositories, with Papirus's folders repointed to its teal
-  variants. Drawing an icon set means hundreds of files that no palette can
+- **The icons and cursors are adopted, not drawn.** Papirus-Dark and Breeze
+  Dark, from Fedora's repositories, with Papirus's folders repointed to its
+  teal variants. Drawing an icon set means hundreds of files that no palette can
   produce, and a partial one reads as partial. What Navigator does own here is
   the verification: the boot test takes the theme names out of the image's own
   config files and requires them to exist in the image, because a config

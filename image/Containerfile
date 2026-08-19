@@ -95,12 +95,22 @@ RUN dnf5 -y copr enable denorath/navigator-hyprland \
         wireplumber \
         seatd \
         qt6ct \
-        papirus-icon-theme \
-        papirus-icon-theme-dark \
-        breeze-cursor-theme \
     && ostree container commit
 
-# The icon and cursor themes, which until now were the honest gap in theme/:
+# The icon and cursor themes get their own install, above, for two reasons
+# that are both measurements rather than preferences.
+#
+# --setopt=install_weak_deps=0: papirus-icon-theme Recommends both its -dark
+# and its -light subpackage, so the first build shipped a light icon theme
+# that nothing in Navigator can select. dnf5 rather than rpm-ostree because
+# rpm-ostree install has no equivalent switch; Layer 2 already installs this
+# way for its own reasons.
+#
+# A separate layer, rather than the list above, so the cost of this decision
+# is attributable: it is one blob in the manifest instead of a change in the
+# 200 MB package layer that also moves whenever Fedora updates anything.
+#
+# The themes, which until now were the honest gap in theme/:
 # settings.ini and qt6ct.conf named Adwaita's because Navigator had none of
 # its own, and nothing named a cursor theme at all — only a size, which left
 # the cursor at whatever the compositor happened to fall back to.
@@ -121,9 +131,25 @@ RUN dnf5 -y copr enable denorath/navigator-hyprland \
 #   packaged nowhere here — a real option, but a much larger piece of work than
 #   this one, and not one to start by accident.
 #
+#   The name to configure is `breeze_cursors`, which is the DIRECTORY the
+#   package installs; its index.theme calls itself "Breeze Dark", and the
+#   package also ships Breeze_Light. XCursor resolves by directory name, not by
+#   Name=, so a configuration saying "Breeze" resolves to nothing at all —
+#   which is what the first version of this said, and what the boot test caught
+#   on its first run (run 32291234271). breeze-icon-theme and kf6-breeze-icons
+#   are NOT part of this: they were already in the image before any of this,
+#   pulled in by something else in Layer 1, and the cursor package's header
+#   requires nothing icon-related.
+#
 # What makes these more than a line in a config file is that the names are now
 # verified against the image: a settings file naming a theme that is not
 # installed fails silently and looks exactly like one that works.
+
+RUN dnf5 -y install --setopt=install_weak_deps=0 \
+        papirus-icon-theme \
+        papirus-icon-theme-dark \
+        breeze-cursor-theme \
+    && ostree container commit
 
 # ---------------------------------------------------------------------------
 # Layer 2: Quickshell (Navigator's custom shell — see shell/README.md)

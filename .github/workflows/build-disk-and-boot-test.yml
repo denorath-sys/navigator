@@ -1045,6 +1045,27 @@ jobs:
           echo "  the colours inside it: $(${SSH} "grep -o '#[0-9a-f]\{6\}' /usr/share/icons/Papirus/64x64/places/folder-teal.svg | sort -u | tr '\n' ' '")"
           echo "  (Papirus's teal, not Navigator's #4fd1c5 — see the Layer 3 comment in image/Containerfile)"
 
+          # papirus-icon-theme Recommends both its -dark and its -light
+          # subpackage, and the first build shipped -light: an icon theme
+          # nothing in Navigator can select, installed because nobody said
+          # otherwise. The install turns weak dependencies off; this is what
+          # says it stayed off.
+          echo
+          echo "=== ASSERTION: the light icon theme nobody selects is not in the image ==="
+          if ${SSH} "rpm -q papirus-icon-theme-light" >/dev/null 2>&1; then
+            echo "ERROR: papirus-icon-theme-light is installed. Something reintroduced the weak dependency that --setopt=install_weak_deps=0 exists to keep out."
+            exit 1
+          fi
+          echo "  OK: not installed"
+
+          # Diagnostic: what the decision costs on disk, inside the image,
+          # uncompressed. The registry only reports compressed layer sizes, and
+          # this repository has already been caught out once by treating a
+          # package's download size as its size on disk.
+          echo
+          echo "--- DIAGNOSTIC: what the icon and cursor themes cost on disk ---"
+          ${SSH} "du -sh /usr/share/icons/* 2>/dev/null | sort -rh | head -n 8"
+
       - name: Credential path — the /etc/skel template and REAL resolution in the image
         run: |
           set -euo pipefail

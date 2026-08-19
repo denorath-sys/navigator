@@ -246,8 +246,15 @@ in the image. `gtk/` and `qt/` are no longer skeletons.
 
 The **icon and cursor themes** are chosen, installed and verified, and the
 distinction matters: they are adopted, not drawn. Navigator ships
-**Papirus-Dark** for icons and **Breeze** for cursors, both from Fedora's own
-repositories, named in `settings.ini`, `qt6ct.conf` and `hyprland.conf`.
+**Papirus-Dark** for icons and **Breeze Dark** for cursors, both from Fedora's
+own repositories, named in `settings.ini`, `qt6ct.conf` and `hyprland.conf`.
+
+The cursor is configured as `breeze_cursors`, which looks like a typo and is
+not: XCursor resolves a theme by the DIRECTORY name, and that is the directory
+the package installs. Its `index.theme` calls itself "Breeze Dark". Writing
+either of those two prettier names resolves to nothing at all — silently, as
+these things do, which is how the first version of this shipped and how the
+boot test caught it (run 32291234271).
 
 Drawing them was never the sensible option. An icon set is hundreds of files
 that cannot be derived from a four-colour palette, and a partial one would
