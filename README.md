@@ -444,6 +444,10 @@ explains many decisions in the repository, so it is not hidden:
   This has a side benefit: **every claim has a real run link behind it that
   verifies it.** The run numbers you see in the module READMEs in this
   repository are not decoration, they are measured output.
+- Editing documentation does not rebuild the image. The image build watches
+  whole directories, so that a newly added asset cannot be missed by a filter
+  nobody remembered to update — but it excludes markdown, because none of the
+  paths the Containerfile copies contains any.
 
 ## How claims in this repository are verified
 
