@@ -1090,15 +1090,26 @@ jobs:
           echo "--- DIAGNOSTIC: what the icon and cursor themes cost on disk ---"
           ${SSH} "du -sh /usr/share/icons/* 2>/dev/null | sort -rh | head -n 10"
 
-          # /usr/share/icons/breeze and breeze-dark are ~175 MB that nothing in
-          # Navigator selects, and they predate the icon work: they were in the
-          # image before it and the cursor package does not ask for them. This
-          # asks the rpmdb what does, so the answer is in a log rather than in
-          # someone's memory. Diagnostic: removing them is a separate decision
-          # and might not even be possible without dropping something wanted.
+          # The breeze icon data that nothing selects is deleted in the layer
+          # that installs the desktop. Two assertions, because the risk runs in
+          # both directions: leaving the data in wastes the space, and taking
+          # the library with it would break kf6-kiconthemes, which requires it
+          # by soname — the dependency that made `dnf remove` the wrong tool.
           echo
-          echo "--- DIAGNOSTIC: what requires the breeze icon themes nothing selects ---"
-          ${SSH} "rpm -q --whatrequires breeze-icon-theme --whatrequires kf6-breeze-icons 2>&1 | sort -u" || true
+          echo "=== ASSERTION: the unused breeze icon data is gone, its library is not ==="
+          for dir in /usr/share/icons/breeze /usr/share/icons/breeze-dark; do
+            if ${SSH} "test -d ${dir}"; then
+              echo "ERROR: ${dir} is back. It is ~88 MB of icons nothing in Navigator selects; see the Layer 1 comment in image/Containerfile."
+              exit 1
+            fi
+          done
+          echo "  OK: neither directory is in the image"
+
+          ${SSH} "test -e /usr/lib64/libKF6BreezeIcons.so.6" \
+            || { echo "ERROR: libKF6BreezeIcons.so.6 is missing. kf6-kiconthemes requires it by soname, and the icons Qt applications actually fall back to live inside it — the deletion was supposed to take the theme data only."; exit 1; }
+          ${SSH} "rpm -q kf6-kiconthemes" >/dev/null \
+            || { echo "ERROR: kf6-kiconthemes is no longer installed; something removed the package rather than the data."; exit 1; }
+          echo "  OK: libKF6BreezeIcons.so.6 and kf6-kiconthemes are intact"
 
       - name: Credential path — the /etc/skel template and REAL resolution in the image
         run: |

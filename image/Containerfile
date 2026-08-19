@@ -95,6 +95,8 @@ RUN dnf5 -y copr enable denorath/navigator-hyprland \
         wireplumber \
         seatd \
         qt6ct \
+    && { du -sh /usr/share/icons/breeze /usr/share/icons/breeze-dark 2>/dev/null || true; } \
+    && rm -rf /usr/share/icons/breeze /usr/share/icons/breeze-dark \
     && ostree container commit
 
 # The icon and cursor themes get their own install, above, for two reasons
@@ -161,24 +163,37 @@ RUN dnf5 -y copr enable denorath/navigator-hyprland \
 # What makes these more than a line in a config file is that the names are now
 # verified against the image: a settings file naming a theme that is not
 # installed fails silently and looks exactly like one that works.
+#
+# THE BREEZE ICONS THAT NOTHING SELECTS are deleted in the same command that
+# installs the desktop, and both halves of that sentence are deliberate.
+#
+# They were in the image long before any of this and are not the cursor
+# theme's doing — its header requires nothing icon-related. What holds them,
+# asked of this image's own rpmdb (run 32306903336):
+#
+#   breeze-icon-theme        <- required by kf6-breeze-icons
+#   kf6-breeze-icons         <- "no package requires kf6-breeze-icons"
+#   libKF6BreezeIcons.so.6   <- required by kf6-kiconthemes
+#
+# The middle line is the trap. Asked by NAME, nothing requires the package;
+# asked by the capability it provides, kf6-kiconthemes does. Believing the
+# name would have meant `dnf remove` taking kf6-kiconthemes and everything
+# behind it with it. So the packages stay and only the data goes: the icons
+# kf6-kiconthemes actually reaches for are compiled into
+# libKF6BreezeIcons.so.6 as Qt resources, which is untouched — the two
+# directories under /usr/share/icons are the copy for applications that look
+# up a theme by name, and nothing here looks up "breeze".
+#
+# In the same RUN, not a later one, because a later layer would only hide
+# them: the bytes would still ship in the layer underneath and only the
+# deployed filesystem would get smaller. Deleting where they are installed
+# takes them out of the image as well.
 
 RUN dnf5 -y install --setopt=install_weak_deps=0 \
         papirus-icon-theme \
         papirus-icon-theme-dark \
         breeze-cursor-theme \
     && ostree container commit
-
-# TEMPORARY DIAGNOSTIC. /usr/share/icons/breeze and breeze-dark are icons
-# nothing in Navigator selects, and they arrived with something else — the
-# cursor package's header asks for neither. Whether they can be removed
-# depends on what holds them, and the rpmdb in this image is the only place
-# that answer exists. Printed here rather than in the boot test because a
-# build is six minutes and a boot test is twenty-five; removed once read.
-RUN echo "=== what requires the breeze icon themes ===" \
-    && rpm -q --whatrequires breeze-icon-theme || echo "  breeze-icon-theme: nothing" ; \
-    rpm -q --whatrequires kf6-breeze-icons || echo "  kf6-breeze-icons: nothing" ; \
-    rpm -q --whatrequires 'libKF6BreezeIcons.so.6()(64bit)' || echo "  libKF6BreezeIcons.so.6: nothing" ; \
-    rpm -q --queryformat '%{NAME} %{SIZE}\n' breeze-icon-theme kf6-breeze-icons
 
 # ---------------------------------------------------------------------------
 # Layer 2: Quickshell (Navigator's custom shell — see shell/README.md)
