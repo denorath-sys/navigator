@@ -1064,7 +1064,17 @@ jobs:
           # package's download size as its size on disk.
           echo
           echo "--- DIAGNOSTIC: what the icon and cursor themes cost on disk ---"
-          ${SSH} "du -sh /usr/share/icons/* 2>/dev/null | sort -rh | head -n 8"
+          ${SSH} "du -sh /usr/share/icons/* 2>/dev/null | sort -rh | head -n 10"
+
+          # /usr/share/icons/breeze and breeze-dark are ~175 MB that nothing in
+          # Navigator selects, and they predate the icon work: they were in the
+          # image before it and the cursor package does not ask for them. This
+          # asks the rpmdb what does, so the answer is in a log rather than in
+          # someone's memory. Diagnostic: removing them is a separate decision
+          # and might not even be possible without dropping something wanted.
+          echo
+          echo "--- DIAGNOSTIC: what requires the breeze icon themes nothing selects ---"
+          ${SSH} "rpm -q --whatrequires breeze-icon-theme --whatrequires kf6-breeze-icons 2>&1 | sort -u" || true
 
       - name: Credential path — the /etc/skel template and REAL resolution in the image
         run: |
@@ -1467,7 +1477,16 @@ jobs:
           # draws for its own pointer is read here, not claimed.
           echo
           echo "--- DIAGNOSTIC: what the compositor logged about cursors ---"
-          ${SSH} "grep -i cursor /root/hyprland.log | tail -n 10" || echo "  (nothing about cursors in the log)"
+          # Through a variable rather than straight to the log: a pipeline ends
+          # with tail's exit code, so grep finding nothing printed nothing and
+          # said nothing, which is the one thing this repository refuses to let
+          # a check do.
+          CURSOR_LOG="$(${SSH} "grep -i cursor /root/hyprland.log || true")"
+          if [ -n "${CURSOR_LOG}" ]; then
+            printf '%s\n' "${CURSOR_LOG}" | tail -n 10 | sed 's/^/  /'
+          else
+            echo "  (the compositor logged nothing about cursors)"
+          fi
 
       - name: Visual correctness — capture and inspect the real image of the screen
         # NOT `always()`, but the image would be very valuable even if the test

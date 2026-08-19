@@ -110,6 +110,23 @@ RUN dnf5 -y copr enable denorath/navigator-hyprland \
 # is attributable: it is one blob in the manifest instead of a change in the
 # 200 MB package layer that also moves whenever Fedora updates anything.
 #
+# THE COST, measured rather than estimated (run 32295413242, du inside the
+# booted image; the registry's numbers are compressed and are not this):
+#
+#   /usr/share/icons/Papirus        383 MB   added here
+#   /usr/share/icons/Papirus-Dark    33 MB   added here
+#   /usr/share/icons/breeze_cursors  16 MB   added here
+#   /usr/share/icons/Breeze_Light    16 MB   added here, unused, same package
+#   -------------------------------------
+#   about 448 MB on disk, +64 MB compressed in the registry (5400 -> 5464 MB)
+#
+# Accepted deliberately, and the comparison that settles it is in the same du
+# output: /usr/share/icons/breeze and breeze-dark are ~175 MB that NOTHING in
+# Navigator selects and that predate this work entirely. An icon theme the
+# desktop actually uses, at 416 MB, next to 175 MB of one it does not.
+# Tracking down what pulls those in is worth doing and is not this change; the
+# boot test now prints what the rpmdb says requires them.
+#
 # The themes, which until now were the honest gap in theme/:
 # settings.ini and qt6ct.conf named Adwaita's because Navigator had none of
 # its own, and nothing named a cursor theme at all — only a size, which left

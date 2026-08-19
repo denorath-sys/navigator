@@ -272,6 +272,15 @@ the SVGs to the brand hex is mechanical (they are flat fills) and would put
 the folders under the brand check, but it means shipping altered copies of
 someone else's artwork — a separate decision, not a side effect of this one.
 
+**What it costs**, since this repository does not estimate sizes: 383 MB for
+`Papirus`, 33 MB for `Papirus-Dark`, 16 MB each for `breeze_cursors` and the
+`Breeze_Light` that comes with it — about 448 MB on disk, which is +64 MB in
+the registry's compressed terms (5400 → 5464 MB). Measured with `du` inside
+the booted image in run 32295413242, not read off package metadata, because
+that mistake has been made here before. For scale, the same output shows
+~175 MB of `breeze`/`breeze-dark` icons that nothing in Navigator selects and
+that were in the image before any of this — a separate thread to pull.
+
 The cursor is the smaller half and had the worse bug: `hyprland.conf` set
 `XCURSOR_SIZE` and `HYPRCURSOR_SIZE` and never named a theme, so the size was
 Navigator's and the cursor itself was whatever the compositor fell back to.
