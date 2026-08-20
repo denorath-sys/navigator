@@ -82,6 +82,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The action pulls its builder image with a plain `sudo podman pull` and
+      # no retry, and quay's CDN dropped a blob mid-transfer once already
+      # ("unexpected EOF", run 32295413242), which failed the job before it
+      # had built anything. Pulling here first puts the blobs in the same root
+      # store the action uses, so its own pull finds them and returns rather
+      # than fetching them again — and if the CDN is having a moment, this
+      # retries instead of the job dying.
+      - name: Pre-pull the image builder, retrying
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if sudo podman pull "${BIB_IMAGE}"; then
+              echo "pulled on attempt ${attempt}"
+              exit 0
+            fi
+            echo "attempt ${attempt} failed; retrying in 20s"
+            sleep 20
+          done
+          echo "::error::Could not pull ${BIB_IMAGE} after three attempts. quay.io is the usual suspect."
+          exit 1
+
       - name: Build the qcow2 disk image
         id: build
         uses: osbuild/bootc-image-builder-action@8661cd3832544ad68c12dcde8681b13ab0f56a8d # main
@@ -1097,9 +1118,9 @@ jobs:
           # by soname — the dependency that made `dnf remove` the wrong tool.
           echo
           echo "=== ASSERTION: the unused breeze icon data is gone, its library is not ==="
-          for dir in /usr/share/icons/breeze /usr/share/icons/breeze-dark; do
+          for dir in /usr/share/icons/breeze /usr/share/icons/breeze-dark /usr/share/icons/Breeze_Light; do
             if ${SSH} "test -d ${dir}"; then
-              echo "ERROR: ${dir} is back. It is ~88 MB of icons nothing in Navigator selects; see the Layer 1 comment in image/Containerfile."
+              echo "ERROR: ${dir} is back. Nothing in Navigator names it — see the Layer 1 comment in image/Containerfile for what each of these costs."
               exit 1
             fi
           done
