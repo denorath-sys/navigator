@@ -37,6 +37,7 @@ class FakeQMP(threading.Thread):
         self.greeting = greeting if greeting is not None else {"QMP": {"version": {}}}
         self.error_on = error_on
         self.batches = []
+        self.messages = []
         self._server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._server.bind(path)
         self._server.listen(1)
@@ -62,6 +63,7 @@ class FakeQMP(threading.Thread):
                     command = msg.get("execute")
                     if command == "input-send-event":
                         self.batches.append(msg["arguments"]["events"])
+                        self.messages.append(msg)
                     if command == self.error_on:
                         reply = {"error": {"class": "GenericError", "desc": "no"}}
                     else:
@@ -147,6 +149,25 @@ class TestAgainstFakeQMP(Harness):
         keys = [e for e in events if e["type"] == "key"]
         self.assertTrue(all(k["data"]["key"]["data"] == "meta_l" for k in keys))
         self.assertIn("scrolled down with super held", result.stdout)
+
+    def test_scroll_addresses_only_the_wheel_batch_to_a_device(self):
+        """The modifier belongs to the keyboard and the pointer position to the
+        tablet; addressing those at the mouse would be worse than not
+        addressing anything."""
+        server, path = self.start_server()
+        result = self.run_script(
+            path, "scroll", "1280", "800", "640", "400",
+            "--direction", "down", "--modifier", "super", "--device", "navwheel",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        addressed = [msg for msg in server.messages if "device" in msg.get("arguments", {})]
+        self.assertEqual(len(addressed), 1)
+        self.assertEqual(addressed[0]["arguments"]["device"], "navwheel")
+        self.assertEqual(
+            [e["data"]["button"] for e in addressed[0]["arguments"]["events"]],
+            ["wheel-down", "wheel-down"],
+        )
+        self.assertIn("via navwheel", result.stdout)
 
     def test_scroll_without_a_modifier_sends_no_key(self):
         server, path = self.start_server()

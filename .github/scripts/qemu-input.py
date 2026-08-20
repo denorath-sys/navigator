@@ -26,6 +26,7 @@ Usage:
     qemu-input.py <qmp.sock> click  <W> <H> <X> <Y> [--button left|right|middle]
     qemu-input.py <qmp.sock> scroll <W> <H> <X> <Y> --direction up|down
                                     [--modifier super|ctrl|alt|shift]
+                                    [--device <qdev id>]
     qemu-input.py <qmp.sock> key    <QCODE> [--modifier super|ctrl|alt|shift]
 
 A wheel notch is a BUTTON in QEMU's input model, not an axis, which is why
@@ -84,8 +85,18 @@ class QMP:
                 raise RuntimeError(f"{command} failed: {reply['error']}")
             return reply
 
-    def send_events(self, events: list[dict]) -> None:
-        self._execute("input-send-event", {"events": events})
+    def send_events(self, events: list[dict], device: str | None = None) -> None:
+        """`device` addresses one emulated input device by its qdev id.
+
+        Without it QEMU picks whichever device can handle the event, which is
+        fine until two of them can. A wheel notch has to reach the mouse and a
+        left button has to reach the tablet the pointer was positioned on;
+        leaving that to a first-match rule is how a click ends up somewhere
+        nobody aimed."""
+        arguments: dict = {"events": events}
+        if device:
+            arguments["device"] = device
+        self._execute("input-send-event", arguments)
 
     def close(self) -> None:
         self._sock.close()
@@ -195,6 +206,9 @@ def main() -> int:
     direction = None
     if "--direction" in args:
         direction = args[args.index("--direction") + 1]
+    device = None
+    if "--device" in args:
+        device = args[args.index("--device") + 1]
 
     if action not in ("move", "click", "scroll"):
         print(f"unknown action {action!r}")
@@ -232,11 +246,14 @@ def main() -> int:
             # is the whole point rather than a detail.
             if qcode:
                 qmp.send_events([key_event(qcode, True)])
-            qmp.send_events(wheel)
+            # The wheel goes to the device that has one; the modifier goes to
+            # the keyboard, which is why only this batch is addressed.
+            qmp.send_events(wheel, device=device)
             if qcode:
                 qmp.send_events([key_event(qcode, False)])
             held = f" with {modifier} held" if qcode else ""
-            print(f"scrolled {direction}{held} at ({x}, {y})")
+            where = f" via {device}" if device else ""
+            print(f"scrolled {direction}{held}{where} at ({x}, {y})")
     except (OSError, RuntimeError, ValueError) as e:
         print(f"ERROR: sending input failed: {e}")
         return 1

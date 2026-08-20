@@ -168,14 +168,34 @@ command never ran at all.
 deliberate was unsettled for a simple reason: nothing could turn a wheel in
 the test VM, so the question could only be argued from documentation.
 
-It can be asked now. The input injection added for the click test grew a
-`scroll` action with a held modifier, and the boot test puts a window on
-workspace 2 first — without that the two readings give the same answer and
-the run proves nothing — then turns Super+wheel from workspace 1. Landing on
-3 means `e+1` skipped the occupied workspace and the config does what it
-says; landing on 2 means it does not. Diagnostic on this round: what the
-result should BE is a design question, and answering it is not the same as
-observing it.
+It can be asked now, and asking it took two rounds of finding out that the
+test VM could not ask it.
+
+The input injection added for the click test grew a `scroll` action with a
+held modifier, and the boot test puts a window on workspace 2 first — without
+that the two readings give the same answer and the run proves nothing — then
+turns Super+wheel from workspace 1. Landing on 3 means `e+1` skipped the
+occupied workspace and the config does what it says; landing on 2 means it
+does not.
+
+**Round one (run 32424241261)** moved nothing, and taught something else
+instead: an ordinary application window does open in this VM. kitty reached
+workspace 2 under llvmpipe, which had never been tested either.
+
+**Round two (run 32426895684)** separated the two ways that could fail, with
+throwaway binds added at runtime so the mechanism was under test rather than
+the config: an unmodified wheel bound to workspace 5 moved nothing, while
+Super+F12 bound to workspace 6 worked. The modifier arrives; the wheel does
+not. That is what an absolute pointing device with no wheel button looks like
+from inside the guest — the tablet is not a mouse.
+
+So the VM now also has `-device virtio-mouse-pci,id=navwheel`, and wheel
+events are addressed to it by id rather than left to QEMU's first-match
+routing, which would otherwise be free to hand a left click to a relative
+mouse that is not where the pointer was put.
+
+Diagnostic still, on purpose: what the result SHOULD be is a design question,
+and answering it is not the same as observing it.
 
 **The limitation at the time (no longer applicable):** this was a static
 review and no real compositor was run — runtime verification had been left
