@@ -162,11 +162,20 @@ and then it is reverted and the cleanliness re-checked. Without that
 self-test, the "empty output = clean" rule would stay green even if the
 command never ran at all.
 
-**An open note:** workspace switching with `mouse_down`/`mouse_up` uses
-`e+1`/`e-1` (lines 184-185) — that means "go to the next/previous **empty**
-workspace", not "the next workspace in order". If sequential switching was
-intended, it may need changing to `+1`/`-1`; it is not settled whether this
-is deliberate or needs fixing, so it was left as is.
+**An open note, now being measured:** workspace switching with
+`mouse_down`/`mouse_up` uses `e+1`/`e-1` — that means "go to the next/previous
+**empty** workspace", not "the next workspace in order". Whether that is
+deliberate was unsettled for a simple reason: nothing could turn a wheel in
+the test VM, so the question could only be argued from documentation.
+
+It can be asked now. The input injection added for the click test grew a
+`scroll` action with a held modifier, and the boot test puts a window on
+workspace 2 first — without that the two readings give the same answer and
+the run proves nothing — then turns Super+wheel from workspace 1. Landing on
+3 means `e+1` skipped the occupied workspace and the config does what it
+says; landing on 2 means it does not. Diagnostic on this round: what the
+result should BE is a design question, and answering it is not the same as
+observing it.
 
 **The limitation at the time (no longer applicable):** this was a static
 review and no real compositor was run — runtime verification had been left

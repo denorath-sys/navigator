@@ -22,8 +22,16 @@ Absolute axes are a fixed 0..32767 range that QEMU maps onto the screen, so
 the caller has to say how big the screen is; there is no way to ask.
 
 Usage:
-    qemu-input.py <qmp.sock> move  <W> <H> <X> <Y>
-    qemu-input.py <qmp.sock> click <W> <H> <X> <Y> [--button left|right|middle]
+    qemu-input.py <qmp.sock> move   <W> <H> <X> <Y>
+    qemu-input.py <qmp.sock> click  <W> <H> <X> <Y> [--button left|right|middle]
+    qemu-input.py <qmp.sock> scroll <W> <H> <X> <Y> --direction up|down
+                                    [--modifier super|ctrl|alt|shift]
+
+A wheel notch is a BUTTON in QEMU's input model, not an axis, which is why
+scrolling looks like clicking here. The modifier is a real key press held
+around it, because that is what a binding like `bind = SUPER, mouse_down` is
+waiting for: Hyprland matches the modifier state at the moment the wheel
+event arrives, and a wheel with no modifier held is simply a scroll.
 """
 import json
 import socket
@@ -89,6 +97,46 @@ def move_events(w: int, h: int, x: int, y: int) -> list[dict]:
     ]
 
 
+# Left-hand modifiers, named as QEMU's qcode enum names them. Hyprland's
+# SUPER is the meta key.
+MODIFIER_QCODES = {
+    "super": "meta_l",
+    "ctrl": "ctrl",
+    "alt": "alt",
+    "shift": "shift",
+}
+
+WHEEL_BUTTONS = {"up": "wheel-up", "down": "wheel-down"}
+
+
+def key_event(qcode: str, down: bool) -> dict:
+    return {"type": "key", "data": {"down": down, "key": {"type": "qcode", "data": qcode}}}
+
+
+def wheel_events(direction: str) -> list[dict]:
+    """One notch. Press and release, because a wheel button that is never
+    released leaves the guest scrolling for as long as it believes it."""
+    try:
+        button = WHEEL_BUTTONS[direction]
+    except KeyError:
+        raise ValueError(
+            f"direction must be one of {sorted(WHEEL_BUTTONS)}, got {direction!r}"
+        ) from None
+    return [
+        {"type": "btn", "data": {"down": True, "button": button}},
+        {"type": "btn", "data": {"down": False, "button": button}},
+    ]
+
+
+def modifier_qcode(name: str) -> str:
+    try:
+        return MODIFIER_QCODES[name]
+    except KeyError:
+        raise ValueError(
+            f"modifier must be one of {sorted(MODIFIER_QCODES)}, got {name!r}"
+        ) from None
+
+
 def main() -> int:
     args = sys.argv[1:]
     if len(args) < 6:
@@ -100,9 +148,19 @@ def main() -> int:
     button = "left"
     if "--button" in args:
         button = args[args.index("--button") + 1]
+    direction = None
+    if "--direction" in args:
+        direction = args[args.index("--direction") + 1]
+    modifier = None
+    if "--modifier" in args:
+        modifier = args[args.index("--modifier") + 1]
 
-    if action not in ("move", "click"):
+    if action not in ("move", "click", "scroll"):
         print(f"unknown action {action!r}")
+        return 2
+
+    if action == "scroll" and direction is None:
+        print("scroll needs --direction up|down")
         return 2
 
     try:
@@ -123,6 +181,21 @@ def main() -> int:
             qmp.send_events([{"type": "btn", "data": {"down": True, "button": button}}])
             qmp.send_events([{"type": "btn", "data": {"down": False, "button": button}}])
             print(f"clicked {button} at ({x}, {y})")
+
+        if action == "scroll":
+            qcode = modifier_qcode(modifier) if modifier else None
+            wheel = wheel_events(direction)
+            # The modifier is pressed in its own batch and released in
+            # another, with the wheel between them: a binding is matched
+            # against the modifier state when the wheel arrives, so the order
+            # is the whole point rather than a detail.
+            if qcode:
+                qmp.send_events([key_event(qcode, True)])
+            qmp.send_events(wheel)
+            if qcode:
+                qmp.send_events([key_event(qcode, False)])
+            held = f" with {modifier} held" if qcode else ""
+            print(f"scrolled {direction}{held} at ({x}, {y})")
     except (OSError, RuntimeError, ValueError) as e:
         print(f"ERROR: sending input failed: {e}")
         return 1
