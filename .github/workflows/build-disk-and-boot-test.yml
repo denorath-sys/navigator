@@ -1796,8 +1796,48 @@ jobs:
 
           case "${AFTER}" in
             "${BEFORE}")
-              echo "  RESULT: nothing moved. Either the modifier is not reaching the"
-              echo "          compositor with the wheel, or the bind is not matching."
+              echo "  RESULT: nothing moved — and that is a question about the test"
+              echo "          machinery, not about e+1. Two probes below separate the"
+              echo "          two things it could be. They use hyprctl keyword to add"
+              echo "          throwaway binds at runtime: a bind that already exists"
+              echo "          would test the config, and what is in doubt here is the"
+              echo "          mechanism underneath it."
+              echo
+              echo "  --- probe A: does a wheel event reach the compositor at all ---"
+              inguest 'hyprctl keyword bind ,mouse_down,workspace,5' >/dev/null
+              inguest 'hyprctl dispatch workspace 1' >/dev/null
+              sleep 1
+              python3 .github/scripts/qemu-input.py "$QMP" scroll "$SW" "$SH" \
+                "$(( SW / 2 ))" "$(( SH / 2 ))" --direction down
+              sleep 2
+              PLAIN="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+              echo "      unmodified wheel -> workspace ${PLAIN} (5 means the wheel arrives)"
+
+              echo
+              echo "  --- probe B: does the Super modifier reach the compositor ---"
+              inguest 'hyprctl keyword bind SUPER,F12,workspace,6' >/dev/null
+              inguest 'hyprctl dispatch workspace 1' >/dev/null
+              sleep 1
+              python3 .github/scripts/qemu-input.py "$QMP" key f12 --modifier super
+              sleep 2
+              MODKEY="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+              echo "      Super+F12 -> workspace ${MODKEY} (6 means the modifier arrives)"
+
+              echo
+              if [ "${PLAIN}" = "5" ] && [ "${MODKEY}" = "6" ]; then
+                echo "      READING: both halves work on their own, so what fails is the"
+                echo "               COMBINATION — a wheel arriving while Super is held."
+              elif [ "${PLAIN}" != "5" ] && [ "${MODKEY}" = "6" ]; then
+                echo "      READING: wheel events do not reach the compositor. The tablet"
+                echo "               is an absolute pointing device; a wheel is a button,"
+                echo "               and nothing in the guest may be carrying it."
+              elif [ "${PLAIN}" = "5" ] && [ "${MODKEY}" != "6" ]; then
+                echo "      READING: the wheel arrives but the modifier does not, so the"
+                echo "               keyboard side is where to look."
+              else
+                echo "      READING: neither arrives, which does not fit the click test"
+                echo "               passing in the step above — read both together."
+              fi
               ;;
             2)
               echo "  RESULT: sequential — it went to the next workspace in order,"

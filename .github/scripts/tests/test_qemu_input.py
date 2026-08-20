@@ -162,6 +162,29 @@ class TestAgainstFakeQMP(Harness):
         self.assertEqual([e["type"] for e in self.flatten(server.batches)],
                          ["abs", "abs", "btn", "btn"])
 
+    def test_key_holds_the_modifier_around_the_press(self):
+        server, path = self.start_server()
+        result = self.run_script(path, "key", "ret", "--modifier", "super")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        events = self.flatten(server.batches)
+        self.assertEqual(
+            [(e["data"]["key"]["data"], e["data"]["down"]) for e in events],
+            [("meta_l", True), ("ret", True), ("ret", False), ("meta_l", False)],
+        )
+        self.assertIn("pressed ret with super held", result.stdout)
+
+    def test_key_without_a_modifier(self):
+        server, path = self.start_server()
+        result = self.run_script(path, "key", "ret")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.flatten(server.batches)), 2)
+
+    def test_key_needs_no_coordinates(self):
+        """A key press has nothing to do with where the pointer is, and
+        demanding a screen size for one would be cargo cult."""
+        server, path = self.start_server()
+        self.assertEqual(self.run_script(path, "key", "ret").returncode, 0)
+
     def test_missing_direction_is_refused_before_connecting(self):
         result = self.run_script("/nonexistent.sock", "scroll", "1280", "800", "1", "1")
         self.assertEqual(result.returncode, 2)

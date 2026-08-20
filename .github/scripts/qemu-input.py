@@ -26,6 +26,7 @@ Usage:
     qemu-input.py <qmp.sock> click  <W> <H> <X> <Y> [--button left|right|middle]
     qemu-input.py <qmp.sock> scroll <W> <H> <X> <Y> --direction up|down
                                     [--modifier super|ctrl|alt|shift]
+    qemu-input.py <qmp.sock> key    <QCODE> [--modifier super|ctrl|alt|shift]
 
 A wheel notch is a BUTTON in QEMU's input model, not an axis, which is why
 scrolling looks like clicking here. The modifier is a real key press held
@@ -137,13 +138,56 @@ def modifier_qcode(name: str) -> str:
         ) from None
 
 
+def send_key(qmp: "QMP", qcode: str, modifier: str | None) -> None:
+    """One key press, optionally inside a held modifier.
+
+    Exists to take the pointer out of the question: when a modifier+wheel
+    binding does nothing, the useful next question is whether the modifier
+    reaches the compositor at all, and a modifier+KEY binding that already
+    works answers it without involving the wheel.
+    """
+    held = modifier_qcode(modifier) if modifier else None
+    if held:
+        qmp.send_events([key_event(held, True)])
+    qmp.send_events([key_event(qcode, True)])
+    qmp.send_events([key_event(qcode, False)])
+    if held:
+        qmp.send_events([key_event(held, False)])
+    print(f"pressed {qcode}" + (f" with {modifier} held" if held else ""))
+
+
 def main() -> int:
     args = sys.argv[1:]
-    if len(args) < 6:
+    if len(args) < 3:
         print(__doc__)
         return 2
 
     sock_path, action = args[0], args[1]
+
+    modifier = None
+    if "--modifier" in args:
+        modifier = args[args.index("--modifier") + 1]
+
+    if action == "key":
+        qcode = args[2]
+        try:
+            qmp = QMP(sock_path)
+        except (OSError, RuntimeError, ValueError) as e:
+            print(f"ERROR: could not talk to QMP at {sock_path}: {e}")
+            return 1
+        try:
+            send_key(qmp, qcode, modifier)
+        except (OSError, RuntimeError, ValueError) as e:
+            print(f"ERROR: sending input failed: {e}")
+            return 1
+        finally:
+            qmp.close()
+        return 0
+
+    if len(args) < 6:
+        print(__doc__)
+        return 2
+
     w, h, x, y = (int(v) for v in args[2:6])
     button = "left"
     if "--button" in args:
@@ -151,9 +195,6 @@ def main() -> int:
     direction = None
     if "--direction" in args:
         direction = args[args.index("--direction") + 1]
-    modifier = None
-    if "--modifier" in args:
-        modifier = args[args.index("--modifier") + 1]
 
     if action not in ("move", "click", "scroll"):
         print(f"unknown action {action!r}")
