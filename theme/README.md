@@ -262,15 +262,37 @@ read as partial — Navigator's icons next to Adwaita's for everything they did
 not cover. Adopting finished work and saying whose it is beats a half-drawn
 identity.
 
-The one place the palette does reach them is the folders: Layer 3 of
-`image/Containerfile` repoints Papirus's folder icons at its own **teal**
-variants, which is exactly what `papirus-folders` does on an ordinary system
-and is possible only because Papirus ships those defaults as symlinks. Being
-precise about it, since this directory is otherwise strict about hexes: that
-teal is Papirus's `#16a085`/`#12806a`, not Navigator's `#4fd1c5`. Recolouring
-the SVGs to the brand hex is mechanical (they are flat fills) and would put
-the folders under the brand check, but it means shipping altered copies of
-someone else's artwork — a separate decision, not a side effect of this one.
+The one place the palette does reach them is the folders, and it reaches them
+properly: Layer 3 of `image/Containerfile` **recolours** Papirus's folder
+icons to the brand teal and points the default folder names at the result.
+Papirus ships those defaults as symlinks precisely so they can be repointed
+(that is all `papirus-folders` does on an ordinary system, and it is not in
+Fedora), and its folder SVGs are flat fills — two hexes, `#16a085` for the
+front face and `#12806a` for the back flap.
+
+**The shaded tone is derived, not chosen.** Papirus's own pair encodes a
+lighting decision — the flap is the face at 0.818 / 0.800 / 0.797 of its red,
+green and blue — and the same three ratios applied to `#4fd1c5` give
+`#41a79d`. That keeps the drawing's lighting and changes only the colour. It
+is deliberately **not** in `palette.json`, on the same line the logos' derived
+tones sit: the palette owns the brand, not a shading detail internal to one
+derived asset.
+
+This modifies someone else's artwork, which was a decision rather than a side
+effect. Papirus is GPL-3.0 and so is Navigator; the modification is two hexes
+in [`image/scripts/recolour-folder-icons.py`](../image/scripts/recolour-folder-icons.py),
+applied at build time, and every recoloured file is written under a new name
+(`folder-navigator*.svg`) so that which icons are ours and which are Papirus's
+is visible in the theme itself.
+
+The script is a repository file with tests that run in under a second
+(`image/scripts/tests/`) rather than a loop inside the Containerfile, for the
+reason the boot test's aiming script learned the hard way: work that can only
+be exercised by spending a build has exactly one failure mode, the one nobody
+sees. Its guards read the result back — the plain name must point at ours, the
+file must carry the brand teal, and none of Papirus's teal may survive in it —
+and the boot test repeats the last two against the image, taking the expected
+hex from the palette in the image rather than carrying its own copy.
 
 **What it costs** — three numbers, because they disagree by a factor of four
 and each answers a different question:

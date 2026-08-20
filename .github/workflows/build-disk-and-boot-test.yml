@@ -1077,18 +1077,37 @@ jobs:
             || { echo "ERROR: /usr/share/icons/${CURSOR_GTK}/cursors/left_ptr is missing — the configs name a cursor theme the image does not have."; exit 1; }
           echo "  OK  ${ICON_GTK}/index.theme and ${CURSOR_GTK}/cursors/left_ptr"
 
-          # Layer 3 repoints Papirus's folder icons at its teal variants. The
-          # operation is a loop over symlinks: if Papirus renames its colour
-          # variants it repoints nothing, and blue folders are not the kind of
-          # failure anyone notices in a log.
+          # Layer 3 recolours Papirus's folder icons to the brand teal. Two
+          # ways for that to go quietly wrong: the repoint misses, leaving
+          # Papirus's blue defaults, or the substitution misses, leaving
+          # Papirus's teal in a file called folder-navigator.svg. Blue folders
+          # are not the kind of failure anyone notices in a log.
           echo
-          echo "=== ASSERTION: the folder icons are Navigator's teal choice, not Papirus's default blue ==="
+          echo "=== ASSERTION: the folder icons carry the brand teal ==="
           FOLDER="$(${SSH} "readlink /usr/share/icons/Papirus/64x64/places/folder.svg" || echo '(not a symlink)')"
           echo "  folder.svg -> ${FOLDER}"
-          [ "${FOLDER}" = "folder-teal.svg" ] \
-            || { echo "ERROR: folder.svg points at ${FOLDER}. Layer 3's repoint did not take effect."; exit 1; }
-          echo "  the colours inside it: $(${SSH} "grep -o '#[0-9a-f]\{6\}' /usr/share/icons/Papirus/64x64/places/folder-teal.svg | sort -u | tr '\n' ' '")"
-          echo "  (Papirus's teal, not Navigator's #4fd1c5 — see the Layer 3 comment in image/Containerfile)"
+          [ "${FOLDER}" = "folder-navigator.svg" ] \
+            || { echo "ERROR: folder.svg points at ${FOLDER}. Layer 3's recolour did not take effect."; exit 1; }
+
+          # The expected colour is read from the palette IN THE IMAGE, not
+          # written here: the palette is the single source, and a check that
+          # carries its own copy of the answer is a check that agrees with
+          # itself.
+          TEAL="$(${SSH} "python3 -c \"import json;print(json.load(open('/usr/share/navigator/theme/palette.json'))['colors']['teal']['hex'])\"")"
+          COLOURS="$(${SSH} "grep -o '#[0-9a-f]\{6\}' /usr/share/icons/Papirus/64x64/places/folder-navigator.svg | sort -u | tr '\n' ' '")"
+          echo "  palette teal: ${TEAL}"
+          echo "  colours in the icon: ${COLOURS}"
+          case "${COLOURS}" in
+            *"${TEAL}"*) ;;
+            *) echo "ERROR: the folder icon does not contain the palette's teal ${TEAL}."; exit 1 ;;
+          esac
+          case "${COLOURS}" in
+            *"#16a085"*|*"#12806a"*)
+              echo "ERROR: Papirus's own teal is still in the icon; the substitution did not take."
+              exit 1
+              ;;
+          esac
+          echo "  OK: the brand teal is in the icon and Papirus's is not"
 
           # papirus-icon-theme Recommends both its -dark and its -light
           # subpackage, and the first build shipped -light: an icon theme

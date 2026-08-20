@@ -52,8 +52,9 @@ This section exists on purpose, and it is not a footnote.
   Until you run `ollama pull`, the assistant falls through to the cloud,
   which needs your key.
 - **The icons and cursors are adopted, not drawn.** Papirus-Dark and Breeze
-  Dark, from Fedora's repositories, with Papirus's folders repointed to its
-  teal variants. Drawing an icon set means hundreds of files that no palette can
+  Dark, from Fedora's repositories — with the folders recoloured to
+  Navigator's own teal at build time, keeping the shading ratio the Papirus
+  artists drew with. Drawing an icon set means hundreds of files that no palette can
   produce, and a partial one reads as partial. What Navigator does own here is
   the verification: the boot test takes the theme names out of the image's own
   config files and requires them to exist in the image, because a config
@@ -178,10 +179,10 @@ The GTK and Qt widget colours are done, the icons and cursors are chosen and
 verified, and so is layering Ollama in — the runtime ships in the image; the
 weights are still yours to choose. Real pointer input can now be injected into
 the test VM from outside the guest, which closed the last thing the desktop
-was never able to check about itself. The open question left in the theme is
-whether Navigator's own teal should replace Papirus's inside the folder icons,
-which is a question about altering someone else's artwork rather than a
-technical one.
+was never able to check about itself. The folder icons now carry Navigator's own teal, which was a question about
+altering someone else's artwork rather than a technical one, and was decided
+in favour of the brand with the modification kept visible: it happens in a
+readable build-time script and the recoloured files are named for it.
 
 ## Contributing
 
