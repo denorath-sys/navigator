@@ -189,10 +189,15 @@ Super+F12 bound to workspace 6 worked. The modifier arrives; the wheel does
 not. That is what an absolute pointing device with no wheel button looks like
 from inside the guest — the tablet is not a mouse.
 
-So the VM now also has `-device virtio-mouse-pci,id=navwheel`, and wheel
-events are addressed to it by id rather than left to QEMU's first-match
-routing, which would otherwise be free to hand a left click to a relative
-mouse that is not where the pointer was put.
+So the VM now also has `-device virtio-mouse-pci,id=navwheel`.
+
+**Round three (run 32428973455)** was the author's mistake rather than the
+VM's. Wheel events were addressed to that device by id, on the assumption
+that `input-send-event`'s `device` names an input device. It names the
+DISPLAY device, and QEMU does not say so politely: it aborted the whole VM
+with `Property 'qemu-fixed-text-console.device' not found`. Which device
+receives an event is QEMU's choice, and the wheel should reach the only one
+here that has a wheel.
 
 Diagnostic still, on purpose: what the result SHOULD be is a design question,
 and answering it is not the same as observing it.

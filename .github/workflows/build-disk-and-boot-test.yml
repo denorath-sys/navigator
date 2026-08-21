@@ -751,11 +751,19 @@ jobs:
           # which is what an absolute pointing device with no wheel button
           # looks like from the guest.
           #
-          # Wheel events are addressed to this device BY ID rather than left to
-          # QEMU to route. Whichever device QEMU would pick for a button event
-          # is not something to leave to chance here: the click test aims at a
-          # pixel it set on the tablet, and a left button delivered to a
-          # relative mouse would land wherever that mouse believes it is.
+          # Which device an event reaches is QEMU's choice and cannot be
+          # overridden: input-send-event's `device` names the DISPLAY device
+          # for a multi-head setup, and passing an input device's id to it
+          # does not fail politely — QEMU aborted the VM mid-test with
+          # "Property 'qemu-fixed-text-console.device' not found"
+          # (run 32428973455). So the wheel goes wherever QEMU sends it, which
+          # should be the only device here that has one.
+          #
+          # That leaves a real question this run answers by measurement: with
+          # two pointing devices present, does a left click still reach the
+          # tablet the pointer was positioned on? The click test in this job
+          # asserts the toggle flips, so if buttons started going to the
+          # relative mouse it would fail rather than drift.
           #
           # -qmp unix:... : the input path uses QMP rather than HMP, because
           # HMP's mouse_move is relative while `input-send-event` takes
@@ -1804,8 +1812,7 @@ jobs:
           sleep 1
           BEFORE="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
           python3 .github/scripts/qemu-input.py "$QMP" scroll "$SW" "$SH" \
-            "$(( SW / 2 ))" "$(( SH / 2 ))" --direction down --modifier super \
-            --device navwheel
+            "$(( SW / 2 ))" "$(( SH / 2 ))" --direction down --modifier super
           sleep 2
           AFTER="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
           echo "  workspace ${BEFORE} -> ${AFTER}"
@@ -1824,7 +1831,7 @@ jobs:
               inguest 'hyprctl dispatch workspace 1' >/dev/null
               sleep 1
               python3 .github/scripts/qemu-input.py "$QMP" scroll "$SW" "$SH" \
-                "$(( SW / 2 ))" "$(( SH / 2 ))" --direction down --device navwheel
+                "$(( SW / 2 ))" "$(( SH / 2 ))" --direction down
               sleep 2
               PLAIN="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
               echo "      unmodified wheel -> workspace ${PLAIN} (5 means the wheel arrives)"

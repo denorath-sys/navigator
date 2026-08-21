@@ -150,24 +150,18 @@ class TestAgainstFakeQMP(Harness):
         self.assertTrue(all(k["data"]["key"]["data"] == "meta_l" for k in keys))
         self.assertIn("scrolled down with super held", result.stdout)
 
-    def test_scroll_addresses_only_the_wheel_batch_to_a_device(self):
-        """The modifier belongs to the keyboard and the pointer position to the
-        tablet; addressing those at the mouse would be worse than not
-        addressing anything."""
+    def test_no_event_batch_names_a_device(self):
+        """input-send-event's `device` is the DISPLAY device, not the mouse.
+        Passing an input device's qdev id to it aborts QEMU outright — the VM
+        died mid-test in run 32428973455 — so nothing here may set it."""
         server, path = self.start_server()
         result = self.run_script(
             path, "scroll", "1280", "800", "640", "400",
-            "--direction", "down", "--modifier", "super", "--device", "navwheel",
+            "--direction", "down", "--modifier", "super",
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        addressed = [msg for msg in server.messages if "device" in msg.get("arguments", {})]
-        self.assertEqual(len(addressed), 1)
-        self.assertEqual(addressed[0]["arguments"]["device"], "navwheel")
-        self.assertEqual(
-            [e["data"]["button"] for e in addressed[0]["arguments"]["events"]],
-            ["wheel-down", "wheel-down"],
-        )
-        self.assertIn("via navwheel", result.stdout)
+        for msg in server.messages:
+            self.assertNotIn("device", msg.get("arguments", {}))
 
     def test_scroll_without_a_modifier_sends_no_key(self):
         server, path = self.start_server()
