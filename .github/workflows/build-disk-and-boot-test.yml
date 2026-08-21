@@ -1806,7 +1806,31 @@ jobs:
             exit 0
           fi
 
+          # The open note is about what `e+1` MEANS. That is a question for the
+          # compositor, not for the wheel, and conflating the two is what the
+          # last three rounds did: asking it through an input path that turned
+          # out not to work made a config question depend on a device question.
+          # Asked directly, it takes one dispatch.
           echo
+          echo "=== what does e+1 mean, asked of the compositor directly ==="
+          inguest 'hyprctl dispatch workspace 1' >/dev/null
+          sleep 1
+          inguest 'hyprctl dispatch workspace e+1' >/dev/null
+          sleep 1
+          SEMANTIC="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+          echo "  from workspace 1 with workspace 2 occupied, e+1 -> ${SEMANTIC}"
+          case "${SEMANTIC}" in
+            3) echo "  ANSWER: e+1 skips the occupied workspace. The config does what"
+               echo "          the Hyprland documentation says: 'next EMPTY workspace'."
+               echo "          Whether that is what Navigator WANTS from a scroll is a"
+               echo "          design question, and it is now the only part left open." ;;
+            2) echo "  ANSWER: e+1 went to the next workspace in order, occupied or not,"
+               echo "          which is not what the documentation says it does." ;;
+            *) echo "  ANSWER: landed on ${SEMANTIC}, which neither reading predicts." ;;
+          esac
+
+          echo
+          echo "=== and separately: does the wheel reach the compositor ==="
           echo "=== from workspace 1, Super+wheel-down ==="
           inguest 'hyprctl dispatch workspace 1' >/dev/null
           sleep 1

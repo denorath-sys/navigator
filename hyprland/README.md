@@ -199,6 +199,22 @@ with `Property 'qemu-fixed-text-console.device' not found`. Which device
 receives an event is QEMU's choice, and the wheel should reach the only one
 here that has a wheel.
 
+**Round four (run 32430935555)** showed the mouse had not helped: a left click
+still reaches the tablet it was aimed on, so nothing regressed, but an
+unmodified wheel still moved nothing. With two pointing devices present QEMU
+appears to hand button events to the first that can take them, and the tablet
+drops wheel notches.
+
+**And then the mistake underneath all four rounds.** The open note asks what
+`e+1` MEANS. That is a question for the compositor, not for a wheel, and
+asking it through an input path made a config question depend on a device
+question that has nothing to do with it. `hyprctl dispatch workspace e+1`,
+with workspace 2 occupied, answers it in one line.
+
+The wheel remains a separate and genuinely open question about the test rig:
+whether the events can be delivered at all from outside, and the untried
+lead is HMP's `mouse_set`, which can choose the device that QMP cannot.
+
 Diagnostic still, on purpose: what the result SHOULD be is a design question,
 and answering it is not the same as observing it.
 
