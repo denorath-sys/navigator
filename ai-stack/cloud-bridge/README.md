@@ -94,13 +94,23 @@ that first creates it decides the mode. The `Containerfile` created it with
 `COPY` (755) and ran `chmod 700` one layer later, which was dropped; files
 are replaced whole, which is why the file's 600 held in the same `RUN`.
 
-The `Containerfile` now creates the directory 0700 before copying into it.
-**That fix has not been measured yet**, so the directory mode is still
-tracked in CI as a diagnostic rather than an assertion.
+The `Containerfile` now creates the directory 0700 before copying into it,
+and that was measured ([run
+37151486990](https://github.com/denorath-sys/navigator/actions/runs/37151486990)):
 
-The impact is limited: someone else can list the directory and see that the
-`env` file exists, but cannot read its contents — what protects the secret
-is the file's mode, and `cloud-bridge` looks at the file, not the directory.
+```
+/etc/skel/.config/navigator      mode=700 owner=root:root
+/usr/etc/skel/.config/navigator  mode=700 owner=root:root
+/var/home/navtest/.config/navigator mode=700 owner=navtest:navtest
+```
+
+The new account's copy keeps the mode as well. The directory mode is still a
+diagnostic in CI rather than an assertion — one run is a measurement.
+
+Nothing relies on it either way: with 755 someone else could list the
+directory and see that the `env` file exists, but could not read its contents
+— what protects the secret is the file's mode, and `cloud-bridge` looks at
+the file, not the directory.
 
 ### Permissions: if they are loose the file is DELIBERATELY ignored
 

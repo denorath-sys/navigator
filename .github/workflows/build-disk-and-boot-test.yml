@@ -1205,8 +1205,8 @@ jobs:
           # directory that already exists, so the layer that first creates a
           # directory decides its mode. The Containerfile used to create it with
           # COPY (755) and chmod it one layer later; it now creates it 0700
-          # first. Still a diagnostic: the fix has not been measured yet, and
-          # this file has learned what an unmeasured assertion costs.
+          # first, and run 37151486990 measured 700 in all three places below.
+          # Still a diagnostic: one run is a measurement, not yet an assertion.
           stat -c '%n mode=%a owner=%U:%G' \
             /etc/skel/.config /etc/skel/.config/navigator /etc/skel/.config/navigator/env 2>&1 || true
           stat -c '%n mode=%a owner=%U:%G' \
