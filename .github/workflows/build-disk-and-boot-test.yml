@@ -1758,6 +1758,9 @@ jobs:
       # makes the two answers 3 (next open, skipping the empty 2) and 2 (next
       # in order).
       #
+      # The e+1 answer is an ASSERTION since run 37146391410 measured it (3).
+      # Everything about the wheel below it is still a diagnostic.
+      #
       # It does not fail when it cannot answer. Whether an ordinary
       # application window can even open in this VM has never been tested
       # either, and turning that into a red build in the same commit that
@@ -1828,9 +1831,10 @@ jobs:
             3) echo "  ANSWER: e+1 skipped the empty workspace and went to the next OPEN"
                echo "          one. That is what Hyprland documents, and what its example"
                echo "          config means by 'scroll through existing workspaces'." ;;
-            2) echo "  ANSWER: e+1 went to the next workspace in order, open or not,"
-               echo "          which is NOT what Hyprland documents ('next open')." ;;
-            *) echo "  ANSWER: landed on ${SEMANTIC}, which neither reading predicts." ;;
+            2) echo "::error::e+1 went to the next workspace in order, open or not — NOT what Hyprland documents ('next open'), and not what run 37146391410 measured."
+               exit 1 ;;
+            *) echo "::error::e+1 landed on ${SEMANTIC}, which neither reading predicts (expected 3)."
+               exit 1 ;;
           esac
 
           echo

@@ -228,8 +228,9 @@ on 3 is "next open", landing on 2 is "next in order".
 
 **Run 37146391410 settled it:** with workspaces `[(1, 0), (3, 1)]` — 2 not
 existing at all — `e+1` from 1 landed on **3**. It is "next open", measured
-rather than read. The step is still a diagnostic, deliberately: one run is a
-measurement, and turning it into an assertion is a separate decision.
+rather than read. With a number to assert against, the boot test now fails
+if `e+1` lands anywhere but 3. It still passes without asserting when no
+window reaches workspace 3, because then there is nothing to measure.
 
 The wheel remains a separate and genuinely open question about the test rig:
 whether the events can be delivered at all from outside, and the untried
