@@ -224,8 +224,12 @@ That layout had a blind spot of its own, though. With 2 occupied, "next open"
 and "next in order" are the same workspace, so the run confirmed the
 documented behaviour without being able to tell it from the other one. The
 boot test now puts the window on workspace **3** and leaves 2 empty: landing
-on 3 is "next open", landing on 2 is "next in order". That layout has not run
-yet, so the step is still a diagnostic and not an assertion.
+on 3 is "next open", landing on 2 is "next in order".
+
+**Run 37146391410 settled it:** with workspaces `[(1, 0), (3, 1)]` — 2 not
+existing at all — `e+1` from 1 landed on **3**. It is "next open", measured
+rather than read. The step is still a diagnostic, deliberately: one run is a
+measurement, and turning it into an assertion is a separate decision.
 
 The wheel remains a separate and genuinely open question about the test rig:
 whether the events can be delivered at all from outside, and the untried
