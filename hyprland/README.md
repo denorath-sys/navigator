@@ -162,21 +162,25 @@ and then it is reverted and the cleanliness re-checked. Without that
 self-test, the "empty output = clean" rule would stay green even if the
 command never ran at all.
 
-**An open note, now being measured:** workspace switching with
-`mouse_down`/`mouse_up` uses `e+1`/`e-1` — that means "go to the next/previous
-**empty** workspace", not "the next workspace in order". Whether that is
-deliberate was unsettled for a simple reason: nothing could turn a wheel in
-the test VM, so the question could only be argued from documentation.
+**A note that was open for the wrong reason (closed):** workspace switching
+with `mouse_down`/`mouse_up` uses `e+1`/`e-1`. This file used to say that
+means "go to the next/previous **empty** workspace", and asked whether that
+was deliberate. The premise was the mistake. `e` is the next/previous **open**
+(existing) workspace; "empty" is a different selector (`empty`), and `r+1` is
+the one that counts empty workspaces too. Hyprland's own example config ships
+exactly these two binds under the comment "Scroll through existing
+workspaces". The config was never in question — the note was.
 
-It can be asked now, and asking it took two rounds of finding out that the
-test VM could not ask it.
+What follows is the record of how that was found, kept because the rounds
+taught things about the test VM that are still true. Read it knowing that
+every round was designed around the wrong reading.
 
-The input injection added for the click test grew a `scroll` action with a
-held modifier, and the boot test puts a window on workspace 2 first — without
-that the two readings give the same answer and the run proves nothing — then
-turns Super+wheel from workspace 1. Landing on 3 means `e+1` skipped the
-occupied workspace and the config does what it says; landing on 2 means it
-does not.
+The note could only be argued from documentation at first, because nothing
+could turn a wheel in the test VM. The input injection added for the click
+test grew a `scroll` action with a held modifier, and the boot test put a
+window on workspace 2 first, then turned Super+wheel from workspace 1 — on
+the theory that landing on 3 would mean `e+1` skipped the occupied workspace
+("next empty") and landing on 2 would mean it did not.
 
 **Round one (run 32424241261)** moved nothing, and taught something else
 instead: an ordinary application window does open in this VM. kitty reached
@@ -211,12 +215,21 @@ asking it through an input path made a config question depend on a device
 question that has nothing to do with it. `hyprctl dispatch workspace e+1`,
 with workspace 2 occupied, answers it in one line.
 
+**The answer (run 32432881856):** from workspace 1 with workspace 2 occupied,
+`e+1` landed on **2**. The run printed that as "not what the documentation
+says it does", which was the wrong reading speaking one last time: going to
+the occupied workspace 2 is exactly what "next open workspace" means.
+
+That layout had a blind spot of its own, though. With 2 occupied, "next open"
+and "next in order" are the same workspace, so the run confirmed the
+documented behaviour without being able to tell it from the other one. The
+boot test now puts the window on workspace **3** and leaves 2 empty: landing
+on 3 is "next open", landing on 2 is "next in order". That layout has not run
+yet, so the step is still a diagnostic and not an assertion.
+
 The wheel remains a separate and genuinely open question about the test rig:
 whether the events can be delivered at all from outside, and the untried
 lead is HMP's `mouse_set`, which can choose the device that QMP cannot.
-
-Diagnostic still, on purpose: what the result SHOULD be is a design question,
-and answering it is not the same as observing it.
 
 **The limitation at the time (no longer applicable):** this was a static
 review and no real compositor was run — runtime verification had been left

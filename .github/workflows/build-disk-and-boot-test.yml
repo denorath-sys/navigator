@@ -1744,16 +1744,19 @@ jobs:
 
       # DIAGNOSTIC, deliberately, and the second time this repository has been
       # able to ask a question it could only shrug at before. hyprland.conf
-      # binds Super+wheel to `workspace, e+1` / `e-1`, which is "the next
-      # EMPTY workspace" rather than "the next workspace". hyprland/README.md
-      # has carried an open note about that since the config was written —
-      # nobody could tell whether it was deliberate, because there was no way
-      # to turn a wheel in the test VM. There is now.
+      # binds Super+wheel to `workspace, e+1` / `e-1`. hyprland/README.md
+      # carried an open note that read `e` as "the next EMPTY workspace", and
+      # this step was first built on that reading. The reading was wrong: `e`
+      # is the next OPEN (existing) workspace — Hyprland's own example config
+      # ships these two binds as "Scroll through existing workspaces", and
+      # "empty" is a separate selector. Run 32432881856 landed on 2 with 2
+      # occupied, and labelled that a departure from the documentation when
+      # it was the documentation.
       #
-      # The measurement only means something if workspace 2 is OCCUPIED: from
-      # an empty desktop both readings answer "2" and the run would prove
-      # nothing. So a window goes on 2 first, which makes the two answers 3
-      # (next empty, skipping 2) and 2 (next in order).
+      # That layout could not tell "next open" from "next in order", though:
+      # both answer 2. So the window now goes on 3 and 2 is left EMPTY, which
+      # makes the two answers 3 (next open, skipping the empty 2) and 2 (next
+      # in order).
       #
       # It does not fail when it cannot answer. Whether an ordinary
       # application window can even open in this VM has never been tested
@@ -1777,17 +1780,19 @@ jobs:
           SW="$(printf '%s' "$MON" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["width"])')"
           SH="$(printf '%s' "$MON" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["height"])')"
 
-          echo "=== put a window on workspace 2, so the two readings differ ==="
-          inguest 'hyprctl dispatch workspace 2' >/dev/null
+          echo "=== put a window on workspace 3 and leave 2 empty, so the two readings differ ==="
+          # From 1, and `silent`, so that 2 is never visited: an empty
+          # workspace exists only while it is being looked at.
+          inguest 'hyprctl dispatch workspace 1' >/dev/null
           # Software rendering is the only kind this VM has; kitty asks for GL
           # and gets llvmpipe, which is slow but is not nothing.
-          inguest 'hyprctl dispatch exec [workspace 2] env LIBGL_ALWAYS_SOFTWARE=1 kitty' >/dev/null
+          inguest 'hyprctl dispatch exec [workspace 3 silent] env LIBGL_ALWAYS_SOFTWARE=1 kitty' >/dev/null
 
           OCCUPIED=""
           for _ in $(seq 1 20); do
             CLIENTS="$(inguest 'hyprctl clients -j')"
             if printf '%s' "$CLIENTS" \
-                 | python3 -c 'import json,sys; print(any(c.get("workspace",{}).get("id")==2 for c in json.load(sys.stdin)))' \
+                 | python3 -c 'import json,sys; print(any(c.get("workspace",{}).get("id")==3 for c in json.load(sys.stdin)))' \
                  | grep -q True; then
               OCCUPIED=yes
               break
@@ -1799,10 +1804,10 @@ jobs:
             | python3 -c 'import json,sys; print("  workspaces:", [(w["id"], w["windows"]) for w in sorted(json.load(sys.stdin), key=lambda w: w["id"])])'
 
           if [ -z "${OCCUPIED}" ]; then
-            echo "  no window reached workspace 2 — kitty may not run under llvmpipe here."
-            echo "  RESULT: unanswered. From an empty desktop, 'next workspace' and"
-            echo "          'next EMPTY workspace' are the same workspace, so turning"
-            echo "          the wheel now would produce a number that means nothing."
+            echo "  no window reached workspace 3 — kitty may not run under llvmpipe here."
+            echo "  RESULT: unanswered. With no other open workspace, 'next open' has"
+            echo "          nowhere to go, so a dispatch now would produce a number"
+            echo "          that means nothing."
             exit 0
           fi
 
@@ -1818,14 +1823,13 @@ jobs:
           inguest 'hyprctl dispatch workspace e+1' >/dev/null
           sleep 1
           SEMANTIC="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
-          echo "  from workspace 1 with workspace 2 occupied, e+1 -> ${SEMANTIC}"
+          echo "  from workspace 1 with workspace 2 empty and 3 occupied, e+1 -> ${SEMANTIC}"
           case "${SEMANTIC}" in
-            3) echo "  ANSWER: e+1 skips the occupied workspace. The config does what"
-               echo "          the Hyprland documentation says: 'next EMPTY workspace'."
-               echo "          Whether that is what Navigator WANTS from a scroll is a"
-               echo "          design question, and it is now the only part left open." ;;
-            2) echo "  ANSWER: e+1 went to the next workspace in order, occupied or not,"
-               echo "          which is not what the documentation says it does." ;;
+            3) echo "  ANSWER: e+1 skipped the empty workspace and went to the next OPEN"
+               echo "          one. That is what Hyprland documents, and what its example"
+               echo "          config means by 'scroll through existing workspaces'." ;;
+            2) echo "  ANSWER: e+1 went to the next workspace in order, open or not,"
+               echo "          which is NOT what Hyprland documents ('next open')." ;;
             *) echo "  ANSWER: landed on ${SEMANTIC}, which neither reading predicts." ;;
           esac
 
@@ -1887,15 +1891,14 @@ jobs:
               fi
               ;;
             2)
-              echo "  RESULT: sequential — it went to the next workspace in order,"
-              echo "          which is NOT what e+1 is documented to mean."
+              echo "  RESULT: the wheel arrived, and the bind went to the next"
+              echo "          workspace in order, open or not — which is NOT what"
+              echo "          e+1 is documented to mean ('next open')."
               ;;
             3)
-              echo "  RESULT: e+1 does what it says — it skipped the occupied"
-              echo "          workspace 2 and landed on the first empty one."
-              echo "          The open note in hyprland/README.md is answered:"
-              echo "          the behaviour is 'next empty', and whether that is"
-              echo "          wanted is now a design question rather than an unknown."
+              echo "  RESULT: the wheel arrived, and the bind does what e+1 is"
+              echo "          documented to do — it skipped the empty workspace 2"
+              echo "          and landed on the next open one."
               ;;
             *)
               echo "  RESULT: landed on ${AFTER}, which neither reading predicts."
