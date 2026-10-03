@@ -361,17 +361,24 @@ COPY theme/qt/qt6ct/colors/Navigator.conf   /etc/skel/.config/qt6ct/colors/Navig
 # The file mode was measured to genuinely hold in the deployed image (the boot
 # test, "ASSERTION: the template FILE must be closed to others").
 #
-# The directory's 0700, however, does NOT hold: in the same measurement
-# /etc/skel/.config/navigator came out as 755 (run 30893404648). The chmod line
-# still stands — the intent is right and it is effective at the container layer
-# — but nothing relies on it: what protects the secret is the file's mode, and
-# cloud-bridge looks at the file, not the directory. The directory mode is
-# tracked in the boot test as a DIAGNOSTIC rather than an assertion; the
-# mechanism (ostree's /etc merge, or loss at the layer) has not been pinned
-# down yet.
+# The directory's 0700 did NOT hold for a long time, and the reason is worth
+# keeping: it came out as 755 in the deployed image (run 30893404648) although
+# the container layer carried `drwx------`. bootc/ostree-ext builds the final
+# tree by checking each layer out over the previous ones in union mode, and
+# ostree's checkout skips fchmod AND fchown for a directory that already exists
+# (ostree-repo-checkout.c, `if (!did_exist)`). So for a DIRECTORY the layer
+# that first creates it decides the mode and the owner, and a `chmod` or
+# `chown` in a later layer is silently dropped. Files are replaced whole, which is why the file's 600 held
+# while the directory's 700 did not.
+#
+# The old order was COPY (creates the directory, 755) and then chmod (a later
+# layer, ignored). The directory is therefore created with its final mode
+# BEFORE anything is copied into it. Do not fold the mkdir into a later RUN,
+# and do not "fix" a directory's mode or owner anywhere in this file with a
+# chmod/chown that comes after the layer which created the directory.
+RUN install -d -m 0700 /etc/skel/.config/navigator
 COPY image/skel/.config/navigator/env /etc/skel/.config/navigator/env
-RUN chmod 700 /etc/skel/.config/navigator \
-    && chmod 600 /etc/skel/.config/navigator/env
+RUN chmod 600 /etc/skel/.config/navigator/env
 
 # ---------------------------------------------------------------------------
 # Layer 5: Navigator AI stack (ai-stack/ — six Python modules)

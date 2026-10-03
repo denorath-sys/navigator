@@ -84,14 +84,19 @@ DIAGNOSTIC RESULT: mode of the navtest copy = 600
 
 So the user is not forced to run `chmod`; writing their key is enough.
 
-The 0700 intended for the directory, however, does **not** hold:
-`/etc/skel/.config/navigator` comes out as 755. The same run also narrowed
-down the mechanism — it is 755 in `/usr/etc` too, so the loss happens at the
-image layer/commit stage rather than in ostree's `/etc` merge during
-deployment; and since the `chmod 600` in the same `RUN` does hold for the
-file, this is not a plain "chmod didn't work" either. The exact mechanism is
-not yet known, so the directory mode is tracked in CI as a diagnostic rather
-than an assertion.
+The 0700 intended for the directory, however, did **not** hold:
+`/etc/skel/.config/navigator` came out as 755, in `/usr/etc` too, although the
+container layer carried 700. The mechanism is known now. `bootc` builds the
+final tree by checking the image's layers out over one another, and ostree's
+checkout does not `fchmod` (or `fchown`) a directory that already exists
+(`ostree-repo-checkout.c`, `if (!did_exist)`). For a directory, the layer
+that first creates it decides the mode. The `Containerfile` created it with
+`COPY` (755) and ran `chmod 700` one layer later, which was dropped; files
+are replaced whole, which is why the file's 600 held in the same `RUN`.
+
+The `Containerfile` now creates the directory 0700 before copying into it.
+**That fix has not been measured yet**, so the directory mode is still
+tracked in CI as a diagnostic rather than an assertion.
 
 The impact is limited: someone else can list the directory and see that the
 `env` file exists, but cannot read its contents — what protects the secret

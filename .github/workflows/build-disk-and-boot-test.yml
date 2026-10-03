@@ -1197,21 +1197,22 @@ jobs:
           # (the directory mode) failed the job, the measurement actually wanted
           # (the new account's copy) never ran at all. Do not put the thing you
           # want to measure behind an unproven assertion.
-          echo "=== DIAGNOSTIC: where does the directory mode get lost? ==="
-          # Measured over two rounds: the file comes out 600 but the DIRECTORY is
-          # Containerfile'daki `chmod 700 /etc/skel/.config/navigator`
-          # does not hold. The second round (run 30895377833) also said where it
-          # is lost: it is 755 in /usr/etc too, so the problem is NOT the /etc
-          # merge at deployment but the image layer/commit stage. Since the
-          # `chmod 600` in the same RUN does hold for the file, this is not a
-          # plain "chmod did not work" either. The exact mechanism is not yet
-          # known; the directory mode therefore continues to be tracked as a
-          # diagnostic (not an assertion).
+          echo "=== DIAGNOSTIC: does the directory mode hold now? ==="
+          # For a long time it did not: the file came out 600 but the DIRECTORY
+          # came out 755, in /usr/etc too (run 30895377833), although the
+          # container layer carried 700. The mechanism is known now: ostree-ext
+          # unions the layers by checkout, and ostree's checkout does not chmod a
+          # directory that already exists, so the layer that first creates a
+          # directory decides its mode. The Containerfile used to create it with
+          # COPY (755) and chmod it one layer later; it now creates it 0700
+          # first. Still a diagnostic: the fix has not been measured yet, and
+          # this file has learned what an unmeasured assertion costs.
           stat -c '%n mode=%a owner=%U:%G' \
             /etc/skel/.config /etc/skel/.config/navigator /etc/skel/.config/navigator/env 2>&1 || true
           stat -c '%n mode=%a owner=%U:%G' \
             /usr/etc/skel/.config/navigator /usr/etc/skel/.config/navigator/env 2>&1 \
             || echo "(/usr/etc/skel does not exist)"
+          stat -c '%n mode=%a owner=%U:%G' /var/home/navtest/.config/navigator 2>&1 || true
 
           echo "=== ASSERTION: the new account's copy must preserve the file mode ==="
           # This was not a documented guarantee, so it was first measured as a
@@ -1236,10 +1237,10 @@ jobs:
           # deployed image. This assertion exists so that it breaks if that
           # chmod is ever dropped.
           #
-          # The directory mode is deliberately NOT AN ASSERTION but a diagnostic
-          # (above): 700 was intended but it comes out as 755 on the ostree /etc
-          # path. The impact is limited — someone else can list the directory and
-          # see that the `env` file exists, but cannot read its contents.
+          # The directory mode is deliberately NOT AN ASSERTION yet but a
+          # diagnostic (above): 700 is intended, and nothing relies on it —
+          # with 755 someone else could list the directory and see that the
+          # `env` file exists, but could not read its contents.
           [ "$(stat -c '%a' /etc/skel/.config/navigator/env)" = "600" ] || {
             echo "ERROR: the mode of /etc/skel/.config/navigator/env is not 600."; exit 1; }
           echo "OK: the template file is 0600."
