@@ -104,8 +104,8 @@ and that was measured ([run
 /var/home/navtest/.config/navigator mode=700 owner=navtest:navtest
 ```
 
-The new account's copy keeps the mode as well. The directory mode is still a
-diagnostic in CI rather than an assertion — one run is a measurement.
+The new account's copy keeps the mode as well, and the boot test now asserts
+700 in the image and in the new account's home.
 
 Nothing relies on it either way: with 755 someone else could list the
 directory and see that the `env` file exists, but could not read its contents

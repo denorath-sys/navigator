@@ -1206,7 +1206,8 @@ jobs:
           # directory decides its mode. The Containerfile used to create it with
           # COPY (755) and chmod it one layer later; it now creates it 0700
           # first, and run 37151486990 measured 700 in all three places below.
-          # Still a diagnostic: one run is a measurement, not yet an assertion.
+          # These lines only print; the assertion on them comes further down,
+          # after the other measurements, for the reason given above.
           stat -c '%n mode=%a owner=%U:%G' \
             /etc/skel/.config /etc/skel/.config/navigator /etc/skel/.config/navigator/env 2>&1 || true
           stat -c '%n mode=%a owner=%U:%G' \
@@ -1237,13 +1238,23 @@ jobs:
           # deployed image. This assertion exists so that it breaks if that
           # chmod is ever dropped.
           #
-          # The directory mode is deliberately NOT AN ASSERTION yet but a
-          # diagnostic (above): 700 is intended, and nothing relies on it —
-          # with 755 someone else could list the directory and see that the
-          # `env` file exists, but could not read its contents.
           [ "$(stat -c '%a' /etc/skel/.config/navigator/env)" = "600" ] || {
             echo "ERROR: the mode of /etc/skel/.config/navigator/env is not 600."; exit 1; }
           echo "OK: the template file is 0600."
+
+          echo "=== ASSERTION: the DIRECTORY must be closed to others too ==="
+          # An assertion since run 37151486990 measured 700 in both places.
+          # Nothing relies on it for secrecy — with 755 someone else could
+          # only see that the `env` file exists — but it is the one check
+          # that notices the trap coming back: for a directory, bootc keeps
+          # the mode of the layer that created it first, so a `chmod` moved
+          # after the COPY in the Containerfile would be dropped in silence.
+          for d in /etc/skel/.config/navigator /var/home/navtest/.config/navigator; do
+            DIR_MODE=$(stat -c '%a' "$d")
+            [ "${DIR_MODE}" = "700" ] || {
+              echo "ERROR: the mode of $d is ${DIR_MODE}, 700 was expected."; exit 1; }
+          done
+          echo "OK: the directory is 0700 in the image and in the new account's home."
 
           echo "=== REAL RESOLUTION: does the cloud-bridge in the image read the file? ==="
           # A fake key is enough: what is tested here is the RESOLUTION of the
