@@ -1850,76 +1850,98 @@ jobs:
           esac
 
           echo
-          echo "=== and separately: does the wheel reach the compositor ==="
-          echo "=== from workspace 1, Super+wheel-down ==="
+          # Everything below is a DIAGNOSTIC about the test rig, and it was
+          # rebuilt after reading the sources instead of the symptoms. Two
+          # things the earlier rounds took for granted turned out not to hold:
+          #
+          #  - "The tablet carries no wheel." It does. virtio-tablet has
+          #    wheel-axis=on by default and turns a wheel button into
+          #    REL_WHEEL, exactly as virtio-mouse does (QEMU
+          #    hw/input/virtio-input-hid.c).
+          #  - "An unmodified wheel bound to workspace 5 moved nothing, so the
+          #    wheel does not arrive." That probe bound `mouse_down` only and
+          #    sent QEMU's wheel-down. QEMU's wheel-down is REL_WHEEL -1,
+          #    which is a POSITIVE scroll delta on Wayland, and Hyprland fires
+          #    `mouse_down` for a NEGATIVE one (KeybindManager::onAxisEvent).
+          #    So the probe was listening on the bind the event does not
+          #    fire, and its silence proved nothing.
+          #
+          # So this asks in order, and each answer stands on its own: what
+          # QEMU thinks its pointing devices are, what the guest kernel
+          # receives, and what the compositor does with each direction.
+          echo
+          echo "=== QEMU's pointing devices, as QEMU lists them ==="
+          python3 .github/scripts/qemu-input.py "$QMP" mice || true
+
+          echo
+          echo "=== what the guest KERNEL receives: wheel down, then wheel up ==="
+          $SSH "cat > /tmp/evdev-watch.py" < .github/scripts/evdev-watch.py
+          $SSH "python3 /tmp/evdev-watch.py 8" < /dev/null > evdev-watch.txt 2>&1 &
+          WATCH=$!
+          sleep 3
+          python3 .github/scripts/qemu-input.py "$QMP" scroll "$SW" "$SH" \
+            "$(( SW / 2 ))" "$(( SH / 2 ))" --direction down || true
+          sleep 1
+          python3 .github/scripts/qemu-input.py "$QMP" scroll "$SW" "$SH" \
+            "$(( SW / 2 ))" "$(( SH / 2 ))" --direction up || true
+          wait "${WATCH}" || true
+          cat evdev-watch.txt
+          if grep -q 'REL_WHEEL' evdev-watch.txt; then
+            echo "  READING: the wheel reaches the guest kernel."
+          else
+            echo "  READING: no REL_WHEEL on any device — the wheel is lost before"
+            echo "           the guest, and nothing the compositor does below can"
+            echo "           be blamed on a bind."
+          fi
+
+          # Throwaway binds, added at runtime so that the mechanism is under
+          # test rather than the config, and on BOTH names this time.
+          echo
+          echo "=== which bind does each direction fire ==="
+          inguest 'hyprctl keyword bind ,mouse_down,workspace,5' >/dev/null
+          inguest 'hyprctl keyword bind ,mouse_up,workspace,7' >/dev/null
+          for DIRECTION in down up; do
+            inguest 'hyprctl dispatch workspace 1' >/dev/null
+            sleep 1
+            python3 .github/scripts/qemu-input.py "$QMP" scroll "$SW" "$SH" \
+              "$(( SW / 2 ))" "$(( SH / 2 ))" --direction "${DIRECTION}" >/dev/null || true
+            sleep 2
+            LANDED="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+            case "${LANDED}" in
+              5) echo "  QEMU wheel-${DIRECTION} -> workspace 5: fires mouse_down" ;;
+              7) echo "  QEMU wheel-${DIRECTION} -> workspace 7: fires mouse_up" ;;
+              1) echo "  QEMU wheel-${DIRECTION} -> workspace 1: fired neither bind" ;;
+              *) echo "  QEMU wheel-${DIRECTION} -> workspace ${LANDED}: neither bind goes there" ;;
+            esac
+          done
+          inguest 'hyprctl keyword unbind ,mouse_down' >/dev/null || true
+          inguest 'hyprctl keyword unbind ,mouse_up' >/dev/null || true
+
+          echo
+          echo "=== does the Super modifier reach the compositor ==="
+          inguest 'hyprctl keyword bind SUPER,F12,workspace,6' >/dev/null
           inguest 'hyprctl dispatch workspace 1' >/dev/null
           sleep 1
-          BEFORE="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
-          python3 .github/scripts/qemu-input.py "$QMP" scroll "$SW" "$SH" \
-            "$(( SW / 2 ))" "$(( SH / 2 ))" --direction down --modifier super
+          python3 .github/scripts/qemu-input.py "$QMP" key f12 --modifier super
           sleep 2
-          AFTER="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
-          echo "  workspace ${BEFORE} -> ${AFTER}"
+          MODKEY="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+          echo "  Super+F12 -> workspace ${MODKEY} (6 means the modifier arrives)"
 
-          case "${AFTER}" in
-            "${BEFORE}")
-              echo "  RESULT: nothing moved — and that is a question about the test"
-              echo "          machinery, not about e+1. Two probes below separate the"
-              echo "          two things it could be. They use hyprctl keyword to add"
-              echo "          throwaway binds at runtime: a bind that already exists"
-              echo "          would test the config, and what is in doubt here is the"
-              echo "          mechanism underneath it."
-              echo
-              echo "  --- probe A: does a wheel event reach the compositor at all ---"
-              inguest 'hyprctl keyword bind ,mouse_down,workspace,5' >/dev/null
-              inguest 'hyprctl dispatch workspace 1' >/dev/null
-              sleep 1
-              python3 .github/scripts/qemu-input.py "$QMP" scroll "$SW" "$SH" \
-                "$(( SW / 2 ))" "$(( SH / 2 ))" --direction down
-              sleep 2
-              PLAIN="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
-              echo "      unmodified wheel -> workspace ${PLAIN} (5 means the wheel arrives)"
-
-              echo
-              echo "  --- probe B: does the Super modifier reach the compositor ---"
-              inguest 'hyprctl keyword bind SUPER,F12,workspace,6' >/dev/null
-              inguest 'hyprctl dispatch workspace 1' >/dev/null
-              sleep 1
-              python3 .github/scripts/qemu-input.py "$QMP" key f12 --modifier super
-              sleep 2
-              MODKEY="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
-              echo "      Super+F12 -> workspace ${MODKEY} (6 means the modifier arrives)"
-
-              echo
-              if [ "${PLAIN}" = "5" ] && [ "${MODKEY}" = "6" ]; then
-                echo "      READING: both halves work on their own, so what fails is the"
-                echo "               COMBINATION — a wheel arriving while Super is held."
-              elif [ "${PLAIN}" != "5" ] && [ "${MODKEY}" = "6" ]; then
-                echo "      READING: wheel events do not reach the compositor. The tablet"
-                echo "               is an absolute pointing device; a wheel is a button,"
-                echo "               and nothing in the guest may be carrying it."
-              elif [ "${PLAIN}" = "5" ] && [ "${MODKEY}" != "6" ]; then
-                echo "      READING: the wheel arrives but the modifier does not, so the"
-                echo "               keyboard side is where to look."
-              else
-                echo "      READING: neither arrives, which does not fit the click test"
-                echo "               passing in the step above — read both together."
-              fi
-              ;;
-            2)
-              echo "  RESULT: the wheel arrived, and the bind went to the next"
-              echo "          workspace in order, open or not — which is NOT what"
-              echo "          e+1 is documented to mean ('next open')."
-              ;;
-            3)
-              echo "  RESULT: the wheel arrived, and the bind does what e+1 is"
-              echo "          documented to do — it skipped the empty workspace 2"
-              echo "          and landed on the next open one."
-              ;;
-            *)
-              echo "  RESULT: landed on ${AFTER}, which neither reading predicts."
-              ;;
-          esac
+          # The config's own binds, last. With workspaces 1 and 3 open, e+1 and
+          # e-1 from 1 both land on 3 — e-1 wraps — so this says whether a
+          # Super+wheel bind fires, not which one. The direction is what the
+          # probe above is for.
+          echo
+          echo "=== the config's binds: Super+wheel from workspace 1 ==="
+          for DIRECTION in down up; do
+            inguest 'hyprctl dispatch workspace 1' >/dev/null
+            sleep 1
+            python3 .github/scripts/qemu-input.py "$QMP" scroll "$SW" "$SH" \
+              "$(( SW / 2 ))" "$(( SH / 2 ))" --direction "${DIRECTION}" --modifier super >/dev/null || true
+            sleep 2
+            AFTER="$(inguest 'hyprctl activeworkspace -j' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+            echo "  Super+wheel-${DIRECTION}: workspace 1 -> ${AFTER}"
+          done
 
           echo
           echo "--- DIAGNOSTIC: the compositor's own view afterwards ---"

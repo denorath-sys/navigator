@@ -200,6 +200,19 @@ class TestAgainstFakeQMP(Harness):
         server, path = self.start_server()
         self.assertEqual(self.run_script(path, "key", "ret").returncode, 0)
 
+    def test_mice_asks_and_sends_no_input(self):
+        server, path = self.start_server()
+        result = self.run_script(path, "mice")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(server.batches, [])
+        self.assertIn("no pointing devices", result.stdout)
+
+    def test_mice_reports_a_qmp_error(self):
+        server, path = self.start_server(error_on="query-mice")
+        result = self.run_script(path, "mice")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("query-mice failed", result.stdout)
+
     def test_missing_direction_is_refused_before_connecting(self):
         result = self.run_script("/nonexistent.sock", "scroll", "1280", "800", "1", "1")
         self.assertEqual(result.returncode, 2)

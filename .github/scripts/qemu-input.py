@@ -34,6 +34,11 @@ does not fail politely: QEMU aborts the whole VM with "Property
 'qemu-fixed-text-console.device' not found" (run 32428973455). Which device
 receives an event is QEMU's choice, based on what each one can handle.
     qemu-input.py <qmp.sock> key    <QCODE> [--modifier super|ctrl|alt|shift]
+    qemu-input.py <qmp.sock> mice
+
+`mice` sends nothing. It prints QEMU's own list of pointing devices and which
+one is current, because "which device gets a button" was argued about for
+three rounds without once asking QEMU.
 
 A wheel notch is a BUTTON in QEMU's input model, not an axis, which is why
 scrolling looks like clicking here. The modifier is a real key press held
@@ -93,6 +98,10 @@ class QMP:
 
     def send_events(self, events: list[dict]) -> None:
         self._execute("input-send-event", {"events": events})
+
+    def mice(self) -> list[dict]:
+        reply = self._execute("query-mice").get("return")
+        return reply if isinstance(reply, list) else []
 
     def close(self) -> None:
         self._sock.close()
@@ -165,11 +174,32 @@ def send_key(qmp: "QMP", qcode: str, modifier: str | None) -> None:
 
 def main() -> int:
     args = sys.argv[1:]
-    if len(args) < 3:
+    if len(args) < 2 or (len(args) < 3 and args[1] != "mice"):
         print(__doc__)
         return 2
 
     sock_path, action = args[0], args[1]
+
+    if action == "mice":
+        try:
+            qmp = QMP(sock_path)
+        except (OSError, RuntimeError, ValueError) as e:
+            print(f"ERROR: could not talk to QMP at {sock_path}: {e}")
+            return 1
+        try:
+            mice = qmp.mice()
+        except (OSError, RuntimeError, ValueError) as e:
+            print(f"ERROR: query-mice failed: {e}")
+            return 1
+        finally:
+            qmp.close()
+        if not mice:
+            print("QEMU reports no pointing devices")
+        for m in mice:
+            kind = "absolute" if m.get("absolute") else "relative"
+            current = "  <- current" if m.get("current") else ""
+            print(f"  [{m.get('index')}] {m.get('name')} ({kind}){current}")
+        return 0
 
     modifier = None
     if "--modifier" in args:
