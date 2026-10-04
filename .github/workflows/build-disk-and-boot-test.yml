@@ -743,27 +743,23 @@ jobs:
           # to bind, so "the button does not respond" and "there is no mouse"
           # looked identical from inside the guest.
           #
-          # -device virtio-mouse-pci,id=navwheel : a RELATIVE mouse, present
-          # for one reason — the tablet carries no wheel. Measured rather than
-          # assumed (run 32426895684): with a throwaway bind on an unmodified
-          # wheel, the compositor did not move; with a throwaway bind on
-          # Super+F12 it did. So the modifier arrives and the wheel does not,
-          # which is what an absolute pointing device with no wheel button
-          # looks like from the guest.
+          # -device virtio-mouse-pci,id=navwheel : a RELATIVE mouse. It was
+          # added on a wrong premise — "the tablet carries no wheel"; it does,
+          # virtio-tablet has wheel-axis=on by default — but it is what
+          # carries the wheel today, measured (run 37226101234): QEMU lists
+          # it as the current pointing device, and the guest kernel receives
+          # REL_WHEEL on it and nothing on the tablet. Whether the tablet
+          # alone would carry the wheel has NOT been measured, so the mouse
+          # stays; removing it would trade a working rig for a guess.
           #
           # Which device an event reaches is QEMU's choice and cannot be
           # overridden: input-send-event's `device` names the DISPLAY device
           # for a multi-head setup, and passing an input device's id to it
           # does not fail politely — QEMU aborted the VM mid-test with
           # "Property 'qemu-fixed-text-console.device' not found"
-          # (run 32428973455). So the wheel goes wherever QEMU sends it, which
-          # should be the only device here that has one.
-          #
-          # That leaves a real question this run answers by measurement: with
-          # two pointing devices present, does a left click still reach the
-          # tablet the pointer was positioned on? The click test in this job
-          # asserts the toggle flips, so if buttons started going to the
-          # relative mouse it would fail rather than drift.
+          # (run 32428973455). Absolute motion goes to the tablet and the
+          # wheel to the mouse; the click test asserts the toggle flips, so
+          # a button landing somewhere else would fail rather than drift.
           #
           # -qmp unix:... : the input path uses QMP rather than HMP, because
           # HMP's mouse_move is relative while `input-send-event` takes
@@ -1869,6 +1865,12 @@ jobs:
           # So this asks in order, and each answer stands on its own: what
           # QEMU thinks its pointing devices are, what the guest kernel
           # receives, and what the compositor does with each direction.
+          #
+          # Run 37226101234 answered all of it: the wheel reaches the kernel
+          # on the virtio mouse, QEMU's wheel-down fires mouse_up and wheel-up
+          # fires mouse_down, and Super+wheel moves 1 -> 3 both ways. One
+          # thing is left over: in the earlier rounds the FIRST Super+wheel
+          # of the session moved nothing, and that has not been explained.
           echo
           echo "=== QEMU's pointing devices, as QEMU lists them ==="
           python3 .github/scripts/qemu-input.py "$QMP" mice || true

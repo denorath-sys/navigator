@@ -232,9 +232,41 @@ rather than read. With a number to assert against, the boot test now fails
 if `e+1` lands anywhere but 3. It still passes without asserting when no
 window reaches workspace 3, because then there is nothing to measure.
 
-The wheel remains a separate and genuinely open question about the test rig:
-whether the events can be delivered at all from outside, and the untried
-lead is HMP's `mouse_set`, which can choose the device that QMP cannot.
+**The wheel, which was never broken (run 37226101234).** The rounds above
+concluded that wheel events do not reach the compositor. They do. Two of the
+premises were wrong, and both came from reading a symptom as a cause:
+
+- *"The tablet carries no wheel."* It does: `virtio-tablet` defaults to
+  `wheel-axis=on` and turns a wheel notch into `REL_WHEEL`, as `virtio-mouse`
+  does.
+- *"An unmodified wheel bound to workspace 5 moved nothing."* That probe
+  bound `mouse_down` and sent QEMU's wheel-down — and those are opposite
+  directions. QEMU's wheel-down is `REL_WHEEL -1`, a positive scroll on
+  Wayland, and Hyprland fires `mouse_down` for a negative one. The probe was
+  waiting on the one bind its event could not fire.
+
+Measured at three separate points instead of inferred from the last one:
+
+```
+QEMU:       [4] QEMU Virtio Mouse (relative)  <- current
+kernel:     /dev/input/event5 [QEMU Virtio Mouse]  REL_WHEEL x2 values=[-1, 1]
+compositor: QEMU wheel-down -> fires mouse_up
+            QEMU wheel-up   -> fires mouse_down
+config:     Super+wheel-down: workspace 1 -> 3
+            Super+wheel-up:   workspace 1 -> 3
+```
+
+So the config's Super+wheel binds work end to end, from an event injected
+outside the guest. Both directions land on 3 because only workspaces 1 and 3
+are open and `e-1` wraps; the run shows that the binds fire, not which is
+which — the throwaway binds above it show that.
+
+**One observation is still unexplained.** In the earlier rounds the very
+first Super+wheel-down of the session moved nothing, and by the reasoning
+above it should have fired `mouse_up` -> `e-1` and wrapped. In this run it
+was not the first wheel event, nor the first key press, of the session — and
+it worked. Whether the first event of either kind is swallowed has not been
+measured. Everything about the wheel therefore stays a diagnostic.
 
 **The limitation at the time (no longer applicable):** this was a static
 review and no real compositor was run — runtime verification had been left
