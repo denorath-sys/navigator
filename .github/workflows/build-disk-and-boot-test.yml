@@ -758,8 +758,10 @@ jobs:
           # does not fail politely — QEMU aborted the VM mid-test with
           # "Property 'qemu-fixed-text-console.device' not found"
           # (run 32428973455). Absolute motion goes to the tablet and the
-          # wheel to the mouse; the click test asserts the toggle flips, so
-          # a button landing somewhere else would fail rather than drift.
+          # wheel to the mouse. Buttons very likely go to the mouse too — a
+          # wheel notch IS a button event in QEMU — and the click test cannot
+          # tell: the seat has one cursor, so a button from either device
+          # clicks where the tablet put it.
           #
           # -qmp unix:... : the input path uses QMP rather than HMP, because
           # HMP's mouse_move is relative while `input-send-event` takes
@@ -1870,7 +1872,9 @@ jobs:
           # on the virtio mouse, QEMU's wheel-down fires mouse_up and wheel-up
           # fires mouse_down, and Super+wheel moves 1 -> 3 both ways. One
           # thing is left over: in the earlier rounds the FIRST Super+wheel
-          # of the session moved nothing, and that has not been explained.
+          # of the session moved nothing. Here plain wheel events came first
+          # and it worked, so the open question is whether the first WHEEL
+          # event of a session is dropped inside the guest. Not measured.
           echo
           echo "=== QEMU's pointing devices, as QEMU lists them ==="
           python3 .github/scripts/qemu-input.py "$QMP" mice || true

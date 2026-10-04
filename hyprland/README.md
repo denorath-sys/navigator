@@ -207,7 +207,10 @@ here that has a wheel.
 still reaches the tablet it was aimed on, so nothing regressed, but an
 unmodified wheel still moved nothing. With two pointing devices present QEMU
 appears to hand button events to the first that can take them, and the tablet
-drops wheel notches.
+drops wheel notches. (Both readings were wrong, as the wheel section below
+measures: the click test cannot say which device carried the button — a seat
+has one cursor, and a button from any pointer clicks where the tablet put it
+— and the tablet does not drop wheel notches, the probe was deaf to them.)
 
 **And then the mistake underneath all four rounds.** The open note asks what
 `e+1` MEANS. That is a question for the compositor, not for a wheel, and
@@ -261,12 +264,23 @@ outside the guest. Both directions land on 3 because only workspaces 1 and 3
 are open and `e-1` wraps; the run shows that the binds fire, not which is
 which — the throwaway binds above it show that.
 
-**One observation is still unexplained.** In the earlier rounds the very
-first Super+wheel-down of the session moved nothing, and by the reasoning
-above it should have fired `mouse_up` -> `e-1` and wrapped. In this run it
-was not the first wheel event, nor the first key press, of the session — and
-it worked. Whether the first event of either kind is swallowed has not been
-measured. Everything about the wheel therefore stays a diagnostic.
+**One observation is still unexplained, and it may not be about the rig.**
+In the earlier rounds the session's first Super+wheel-down moved nothing,
+and by the reasoning above it should have fired `mouse_up` -> `e-1` and
+wrapped. Two explanations are ruled out by this run: Super+F12 was the first
+key press of the session and it worked, so the first key is not swallowed;
+and the first wheel events of the session reached the guest kernel, so they
+are not lost in QEMU. What differed is that plain wheel events came BEFORE
+the first Super+wheel this time. If the first wheel event of a session is
+dropped, it is dropped in libinput or in Hyprland — and then a user's first
+Super+scroll after login would do nothing too. That has not been measured.
+Everything about the wheel therefore stays a diagnostic.
+
+**What the direction means for a person.** A real wheel rolled toward you
+is `REL_WHEEL -1`, which the run shows firing `mouse_up` -> `e-1`: Super +
+scroll down goes to the PREVIOUS workspace, scroll up to the next. That is
+Hyprland's example config unchanged, not a regression — but it is a choice,
+and it was never made on purpose here.
 
 **The limitation at the time (no longer applicable):** this was a static
 review and no real compositor was run — runtime verification had been left
