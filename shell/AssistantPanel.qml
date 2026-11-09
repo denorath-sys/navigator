@@ -5,10 +5,16 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 
-// The Navigator AI assistant panel — genuinely wired to ai-stack/router.
+// The Navigator AI assistant panel — wired to ai-stack/assistant.
 // Toggled by clicking AssistantToggle (Bar.qml) or by the Hyprland Super+Space
 // shortcut (qs ipc call assistant toggle, see hyprland/hyprland.conf and the
 // IpcHandler in shell.qml).
+//
+// It used to call ai-stack/router, which answers one prompt at a time with no
+// tools and no memory. ai-stack/assistant runs the same routing decision and
+// then a real tool-use loop over mcp-tools, and keeps the conversation in
+// ~/.local/state/navigator/assistant-history.json (`--default-history`; the
+// path is resolved by the assistant, not here). Typing /reset clears it.
 //
 // The workingDirectory below is no longer an assumption: Layer 5 of
 // image/Containerfile genuinely copies ai-stack's six modules under
@@ -25,6 +31,10 @@ PanelWindow {
 
     property string responseText: ""
     property bool loading: false
+
+    // Must match RESET_COMMANDS in ai-stack/assistant/assistant/__main__.py.
+    readonly property var resetCommands: ["/reset", "/yeni"]
+    readonly property var assistantCommand: ["python3", "-m", "assistant", "--default-history"]
 
     anchors {
         top: true
@@ -58,6 +68,8 @@ PanelWindow {
             return "~/.config/navigator/env could not be read (permissions, or corrupt text?)."
         case "credentials_file_malformed":
             return "~/.config/navigator/env could not be parsed — every line must be KEY=VALUE."
+        case "history_file_malformed":
+            return "The conversation history could not be read — type /reset to start a new conversation."
         default:
             return reason
         }
@@ -70,53 +82,90 @@ PanelWindow {
 
         panel.loading = true
         panel.responseText = ""
-        routerProcess.running = false
-        routerProcess.command = ["python3", "-m", "router", "--prompt", trimmed]
-        routerProcess.running = true
+        assistantProcess.running = false
+        assistantProcess.streamsFinished = 0
+        assistantProcess.lastExitCode = -1
+        if (panel.resetCommands.indexOf(trimmed) !== -1)
+            assistantProcess.command = panel.assistantCommand.concat(["--reset"])
+        else
+            assistantProcess.command = panel.assistantCommand.concat(["--prompt", trimmed])
+        assistantProcess.running = true
+    }
+
+    // The assistant reports a failed turn as JSON on STDERR with an empty
+    // stdout ({"status": "error", "error": ..., "reason"?: ...}, see
+    // _print_error() in ai-stack/assistant/assistant/__main__.py).
+    function explainFailure(stderrText) {
+        try {
+            const parsed = JSON.parse(stderrText)
+            if (parsed.status === "error")
+                return "Error: " + panel.explainReason(parsed.reason || parsed.error || "unknown")
+        } catch (e) {
+            // Not JSON (e.g. a Python traceback) — fall through and show it as is.
+        }
+        return null
     }
 
     Process {
-        id: routerProcess
-        workingDirectory: "/usr/share/navigator/ai-stack/router"
+        id: assistantProcess
+        workingDirectory: "/usr/share/navigator/ai-stack/assistant"
 
         property int lastExitCode: -1
 
         onExited: (exitCode, exitStatus) => {
-            routerProcess.lastExitCode = exitCode
+            assistantProcess.lastExitCode = exitCode
+        }
+
+        // Both streams must have ended before the result is read: a failed
+        // turn is explained from STDERR, and stdout ending first does not mean
+        // stderr has been fully collected.
+        property int streamsFinished: 0
+
+        function streamFinished() {
+            assistantProcess.streamsFinished += 1
+            if (assistantProcess.streamsFinished === 2)
+                panel.handleResult()
         }
 
         stdout: StdioCollector {
             id: outCollector
             waitForEnd: true
-            onStreamFinished: {
-                panel.loading = false
-                const out = outCollector.text
-                if (out.length === 0) {
-                    // Empty stdout — show the exit code and stderr as they are;
-                    // do not silently say "Parse error" and hide stderr.
-                    panel.responseText = "ERROR: no output from router (exit=" + routerProcess.lastExitCode
-                        + ", stderr=" + (errCollector.text.length > 0 ? errCollector.text : "(empty)") + ")"
-                    return
-                }
-                try {
-                    const parsed = JSON.parse(out)
-                    const result = parsed.route === "cloud" ? parsed.cloud_bridge : parsed.local_runtime
-                    if (result && result.status === "ok") {
-                        panel.responseText = result.content
-                    } else if (result) {
-                        panel.responseText = "[" + parsed.route + "] " + (result.status || "error") + ": "
-                            + panel.explainReason(result.reason || result.error || "unknown")
-                    } else {
-                        panel.responseText = "Unexpected response: " + out
-                    }
-                } catch (e) {
-                    panel.responseText = "Parse error (" + e + "): " + out
-                }
-            }
+            onStreamFinished: assistantProcess.streamFinished()
         }
 
         stderr: StdioCollector {
             id: errCollector
+            waitForEnd: true
+            onStreamFinished: assistantProcess.streamFinished()
+        }
+    }
+
+    function handleResult() {
+        panel.loading = false
+        const out = outCollector.text
+        if (out.length === 0) {
+            // A structured failure is explained; anything else (no
+            // stderr, a traceback) is shown with the exit code as is —
+            // do not silently say "Parse error" and hide stderr.
+            const explained = panel.explainFailure(errCollector.text)
+            panel.responseText = explained !== null ? explained
+                : "ERROR: no output from assistant (exit=" + assistantProcess.lastExitCode
+                  + ", stderr=" + (errCollector.text.length > 0 ? errCollector.text : "(empty)") + ")"
+            return
+        }
+        try {
+            const parsed = JSON.parse(out)
+            if (parsed.status === "ok" && parsed.reset === true) {
+                panel.responseText = "New conversation — the history was cleared."
+            } else if (parsed.status === "ok") {
+                const tools = (parsed.tool_calls || []).map(t => t.name)
+                panel.responseText = parsed.content
+                    + (tools.length > 0 ? "\n\n(tools used: " + tools.join(", ") + ")" : "")
+            } else {
+                panel.responseText = "Unexpected response: " + out
+            }
+        } catch (e) {
+            panel.responseText = "Parse error (" + e + "): " + out
         }
     }
 
@@ -174,7 +223,7 @@ PanelWindow {
             wrapMode: Text.WordWrap
             color: theme.textPrimary
             font.pixelSize: 12
-            text: panel.loading ? "Thinking..." : (panel.responseText.length > 0 ? panel.responseText : "Ask a question.")
+            text: panel.loading ? "Thinking..." : (panel.responseText.length > 0 ? panel.responseText : "Ask a question. Type /reset to start over.")
         }
     }
 }

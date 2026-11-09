@@ -80,6 +80,15 @@ preventing unbounded growth and a needlessly growing prompt/API cost.
 - If `--history-file <path>` is given, PERSISTENTLY in a JSON file — in both
   `--prompt` and REPL mode, written to the file after every turn (so a crash
   does not lose the history) — **memory even across separate processes**.
+- `--default-history` is the same at the per-user default path,
+  `$XDG_STATE_HOME/navigator/assistant-history.json` (otherwise
+  `~/.local/state/navigator/...`). This is what the shell panel uses.
+
+The file is written atomically, `0600`, in a directory created `0700` — it
+holds everything the user said to the assistant. A turn that fails writes
+nothing. A file that is not a JSON list of `{role, content}` messages is
+refused with `reason: history_file_malformed`, and `--reset` (which does not
+read the file first) is the way out of it.
 
 ## `run_cloud_turn()` — a real tool-use loop (full tool set)
 
@@ -211,7 +220,17 @@ Persistent history (remembers across separate runs/processes too):
 
 ```sh
 python3 -m assistant --prompt "..." --history-file ~/.navigator-assistant-history.json
+python3 -m assistant --prompt "..." --default-history   # ~/.local/state/navigator/...
+python3 -m assistant --reset --default-history          # start a new conversation
 ```
+
+**Errors** (one-shot mode) go to stderr as JSON with an empty stdout and exit
+code 1: `{"schema_version", "status": "error", "error": "...", "reason"?: "..."}`.
+`reason` is present when a module gave a machine-readable one (e.g.
+cloud-bridge's `credentials_not_configured`, local-runtime's
+`ollama_not_running`), or `history_file_malformed`, or `subprocess_failed`
+when router/cloud-bridge/local-runtime exited non-zero (its stderr is kept in
+`error`). Callers should match on `reason`, not on `error`.
 
 The cloud path needs a real Claude API key — see
 `ai-stack/cloud-bridge/README.md`, "Wiring up the credential locally". The
@@ -229,8 +248,10 @@ python3 -m unittest discover -v -s tests
 - The local path's reliability is not complete (see above) — that is a
   limitation stemming from model size, and may require a larger local model
   or a solution beyond prompt engineering.
-- It is not connected to a real Quickshell/Hyprland UI — that depends on the
-  deferred real compositor test (see `ai-stack/mcp-tools/README.md`).
+- ~~It is not connected to a real Quickshell/Hyprland UI~~ — the shell's
+  `AssistantPanel.qml` now calls it (see `shell/README.md`, "AssistantPanel
+  → `ai-stack/assistant`"). The panel has no confirmation step of its own
+  yet for system-modifying tools.
 - No streaming — every response is returned in full, in one go.
 
 **Completed in Phase 4 (previously out of scope here):** the router's

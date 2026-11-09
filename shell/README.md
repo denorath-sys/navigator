@@ -65,11 +65,13 @@ component under test comes from the image.
   "WorkspaceIndicator — real Hyprland data")
 - `AssistantToggle.qml` — the AI assistant panel switch; emits a `toggled()`
   signal when clicked (connected to `shell.qml` via `Bar.qml`)
-- `AssistantPanel.qml` — the assistant panel, **genuinely wired to
-  `ai-stack/router`**: a text input, the logic that invokes
-  `ai-stack/router` as a subprocess via `Quickshell.Io.Process`, and an area
-  showing the real response (route + content, or a graceful error) — see
-  "AssistantPanel — real router integration" below
+- `AssistantPanel.qml` — the assistant panel, wired to
+  `ai-stack/assistant`: a text input, the logic that invokes
+  `ai-stack/assistant` as a subprocess via `Quickshell.Io.Process`, and an
+  area showing the real response (content plus the tools used, or a
+  translated error) — see "AssistantPanel → `ai-stack/assistant`" below.
+  It was first wired to `ai-stack/router`; that history is in "AssistantPanel
+  — real router integration"
 - `Clock.qml` — a live clock display
 
 ## Runtime verification on a real compositor (CI, Phase 4)
@@ -307,7 +309,58 @@ left empty, while 3 came into existence because it became active. The old
 static placeholder would have said `[1..10]` on both readings and could not
 even have passed the first check.
 
+## AssistantPanel → `ai-stack/assistant` (Phase 4)
+
+The panel used to call `ai-stack/router` (the section below), which answers
+one prompt at a time: no tools and no memory. The tool-use loop and the
+conversation history lived in `ai-stack/assistant` and had only ever been
+reached from a terminal. The panel now runs
+
+```
+python3 -m assistant --default-history --prompt <question>
+```
+
+inside `/usr/share/navigator/ai-stack/assistant`, so a question asked from
+Super+Space gets the same treatment as one asked in the REPL: the router's
+decision, then a real tool-use loop over `mcp-tools` (full tool set on the
+cloud path, read-only on the local one), with the conversation remembered.
+
+- **History** lives in `$XDG_STATE_HOME/navigator/assistant-history.json`
+  (`~/.local/state/...` by default), written atomically, `0600` in a `0700`
+  directory. The path is resolved by the assistant, not by QML — the same
+  reasoning as cloud-bridge's credential file. A failed turn writes nothing.
+- **`/reset`** (or `/yeni`) typed into the panel runs `--reset` instead,
+  which also recovers from a history file that cannot be parsed (reported
+  as `history_file_malformed`, which the panel explains).
+- **Errors are structured.** A failed turn prints
+  `{"status": "error", "error": ..., "reason": ...}` on stderr with an empty
+  stdout; the panel reads `reason` (never the message text) and passes it
+  through `explainReason()`. A subprocess that crashes is reported as
+  `subprocess_failed` with its stderr, instead of a bare traceback.
+- The result is read only once **both** stdout and stderr have finished:
+  stdout ending first does not mean stderr has been fully collected, and
+  the error path now depends on stderr.
+- A successful answer is followed by `(tools used: ...)` when the turn
+  called any.
+
+**Verification.** The CLI side has unit tests (`ai-stack/assistant/tests/
+test_cli.py`) that were shown to go red when `reason` is dropped from the
+report or the history directory loses its `0700` mode. The CLI was run for
+real with no credentials and no Ollama and gave
+`{"status": "error", ..., "reason": "credentials_not_configured"}`. The QML
+passed `qmllint` (PySide6's, without Quickshell's type definitions, so only
+the general QML syntax is checked — the same limit as below). The
+`hyprland-test` job was changed to assert the exact translated message
+(`Error: No Claude credentials ...`) rather than "anything that is not an
+error prefix" — the old router's `[cloud] unavailable: ...` now fails it —
+and to check `/reset` creates an empty `0600` history file at the default
+path inside the image. **That job has not been run against this change
+yet**; until it has, the panel side is reviewed, not measured.
+
 ## AssistantPanel — real `ai-stack/router` integration (CI, Phase 4)
+
+> **History:** the panel no longer calls `ai-stack/router` directly — see
+> the section above. The router path is still tested over SSH in CI.
 
 `AssistantToggle` no longer merely writes a console log — it opens and
 closes `AssistantPanel`, and that panel **genuinely** invokes
@@ -417,9 +470,13 @@ Debian/Pardus, something like `qt6-qtdeclarative-devel` on Fedora.)
 
 - ~~Top panel: workspace indicator, clock~~ — real (the workspace indicator
   is now bound to live Hyprland data)
-- ~~AI assistant panel — a real implementation~~ — genuinely wired to
+- ~~AI assistant panel — a real implementation~~ — wired to
   `ai-stack/router`, verified in CI (see "AssistantPanel — real
-  ai-stack/router integration")
+  ai-stack/router integration"), then moved to `ai-stack/assistant` (see
+  "AssistantPanel → `ai-stack/assistant`")
+- A confirmation step in the panel for system-modifying tools
+  (`write_file`, `delete_file`, `rename_file`) — today the cloud path can
+  call them with the model's own `confirm`/`overwrite` arguments
 - ~~Adding `ai-stack` to `image/Containerfile` as a real layer~~ — Layer 5
   is now real, and CI verifies it with `/usr` read-only
 - ~~Layering `shell/` into the image~~ — Layer 7 is now real

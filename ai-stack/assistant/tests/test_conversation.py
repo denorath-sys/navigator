@@ -111,8 +111,9 @@ class TestRunLocalTurn(unittest.TestCase):
     @patch("assistant.conversation._call_local_runtime_converse")
     def test_raises_on_unavailable(self, mock_converse):
         mock_converse.return_value = {"status": "unavailable", "reason": "ollama_not_running"}
-        with self.assertRaises(AssistantError):
+        with self.assertRaises(AssistantError) as ctx:
             run_local_turn("hi", self._fake_mcp_client())
+        self.assertEqual(ctx.exception.reason, "ollama_not_running")
 
     @patch("assistant.conversation._call_local_runtime_converse")
     def test_raises_on_error_status(self, mock_converse):
@@ -493,8 +494,9 @@ class TestRunCloudTurn(unittest.TestCase):
     @patch("assistant.conversation._call_cloud_bridge_converse")
     def test_raises_on_unavailable(self, mock_converse):
         mock_converse.return_value = {"status": "unavailable", "reason": "credentials_not_configured"}
-        with self.assertRaises(AssistantError):
+        with self.assertRaises(AssistantError) as ctx:
             run_cloud_turn("x", self._fake_mcp_client())
+        self.assertEqual(ctx.exception.reason, "credentials_not_configured")
 
     @patch("assistant.conversation._call_cloud_bridge_converse")
     def test_raises_on_error_status(self, mock_converse):
