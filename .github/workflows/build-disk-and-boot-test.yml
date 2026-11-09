@@ -670,11 +670,12 @@ jobs:
           fi
           hyprctl dispatch workspace 1
 
-          echo "=== test AssistantPanel against ai-stack/router (Quickshell IPC) ==="
+          echo "=== test AssistantPanel against ai-stack/assistant (Quickshell IPC) ==="
           # We ask a real question through the IpcHandler in shell.qml
           # (target: "assistant") — this is proof that AssistantPanel.qml really
-          # invokes /usr/share/navigator/ai-stack/router as a subprocess (it now
-          # comes from the image itself, see Layer 5). CI has neither Ollama nor
+          # invokes /usr/share/navigator/ai-stack/assistant as a subprocess (it
+          # comes from the image itself, see Layer 5), which in turn starts
+          # mcp-tools and asks router for a decision. CI has neither Ollama nor
           # Claude API credentials, so the router decision will always fall
           # through to "cloud" (the model_ready=false rule) and cloud-bridge will
           # gracefully return "unavailable" with "credentials_not_configured" —
@@ -715,7 +716,7 @@ jobs:
           tail -n 40 /root/hyprland.log || true
 
           # These prefixes must stay in sync with AssistantPanel.qml's error
-          # paths (the "ERROR: no output from router" and "Parse error (...)"
+          # paths (the "ERROR: no output from assistant" and "Parse error (...)"
           # branches). If they drift apart, this check goes silently green on a
           # panel that is actually failing — which is exactly what happened once
           # when the panel's messages were translated and this case was not.
@@ -725,7 +726,45 @@ jobs:
               exit 1
               ;;
           esac
-          echo "OK: AssistantPanel genuinely invoked ai-stack/router and got a response."
+          # The outcome is known exactly, so it is asserted exactly: the
+          # assistant's structured {"reason": "credentials_not_configured"} on
+          # stderr, translated by explainReason(). Anything else that is not an
+          # error prefix (e.g. the old router's "[cloud] unavailable: ...")
+          # means the chain is not the one this test claims.
+          case "$RESPONSE" in
+            "Error: No Claude credentials"*) ;;
+            *)
+              echo "ERROR: expected the translated credentials_not_configured message, got: $RESPONSE"
+              exit 1
+              ;;
+          esac
+          echo "OK: AssistantPanel genuinely invoked ai-stack/assistant and got its structured failure."
+
+          echo "=== AssistantPanel /reset: the default history path inside the image ==="
+          # A failed turn must not write history; /reset must create the file,
+          # empty and private, at the path the assistant resolves itself
+          # (--default-history -> $XDG_STATE_HOME or ~/.local/state).
+          HIST="$(python3 -c 'import os; x=os.environ.get("XDG_STATE_HOME",""); print((x if x.startswith("/") else os.path.expanduser("~/.local/state")) + "/navigator/assistant-history.json")')"
+          if [ -e "$HIST" ]; then
+            echo "ERROR: $HIST exists after a FAILED turn — a failed turn must not be saved."
+            exit 1
+          fi
+          ${IPC} assistant ask "/reset" >/dev/null
+          for i in $(seq 1 15); do
+            [ "$(${IPC} assistant isLoading)" = "false" ] && break
+            sleep 1
+          done
+          RESET_RESPONSE="$(${IPC} assistant getResponse)"
+          echo "AssistantPanel /reset response: $RESET_RESPONSE"
+          if [ "$RESET_RESPONSE" != "New conversation — the history was cleared." ]; then
+            echo "ERROR: /reset did not report a cleared history."
+            exit 1
+          fi
+          if [ "$(cat "$HIST" 2>/dev/null)" != "[]" ] || [ "$(stat -c %a "$HIST")" != "600" ]; then
+            echo "ERROR: $HIST should be an empty list with mode 600: $(ls -l "$HIST" 2>&1) $(cat "$HIST" 2>&1)"
+            exit 1
+          fi
+          echo "OK: /reset wrote an empty, 0600 history at $HIST."
           SCRIPT
           chmod +x hyprland-test.sh
 

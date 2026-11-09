@@ -71,7 +71,20 @@ LOCAL_SAFE_TOOL_NAMES = frozenset(
 
 
 class AssistantError(Exception):
-    """Raised when an unrecoverable error occurs during the conversation loop."""
+    """Raised when an unrecoverable error occurs during the conversation loop.
+
+    `reason` is the machine-readable slug of the module that refused (e.g.
+    cloud-bridge's `credentials_not_configured`), or None. It is carried
+    separately from the message so that the CLI can report it as its own JSON
+    field: the shell panel translates these slugs into sentences a user can
+    act on (`explainReason()` in shell/AssistantPanel.qml), and parsing them
+    back out of a human-readable message would break the first time that
+    message was reworded.
+    """
+
+    def __init__(self, message: str, reason: str | None = None):
+        super().__init__(message)
+        self.reason = reason
 
 
 def decide_route(
@@ -167,7 +180,9 @@ def run_cloud_turn(
         )
 
         if response.get("status") == "unavailable":
-            raise AssistantError(f"cloud-bridge unavailable: {response.get('reason')}")
+            raise AssistantError(
+                f"cloud-bridge unavailable: {response.get('reason')}", reason=response.get("reason")
+            )
         if response.get("status") == "error":
             raise AssistantError(f"Claude API returned an error: {response.get('error')}")
 
@@ -246,7 +261,9 @@ def run_local_turn(
         )
 
         if response.get("status") == "unavailable":
-            raise AssistantError(f"local-runtime unavailable: {response.get('reason')}")
+            raise AssistantError(
+                f"local-runtime unavailable: {response.get('reason')}", reason=response.get("reason")
+            )
         if response.get("status") == "error":
             raise AssistantError(f"Ollama returned an error: {response.get('error')}")
 

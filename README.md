@@ -422,6 +422,13 @@ Details: [`ai-stack/cloud-bridge/`](ai-stack/cloud-bridge/).
   prediction of "+345 MB" was made before the build and was wrong by seven
   times, because package metadata reports the compressed *download* rather
   than the layer — the correction is kept in the Containerfile as a lesson.
+  **The panel now talks to `ai-stack/assistant` rather than `router`:**
+  questions asked from Super+Space get the real tool-use loop and a
+  remembered conversation (`~/.local/state/navigator/assistant-history.json`,
+  `0600`; `/reset` starts over), and failures carry a machine-readable
+  `reason` the panel translates. The CI assertion was tightened to the exact
+  expected message; it has not been run against this change yet (see
+  `shell/README.md`, "AssistantPanel → `ai-stack/assistant`").
 - **Phase 5 — User testing & release preparation:** installation tests on
   real hardware, documentation, first community release.
 
